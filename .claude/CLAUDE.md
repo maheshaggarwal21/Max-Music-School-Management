@@ -77,7 +77,7 @@ Dev A does NOT touch:
 - `apps/operator-panel/**`, `apps/institution-*-panel/**` (Dev B)
 - `packages/ui/**`, `packages/utils/**` (Dev B)
 
-Dev B is unblocked at Handoff H1 (after P0-01 + P0-02 are pushed). Push immediately after.
+**H1 + H2 complete** — scaffold + 16 models + `packages/types` ready. **P1-R /plan-eng-review complete** (5 model fixes applied). Phase 2 config + middleware written. **P2-R /cso complete** — all 5 checkpoint Qs verified clean; .gitignore + lockfile + nodemailer@8 + node-cron@4 fixed. **Phase 3 CURRENT** — 3 mandatory implementation contracts: (1) embed `instVersion`+`userVersion` in JWT at login; (2) bump `tokenVersion` on grant/revoke/suspend/terminate; (3) call `invalidateInstitution(slug)` after institution state changes.
 
 ---
 
@@ -245,10 +245,10 @@ Any line that touches data without `institutionId` (outside `/operator/*`) = sec
 
 ## IMPLEMENTATION PHASES (see orchestrate/tasks.md for the live board)
 ```
-Phase 0 — Monorepo scaffold             [A: api + nginx + PM2 + env]  [B: 4 Next.js apps + packages/ui/utils]
-Phase 1 — Mongoose models + types       [A only]
-Phase 2 — Auth + PBAC middleware        [A only]  ← /cso MANDATORY
-Phase 3 — Operator APIs                 [A only]
+Phase 0 — Monorepo scaffold        ✅ DONE  [A: api + nginx + PM2 + env]  [B: 4 Next.js apps + packages/ui/utils — pending]
+Phase 1 — Mongoose models + types  ✅ DONE  [A only]
+Phase 2 — Auth + PBAC middleware   ✅ DONE  [A only]  ← /cso MANDATORY (pending)
+Phase 3 — Operator APIs            ← CURRENT  [A only]  (blocked on /cso)
 Phase 4 — Institution APIs              [A only]  ← /cso MANDATORY
 Phase 5 — Operator panel frontend       [B only]  ← /qa
 Phase 6 — Institution panels frontend   [B only]  ← /qa + leak check
@@ -256,7 +256,7 @@ Phase 7 — Payments · cron · emails · Socket.io   [A: backend]  [B: UI wirin
 Phase 8 — QA + security audit + deploy  [A: isolation + /cso + deploy]  [B: bundle leak check + /qa]
 ```
 
-Handoffs: H1 after P0-01+P0-02 (push immediately → B unblocked) · H2 after P1-12 · H3 after Phase 2 · H4 after Phase 3 · H5 after Phase 4 · H6 after Phase 7.
+Handoffs: H1 ✅ · H2 ✅ (packages/types exported — Dev B can wire typed responses) · H3 after Phase 2 · H4 after Phase 3 · H5 after Phase 4 · H6 after Phase 7.
 
 ## GSTACK
 

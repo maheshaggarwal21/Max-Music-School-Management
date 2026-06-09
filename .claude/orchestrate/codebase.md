@@ -176,10 +176,10 @@ Phase 8  /cso, leak audit, /qa, nginx+SSL, pm2+seed, /ship
 | ecosystem.config.js | ✅ | P0-07 — 5 PM2 procs |
 | .env.example | ✅ | P0-08 |
 | scripts/seed.js | ✅ | P0-09 stub — implement after P1-01..P1-11 |
-| models/* (16 files) | ⬜ | Phase 1 |
-| packages/types/* | ⬜ | P1-12 — handoff artifact for Dev B |
-| config/* (12 files) | ⬜ | Phase 2 |
-| middleware/* (7 files) | ⬜ | Phase 2 |
-| controllers/operator/* | ⬜ | Phase 3 |
-| controllers/institution/* | ⬜ | Phase 4 |
+| models/* (16 files) | ✅ | Phase 1 + P1-R review — all schemas, indexes, pre-hooks; +mobile/instrument/employmentType indexes; +findOneAndUpdate label hooks; +slug $setOnInsert guard |
+| packages/types/* | ✅ | P1-12 → H2 — models.ts + api.ts exported |
+| config/* (12 files) | ✅ | P2-01 — 8 critical (db, jwt, helper, auditLog, specialFunctions, strings, totp, s3) + 4 stubs |
+| middleware/* (7 files) | ✅ | P2-02..P2-08 — operatorAuth, resolveInstitution, instAuth, scopeGuard, panelGuard, impersonation, rateLimit |
+| controllers/operator/* | ⬜ | Phase 3 — gated on /cso pass |
+| controllers/institution/* | ⬜ | Phase 4 — gated on /cso pass |
 | routes/* | ⬜ | Phase 3-4 |

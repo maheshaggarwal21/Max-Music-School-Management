@@ -9,9 +9,9 @@
 
 ## CURRENT SESSION GOAL
 **Role:** Dev A — backend · infra · security (see `team-division.md` for full split)
-**Phase:** Phase 1 — all Phase 0 Dev A tasks complete ✅. Starting Mongoose models.
-**Next action:** P1-01 Operator model → P1-02 Institution → ... → P1-12 packages/types export → push (H2).
-**Blocking dependency:** none
+**Phase:** Phase 2 ✅ + P2-R /cso ✅. Phase 3 (Operator APIs) ← CURRENT.
+**Next action:** Phase 3 controllers — start with P3-01 operator auth.
+**Blocking dependency:** Phase 3 controllers MUST honour 3 mandatory contracts from P2-R: (1) embed instVersion+userVersion in JWT at login; (2) bump tokenVersion on grant/revoke/suspend/terminate; (3) call invalidateInstitution(slug) after any institution state change.
 
 ---
 
@@ -52,32 +52,32 @@
 ## PHASE 1 — MODELS (core MVP set) + types
 | ID | Task | Status | Notes |
 |----|------|--------|-------|
-| P1-01 | Operator | ⬜ | 2FA fields, tokenVersion |
-| P1-02 | Institution | ⬜ | slug immutable, mode, status, branding, rent, tokenVersion |
-| P1-03 | Teacher | ⬜ | panelAccess, isOwner, tokenVersion, salaryAmount, razorpayPaymentLink |
-| P1-04 | Student | ⬜ | joinStatus, validity, paid/upcoming amount+classes, tokenVersion |
-| P1-05 | EnrollmentRequest | ⬜ | pending/approved/rejected, paymentStatus |
-| P1-06 | Batch | ⬜ | instrument+dayPattern+timeSlot+teacher, setting phase |
-| P1-07 | DayPattern · TimeSlot · Instrument | ⬜ | reusable, per-institution |
-| P1-08 | Attendance · Holiday | ⬜ | |
-| P1-09 | Payment · RentInvoice · RazorpayWebhookEvent | ⬜ | |
-| P1-10 | AuditLog (immutable) | ⬜ | changes[] + before/after, w:0 |
-| P1-11 | UniqueIdCounter | ⬜ | per-institution display IDs |
-| P1-12 | packages/types — interfaces for all models | ⬜ | after models |
-| P1-R | gstack /plan-eng-review on models (indexes, isolation) | ⬜ | |
+| P1-01 | Operator | ✅ | 2FA fields, tokenVersion |
+| P1-02 | Institution | ✅ | slug immutable (schema + pre-update hook), branding subdoc, rent subdoc |
+| P1-03 | Teacher | ✅ | panelAccess, isOwner, unique {inst,email}+{inst,displayId}; +{inst,mobile}+{inst,employmentType} (P1-R) |
+| P1-04 | Student | ✅ | full lifecycle fields, unique {inst,displayId}, validityEnd cron; +{inst,mobile}+{inst,instrumentId} (P1-R) |
+| P1-05 | EnrollmentRequest | ✅ | handledBy subdoc, paginate |
+| P1-06 | Batch | ✅ | refs instrument/dayPattern/timeSlot/teacher, setting status default |
+| P1-07 | DayPattern · TimeSlot · Instrument | ✅ | derived label hooks + pre(findOneAndUpdate) re-derive; unique compound indexes |
+| P1-08 | Attendance · Holiday | ✅ | unique {student,batch,date} on attendance |
+| P1-09 | Payment · RentInvoice · RazorpayWebhookEvent | ✅ | paginate on all three |
+| P1-10 | AuditLog (immutable) | ✅ | pre-update + pre-delete hooks throw; no updatedAt |
+| P1-11 | UniqueIdCounter | ✅ | unique {inst,entityType} |
+| P1-12 | packages/types — interfaces for all models | ✅ | models.ts + api.ts + index barrel → H2 |
+| P1-R | gstack /plan-eng-review on models (indexes, isolation) | ✅ | 5 fixes: {inst,mobile}/{inst,instrumentId}/{inst,employmentType} indexes; DayPattern+TimeSlot label re-derive on findOneAndUpdate; Institution slug $setOnInsert guard. T5 (security invariant tests) pending |
 
 ## PHASE 2 — AUTH + PBAC MIDDLEWARE
 | ID | Task | Status | Notes |
 |----|------|--------|-------|
-| P2-01 | config: db, jwt (per-panel secrets), helper, auditLog (w:0), specialFunctions (slug, displayId), strings | ⬜ | |
-| P2-02 | operatorAuth + 2FA (TOTP) | ⬜ | |
-| P2-03 | resolveInstitution (cache, 404 unknown, 403 suspended) | ⬜ | |
-| P2-04 | instAuth(panel) — 2-level tokenVersion + panelAccess check | ⬜ | |
-| P2-05 | scopeGuard | ⬜ | actor.institutionId === institution._id |
-| P2-06 | panelGuard('admin') — PBAC | ⬜ | |
-| P2-07 | impersonation god-token issue + accept (bypass scope/panel, stamp impersonatedBy) | ⬜ | |
-| P2-08 | login rate limiting + cookie path-scoping | ⬜ | |
-| P2-R | gstack /cso on all middleware | ⬜ | ⚠️ CRITICAL — do not skip |
+| P2-01 | config: db, jwt (per-panel secrets), helper, auditLog (w:0), specialFunctions (slug, displayId), strings, totp, s3 + Phase 7 stubs (mailer/razorpay/socket/cron) | ✅ | 12 files |
+| P2-02 | operatorAuth + 2FA (TOTP) | ✅ | twoFactorCompleted claim required |
+| P2-03 | resolveInstitution (cache, 404 unknown, 403 suspended) | ✅ | TTL 5 min + invalidateInstitution(slug) |
+| P2-04 | instAuth(panel) — 2-level tokenVersion + panelAccess check | ✅ | god-token path short-circuits |
+| P2-05 | scopeGuard | ✅ | actor.institutionId === institution._id; god bypass |
+| P2-06 | panelGuard('admin') — PBAC | ✅ | god bypass |
+| P2-07 | impersonation god-token issue + accept (bypass scope/panel, stamp impersonatedBy) | ✅ | issueGodCookie + impersonatedByFromActor |
+| P2-08 | login rate limiting + cookie path-scoping | ✅ | loginLimiter, operatorLoginLimiter, apiLimiter |
+| P2-R | gstack /cso on all middleware | ✅ | 5 checkpoint Qs verified clean; 2 HIGH findings fixed (.gitignore + lockfile); nodemailer 6→8 + node-cron 3→4 upgraded; 3 Phase 3 mandatory contracts documented |
 
 ## PHASE 3 — OPERATOR (SaaS) APIs
 | ID | Task | Status | Notes |
