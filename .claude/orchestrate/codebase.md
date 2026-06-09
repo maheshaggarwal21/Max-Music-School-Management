@@ -163,8 +163,23 @@ Phase 8  /cso, leak audit, /qa, nginx+SSL, pm2+seed, /ship
 ---
 
 ## CURRENT FILE STATUS
-> Agents update as files are completed. Legend: ⬜ not started · 🔄 in progress · ✅ done · ❌ blocked
+> Dev A updates this as backend files are completed. Dev B tracks frontend separately.
+> Legend: ⬜ not started · 🔄 in progress · ✅ done · ❌ blocked
 
+### Dev A files (backend + infra)
 | File | Status | Notes |
 |------|--------|-------|
-| (none yet — Phase 0 not started) | ⬜ | planning docs complete |
+| package.json (root) | ✅ | P0-01 |
+| turbo.json | ✅ | P0-02 → H1 |
+| apps/api/ skeleton | ✅ | P0-03 — server.js + all stubs |
+| nginx.conf | ✅ | P0-06 |
+| ecosystem.config.js | ✅ | P0-07 — 5 PM2 procs |
+| .env.example | ✅ | P0-08 |
+| scripts/seed.js | ✅ | P0-09 stub — implement after P1-01..P1-11 |
+| models/* (16 files) | ⬜ | Phase 1 |
+| packages/types/* | ⬜ | P1-12 — handoff artifact for Dev B |
+| config/* (12 files) | ⬜ | Phase 2 |
+| middleware/* (7 files) | ⬜ | Phase 2 |
+| controllers/operator/* | ⬜ | Phase 3 |
+| controllers/institution/* | ⬜ | Phase 4 |
+| routes/* | ⬜ | Phase 3-4 |

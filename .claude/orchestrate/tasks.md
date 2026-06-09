@@ -8,7 +8,9 @@
 ---
 
 ## CURRENT SESSION GOAL
-**Phase:** Planning complete — architecture/schemas/contracts rewritten. Awaiting go-ahead for Phase 0.
+**Role:** Dev A — backend · infra · security (see `team-division.md` for full split)
+**Phase:** Phase 1 — all Phase 0 Dev A tasks complete ✅. Starting Mongoose models.
+**Next action:** P1-01 Operator model → P1-02 Institution → ... → P1-12 packages/types export → push (H2).
 **Blocking dependency:** none
 
 ---
@@ -33,17 +35,19 @@
 ---
 
 ## PHASE 0 — SCAFFOLD
-| ID | Task | Status | Notes |
-|----|------|--------|-------|
-| P0-01 | Root package.json + Turborepo workspaces | ⬜ | first |
-| P0-02 | turbo.json pipeline | ⬜ | |
-| P0-03 | apps/api skeleton (package.json + src/server.js) | ⬜ | |
-| P0-04 | 4 Next.js apps (operator + 3 institution panels) | ⬜ | institution apps read `:slug` from path |
-| P0-05 | packages/ui · types · utils skeletons | ⬜ | |
-| P0-06 | nginx.conf — path-regex routing + operator/api server blocks | ⬜ | `^/[^/]+/(student|teacher|admin)/` |
-| P0-07 | ecosystem.config.js (PM2: api + 4 panels) | ⬜ | |
-| P0-08 | .env.example (PLATFORM_DOMAIN, OPERATOR_DOMAIN, secrets, Mongo, S3, Razorpay, SMTP) | ⬜ | no hardcoded domains |
-| P0-09 | scripts/seed.js skeleton | ⬜ | superadmin + instrument master |
+> Dev A owns P0-01 through P0-03, P0-06 through P0-09. Push P0-01 + P0-02 first — Dev B is blocked on them.
+
+| ID | Task | Owner | Status | Notes |
+|----|------|-------|--------|-------|
+| P0-01 | Root package.json + Turborepo workspaces | **A** | ✅ | |
+| P0-02 | turbo.json pipeline | **A** | ✅ | → H1: Dev B unblocked |
+| P0-03 | apps/api skeleton (package.json + src/server.js + full folder tree) | **A** | ✅ | all stubs created |
+| P0-04 | 4 Next.js apps (operator + 3 institution panels) | **B** | ⬜ | wait for H1 |
+| P0-05 | packages/ui · types · utils skeletons | **B** | ⬜ | wait for H1 |
+| P0-06 | nginx.conf — path-regex routing + operator/api server blocks | **A** | ✅ | |
+| P0-07 | ecosystem.config.js (PM2: api + 4 panels) | **A** | ✅ | 5 processes: api:4000 + panels:3000-3003 |
+| P0-08 | .env.example (PLATFORM_DOMAIN, OPERATOR_DOMAIN, secrets, Mongo, S3, Razorpay, SMTP) | **A** | ✅ | |
+| P0-09 | scripts/seed.js skeleton | **A** | ✅ | implement in Phase 1 after models |
 
 ## PHASE 1 — MODELS (core MVP set) + types
 | ID | Task | Status | Notes |

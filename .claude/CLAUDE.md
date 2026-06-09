@@ -64,19 +64,36 @@ School        Delhi                          Punjab
 
 ---
 
+## ACTIVE DEVELOPER ROLE
+
+**We are building as Dev A (backend · infra · security).** Full ownership split: `team-division.md`.
+
+Dev A owns:
+- `apps/api/**` (Express backend, all models, all controllers, all middleware, all routes)
+- `packages/types/**` (shared interfaces — Dev B reads, never writes)
+- `nginx.conf`, `ecosystem.config.js`, `.env.example`, `scripts/seed.js`
+
+Dev A does NOT touch:
+- `apps/operator-panel/**`, `apps/institution-*-panel/**` (Dev B)
+- `packages/ui/**`, `packages/utils/**` (Dev B)
+
+Dev B is unblocked at Handoff H1 (after P0-01 + P0-02 are pushed). Push immediately after.
+
+---
+
 ## TECH STACK (do not substitute)
 
 ```
 Backend:     Node.js + Express + MongoDB (Mongoose, mongoose-paginate-v2)
-Frontend:    Next.js 14 (App Router) — one app per panel
-Monorepo:    Turborepo
+Frontend:    Next.js 14 (App Router) — 4 separate apps, one per panel
+Monorepo:    Turborepo (4 apps + 3 packages)
 Auth:        JWT in httpOnly cookies (never localStorage), PBAC panelAccess
 File Upload: AWS S3 (pre-signed URLs)
 Email:       Nodemailer (branded per-institution sender)
 Payments:    Razorpay — per-teacher payment links; app TRACKS money, does not ROUTE it
 Real-time:   Socket.io (live attendance, class status) — rooms keyed by institutionId
 Scheduler:   node-cron (daily student-status / validity transitions)
-Infra:       Single VPS · Nginx reverse proxy · PM2
+Infra:       Single VPS · Nginx reverse proxy · PM2 (5 processes: api + 4 panels)
 ```
 
 ---
@@ -228,16 +245,18 @@ Any line that touches data without `institutionId` (outside `/operator/*`) = sec
 
 ## IMPLEMENTATION PHASES (see orchestrate/tasks.md for the live board)
 ```
-Phase 0 — Monorepo scaffold (4 apps + 3 packages), Nginx path routing, PM2
-Phase 1 — Mongoose models (core MVP set) + shared types
-Phase 2 — Auth + PBAC middleware (operator 2FA, instAuth, scopeGuard, panelGuard, impersonation)
-Phase 3 — Operator (SaaS) APIs: institutions CRUD, grant/revoke admin, cross-inst views, impersonation
-Phase 4 — Institution APIs: admin (8 tabs), teacher, student
-Phase 5 — Operator panel frontend
-Phase 6 — Institution panels frontend (admin, teacher, student) + white-label theming
-Phase 7 — Payments (Razorpay webhook + reconciliation), daily cron, branded emails
-Phase 8 — QA, security audit (isolation + white-label leak check), deploy
+Phase 0 — Monorepo scaffold             [A: api + nginx + PM2 + env]  [B: 4 Next.js apps + packages/ui/utils]
+Phase 1 — Mongoose models + types       [A only]
+Phase 2 — Auth + PBAC middleware        [A only]  ← /cso MANDATORY
+Phase 3 — Operator APIs                 [A only]
+Phase 4 — Institution APIs              [A only]  ← /cso MANDATORY
+Phase 5 — Operator panel frontend       [B only]  ← /qa
+Phase 6 — Institution panels frontend   [B only]  ← /qa + leak check
+Phase 7 — Payments · cron · emails · Socket.io   [A: backend]  [B: UI wiring]
+Phase 8 — QA + security audit + deploy  [A: isolation + /cso + deploy]  [B: bundle leak check + /qa]
 ```
+
+Handoffs: H1 after P0-01+P0-02 (push immediately → B unblocked) · H2 after P1-12 · H3 after Phase 2 · H4 after Phase 3 · H5 after Phase 4 · H6 after Phase 7.
 
 ## GSTACK
 
