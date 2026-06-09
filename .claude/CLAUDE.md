@@ -239,6 +239,22 @@ Phase 7 — Payments (Razorpay webhook + reconciliation), daily cron, branded em
 Phase 8 — QA, security audit (isolation + white-label leak check), deploy
 ```
 
-## GSTACK — see GSTACK.md
-`/cso` is mandatory after Phase 2 (auth/PBAC) and Phase 4 (institution isolation).
-`/qa` after Phase 5 and Phase 6 (and verify NO Max Music leakage on institution panels).
+## GSTACK
+
+Gstack skills are installed at `~/.claude/skills/gstack`. Full reference: `GSTACK.md`.
+
+### Web browsing
+Use `/browse` from gstack for ALL web browsing. **Never use `mcp__claude-in-chrome__*` tools.**
+
+### Available skills
+`/office-hours` · `/plan-ceo-review` · `/plan-eng-review` · `/plan-design-review` ·
+`/design-consultation` · `/design-shotgun` · `/design-html` · `/review` · `/ship` ·
+`/land-and-deploy` · `/canary` · `/benchmark` · `/browse` · `/connect-chrome` ·
+`/qa` · `/qa-only` · `/design-review` · `/setup-browser-cookies` · `/setup-deploy` ·
+`/setup-gbrain` · `/retro` · `/investigate` · `/document-release` · `/document-generate` ·
+`/codex` · `/cso` · `/autoplan` · `/plan-devex-review` · `/devex-review` ·
+`/careful` · `/freeze` · `/guard` · `/unfreeze` · `/gstack-upgrade` · `/learn`
+
+### Mandatory checkpoints (see GSTACK.md for exact context to feed each skill)
+`/cso` after Phase 2 (auth/PBAC) and Phase 4 (institution isolation) — non-negotiable.
+`/qa` after Phase 5 and Phase 6 (verify NO Max Music leakage on institution panels).
