@@ -13,6 +13,8 @@ apps/api/
     ├── config/
     │   ├── db.js                      ← Mongoose connect (single connection)
     │   ├── jwt.js                     ← sign/verify; per-panel secrets; god-token issue
+    │   ├── password.js                ← bcrypt hash/compare (cost 12); randomTempPassword()
+    │   ├── instAuthHelpers.js         ← brandingPublic() + issuePanelCookie() (embeds instVersion+userVersion)
     │   ├── helper.js                  ← Helper.response(res, code, msg, data)
     │   ├── auditLog.js                ← auditLog() with { w: 0 }; strips secrets
     │   ├── specialFunctions.js        ← generateSlug(), nextDisplayId(), encodeBatchName()
@@ -178,8 +180,9 @@ Phase 8  /cso, leak audit, /qa, nginx+SSL, pm2+seed, /ship
 | scripts/seed.js | ✅ | P0-09 stub — implement after P1-01..P1-11 |
 | models/* (16 files) | ✅ | Phase 1 + P1-R review — all schemas, indexes, pre-hooks; +mobile/instrument/employmentType indexes; +findOneAndUpdate label hooks; +slug $setOnInsert guard |
 | packages/types/* | ✅ | P1-12 → H2 — models.ts + api.ts exported |
-| config/* (12 files) | ✅ | P2-01 — 8 critical (db, jwt, helper, auditLog, specialFunctions, strings, totp, s3) + 4 stubs |
+| config/* (14 files) | ✅ | P2-01 base + Phase 3/4 added password.js + instAuthHelpers.js; mailer/razorpay/socket/cron still Phase 7 stubs |
 | middleware/* (7 files) | ✅ | P2-02..P2-08 — operatorAuth, resolveInstitution, instAuth, scopeGuard, panelGuard, impersonation, rateLimit |
-| controllers/operator/* | ⬜ | Phase 3 — gated on /cso pass |
-| controllers/institution/* | ⬜ | Phase 4 — gated on /cso pass |
-| routes/* | ⬜ | Phase 3-4 |
+| controllers/operator/* (9) | ✅ | Phase 3 — auth+institution lifecycle+cross-inst reads+payments+changes+dashboard+settings; P3-R /review ✅ |
+| controllers/institution/* (10) | ✅ | Phase 4 — auth + 7 admin + teacher + student; golden-rule isolation self-check clean; P4-R /cso PENDING |
+| routes/auth.js · operator.js | ✅ | Phase 3 — 29 operator routes behind operatorAuth |
+| routes/institution.js | ✅ | Phase 4 — 46 routes; full chains resolveInstitution→instAuth→scopeGuard→[panelGuard] |

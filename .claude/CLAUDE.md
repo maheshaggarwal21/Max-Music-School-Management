@@ -77,7 +77,9 @@ Dev A does NOT touch:
 - `apps/operator-panel/**`, `apps/institution-*-panel/**` (Dev B)
 - `packages/ui/**`, `packages/utils/**` (Dev B)
 
-**H1 + H2 complete** — scaffold + 16 models + `packages/types` ready. **P1-R /plan-eng-review complete** (5 model fixes applied). Phase 2 config + middleware written. **P2-R /cso complete** — all 5 checkpoint Qs verified clean; .gitignore + lockfile + nodemailer@8 + node-cron@4 fixed. **Phase 3 CURRENT** — 3 mandatory implementation contracts: (1) embed `instVersion`+`userVersion` in JWT at login; (2) bump `tokenVersion` on grant/revoke/suspend/terminate; (3) call `invalidateInstitution(slug)` after institution state changes.
+**H1 + H2 complete** — scaffold + 16 models + `packages/types` ready. **P1-R /plan-eng-review ✅** (5 model fixes). **P2-R /cso ✅** — 5 checkpoint Qs clean; .gitignore + lockfile + nodemailer@8 + node-cron@4 fixed. **Phase 3 (Operator APIs) ✅** — 9 controllers + 29 routes behind `operatorAuth`. **P3-R /review ✅** — 5 fixes (existingTeacher isolation guard, grant/revoke idempotency = no mass-logout, impersonate targetUserId required, audit accuracy). **Phase 4 (Institution APIs) ✅** — 10 controllers + 46 routes under `/api/inst/:slug/*`; golden-rule isolation self-check clean; every login JWT embeds `instVersion`+`userVersion`; brandingPublic-only (white-label). **P4-R CURRENT** — `/cso` MANDATORY institution-isolation audit before Phase 5.
+
+The 3 implementation contracts from P2-R are now LIVE in code: (1) login JWTs embed `instVersion`+`userVersion` (via `config/instAuthHelpers.issuePanelCookie`); (2) grant/revoke/suspend/terminate bump `tokenVersion`; (3) every institution state change calls `invalidateInstitution(slug)`.
 
 ---
 
@@ -246,17 +248,17 @@ Any line that touches data without `institutionId` (outside `/operator/*`) = sec
 ## IMPLEMENTATION PHASES (see orchestrate/tasks.md for the live board)
 ```
 Phase 0 — Monorepo scaffold        ✅ DONE  [A: api + nginx + PM2 + env]  [B: 4 Next.js apps + packages/ui/utils — pending]
-Phase 1 — Mongoose models + types  ✅ DONE  [A only]
-Phase 2 — Auth + PBAC middleware   ✅ DONE  [A only]  ← /cso MANDATORY (pending)
-Phase 3 — Operator APIs            ← CURRENT  [A only]  (blocked on /cso)
-Phase 4 — Institution APIs              [A only]  ← /cso MANDATORY
+Phase 1 — Mongoose models + types  ✅ DONE  [A only]  (P1-R /plan-eng-review ✅)
+Phase 2 — Auth + PBAC middleware   ✅ DONE  [A only]  (P2-R /cso ✅)
+Phase 3 — Operator APIs            ✅ DONE  [A only]  (P3-R /review ✅)
+Phase 4 — Institution APIs         ✅ DONE  [A only]  ← P4-R /cso MANDATORY (pending)
 Phase 5 — Operator panel frontend       [B only]  ← /qa
 Phase 6 — Institution panels frontend   [B only]  ← /qa + leak check
 Phase 7 — Payments · cron · emails · Socket.io   [A: backend]  [B: UI wiring]
 Phase 8 — QA + security audit + deploy  [A: isolation + /cso + deploy]  [B: bundle leak check + /qa]
 ```
 
-Handoffs: H1 ✅ · H2 ✅ (packages/types exported — Dev B can wire typed responses) · H3 after Phase 2 · H4 after Phase 3 · H5 after Phase 4 · H6 after Phase 7.
+Handoffs: H1 ✅ · H2 ✅ (packages/types exported — Dev B can wire typed responses) · H3 ✅ (Phase 2 done) · H4 ✅ (Phase 3 operator API contracts in CONTRACTS.md) · H5 ✅ (Phase 4 institution API contracts in CONTRACTS.md — Dev B can build all 4 panels) · H6 after Phase 7.
 
 ## GSTACK
 

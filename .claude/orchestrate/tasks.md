@@ -11,7 +11,8 @@
 **Role:** Dev A — backend · infra · security (see `team-division.md` for full split)
 **Phase:** Phase 4 (Institution APIs) ✅ — 10 controllers + 46 routes. P4-R /cso pending (MANDATORY).
 **Next action:** P4-R /cso — institutionId isolation audit on every institution controller (MANDATORY before Phase 5).
-**Blocking dependency:** Phase 3 controllers MUST honour 3 mandatory contracts from P2-R: (1) embed instVersion+userVersion in JWT at login; (2) bump tokenVersion on grant/revoke/suspend/terminate; (3) call invalidateInstitution(slug) after any institution state change.
+**P2-R contracts — LIVE in code (verify in P4-R /cso):** (1) login JWTs embed instVersion+userVersion via config/instAuthHelpers.issuePanelCookie; (2) grant/revoke/suspend/terminate bump tokenVersion; (3) institution state changes call invalidateInstitution(slug).
+**Blocking dependency:** P4-R /cso must pass before Phase 5 (frontend) — confirms no cross-institution leak in any /api/inst/:slug/* controller.
 
 ---
 
