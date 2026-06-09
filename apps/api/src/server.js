@@ -13,10 +13,9 @@ const PORT = process.env.PORT || 4000;
 // ── Security & parsing middleware ────────────────────────────────────────────
 app.use(helmet());
 app.use(cors({
-  origin: [
-    process.env.PLATFORM_DOMAIN_URL,
-    process.env.OPERATOR_DOMAIN_URL,
-  ],
+  // Drop undefined entries so a missing env var can never collapse the
+  // allow-list into "reflect any origin".
+  origin: [process.env.PLATFORM_DOMAIN_URL, process.env.OPERATOR_DOMAIN_URL].filter(Boolean),
   credentials: true,
 }));
 app.use(express.json());
@@ -24,13 +23,16 @@ app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
 if (process.env.NODE_ENV !== 'production') app.use(morgan('dev'));
 
-// ── Routes (uncomment as phases complete) ────────────────────────────────────
-// Phase 2-4: const authRoutes       = require('./routes/auth');
-// Phase 3:   const operatorRoutes   = require('./routes/operator');
-// Phase 4:   const institutionRoutes = require('./routes/institution');
-// app.use('/api', authRoutes);
-// app.use('/api/operator', operatorRoutes);
-// app.use('/api/inst', institutionRoutes);
+// ── Routes ───────────────────────────────────────────────────────────────────
+const { apiLimiter } = require('./middleware/rateLimit');
+const authRoutes     = require('./routes/auth');
+const operatorRoutes = require('./routes/operator');
+const institutionRoutes = require('./routes/institution'); // Phase 4 (stub router)
+
+app.use('/api', apiLimiter);
+app.use('/api/auth', authRoutes);
+app.use('/api/operator', operatorRoutes);
+app.use('/api/inst', institutionRoutes);
 
 // ── Health check ─────────────────────────────────────────────────────────────
 app.get('/health', (req, res) => res.json({ status: 'ok', env: process.env.NODE_ENV }));
@@ -47,7 +49,7 @@ app.use((err, req, res, next) => {
 
 // ── Bootstrap ────────────────────────────────────────────────────────────────
 async function start() {
-  // Phase 2: await require('./config/db').connect();
+  await require('./config/db').connect();
   // Phase 7: require('./config/socket').init(server);
   // Phase 7: require('./config/cron').init();
 

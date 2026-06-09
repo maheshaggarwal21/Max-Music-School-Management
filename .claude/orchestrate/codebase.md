@@ -13,6 +13,9 @@ apps/api/
     ├── config/
     │   ├── db.js                      ← Mongoose connect (single connection)
     │   ├── jwt.js                     ← sign/verify; per-panel secrets; god-token issue
+    │   ├── password.js                ← bcrypt hash/compare (cost 12); randomTempPassword()
+    │   ├── instAuthHelpers.js         ← brandingPublic() + issuePanelCookie() (embeds instVersion+userVersion)
+    │   ├── refGuard.js                ← studentRefsValid() — rejects cross-institution teacher/batch/instrument refs (P4-R)
     │   ├── helper.js                  ← Helper.response(res, code, msg, data)
     │   ├── auditLog.js                ← auditLog() with { w: 0 }; strips secrets
     │   ├── specialFunctions.js        ← generateSlug(), nextDisplayId(), encodeBatchName()
@@ -38,7 +41,7 @@ apps/api/
     │   ├── Holiday.js
     │   ├── Payment.js
     │   ├── RentInvoice.js             ← platform-level (operator revenue)
-    │   ├── RazorpayWebhookEvent.js    ← platform-level (reconciliation feed)
+    │   ├── RazorpayWebhookEvent.js    ← platform-level (reconciliation feed); 12-month TTL on receivedAt (T-001)
     │   ├── AuditLog.js                ← immutable; Changes History + per-student activity
     │   └── UniqueIdCounter.js         ← per-institution display-ID sequences
     │   # DEFERRED (reserve names): VideoChapter, VideoSession, StudentVideoProgress,
@@ -176,10 +179,11 @@ Phase 8  /cso, leak audit, /qa, nginx+SSL, pm2+seed, /ship
 | ecosystem.config.js | ✅ | P0-07 — 5 PM2 procs |
 | .env.example | ✅ | P0-08 |
 | scripts/seed.js | ✅ | P0-09 stub — implement after P1-01..P1-11 |
-| models/* (16 files) | ⬜ | Phase 1 |
-| packages/types/* | ⬜ | P1-12 — handoff artifact for Dev B |
-| config/* (12 files) | ⬜ | Phase 2 |
-| middleware/* (7 files) | ⬜ | Phase 2 |
-| controllers/operator/* | ⬜ | Phase 3 |
-| controllers/institution/* | ⬜ | Phase 4 |
-| routes/* | ⬜ | Phase 3-4 |
+| models/* (16 files) | ✅ | Phase 1 + P1-R review — all schemas, indexes, pre-hooks; +mobile/instrument/employmentType indexes; +findOneAndUpdate label hooks; +slug $setOnInsert guard |
+| packages/types/* | ✅ | P1-12 → H2 — models.ts + api.ts exported |
+| config/* (15 files) | ✅ | P2-01 base + Phase 3/4 added password.js, instAuthHelpers.js, refGuard.js; mailer/razorpay/socket/cron still Phase 7 stubs |
+| middleware/* (7 files) | ✅ | P2-02..P2-08 — operatorAuth, resolveInstitution, instAuth, scopeGuard, panelGuard, impersonation, rateLimit |
+| controllers/operator/* (9) | ✅ | Phase 3 — auth+institution lifecycle+cross-inst reads+payments+changes+dashboard+settings; P3-R /review ✅ |
+| controllers/institution/* (10) | ✅ | Phase 4 — auth + 7 admin + teacher + student; P4-R /cso ✅ (1 HIGH fixed: refGuard on student create/patch + request approve) |
+| routes/auth.js · operator.js | ✅ | Phase 3 — 29 operator routes behind operatorAuth |
+| routes/institution.js | ✅ | Phase 4 — 46 routes; full chains resolveInstitution→instAuth→scopeGuard→[panelGuard] |

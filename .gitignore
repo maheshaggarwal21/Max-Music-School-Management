@@ -1,8 +1,32 @@
-
 *.png
-node_modules
-.next/
-.turbo/
+
+# Environment — NEVER commit real .env files
 .env
 .env.local
+.env.*.local
+!.env.example
+
+# Dependencies
+node_modules/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Build outputs
+.next/
+.turbo/
+dist/
+build/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Gstack — security reports stay local
 .gstack/
+
+# TypeScript build output (a bare "types" pattern would ignore packages/types —
+# the shared package Dev B consumes at H2 — which is why it never reached main)
+*.tsbuildinfo

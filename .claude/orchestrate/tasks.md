@@ -9,9 +9,10 @@
 
 ## CURRENT SESSION GOAL
 **Role:** Dev A — backend · infra · security (see `team-division.md` for full split)
-**Phase:** Phase 1 — all Phase 0 Dev A tasks complete ✅. Starting Mongoose models.
-**Next action:** P1-01 Operator model → P1-02 Institution → ... → P1-12 packages/types export → push (H2).
-**Blocking dependency:** none
+**Phase:** Phase 4 ✅ + P4-R /cso ✅ (1 HIGH fixed). Backend (Phases 0-4) COMPLETE. Phase 5 (operator panel frontend, Dev B) next.
+**Next action:** Handoff to Dev B for Phase 5/6 frontend, OR Dev A starts Phase 7 (payments/cron/email/socket). All API contracts in CONTRACTS.md.
+**P2-R contracts — LIVE in code (verify in P4-R /cso):** (1) login JWTs embed instVersion+userVersion via config/instAuthHelpers.issuePanelCookie; (2) grant/revoke/suspend/terminate bump tokenVersion; (3) institution state changes call invalidateInstitution(slug).
+**Blocking dependency:** P4-R /cso must pass before Phase 5 (frontend) — confirms no cross-institution leak in any /api/inst/:slug/* controller.
 
 ---
 
@@ -52,64 +53,64 @@
 ## PHASE 1 — MODELS (core MVP set) + types
 | ID | Task | Status | Notes |
 |----|------|--------|-------|
-| P1-01 | Operator | ⬜ | 2FA fields, tokenVersion |
-| P1-02 | Institution | ⬜ | slug immutable, mode, status, branding, rent, tokenVersion |
-| P1-03 | Teacher | ⬜ | panelAccess, isOwner, tokenVersion, salaryAmount, razorpayPaymentLink |
-| P1-04 | Student | ⬜ | joinStatus, validity, paid/upcoming amount+classes, tokenVersion |
-| P1-05 | EnrollmentRequest | ⬜ | pending/approved/rejected, paymentStatus |
-| P1-06 | Batch | ⬜ | instrument+dayPattern+timeSlot+teacher, setting phase |
-| P1-07 | DayPattern · TimeSlot · Instrument | ⬜ | reusable, per-institution |
-| P1-08 | Attendance · Holiday | ⬜ | |
-| P1-09 | Payment · RentInvoice · RazorpayWebhookEvent | ⬜ | |
-| P1-10 | AuditLog (immutable) | ⬜ | changes[] + before/after, w:0 |
-| P1-11 | UniqueIdCounter | ⬜ | per-institution display IDs |
-| P1-12 | packages/types — interfaces for all models | ⬜ | after models |
-| P1-R | gstack /plan-eng-review on models (indexes, isolation) | ⬜ | |
+| P1-01 | Operator | ✅ | 2FA fields, tokenVersion |
+| P1-02 | Institution | ✅ | slug immutable (schema + pre-update hook), branding subdoc, rent subdoc |
+| P1-03 | Teacher | ✅ | panelAccess, isOwner, unique {inst,email}+{inst,displayId}; +{inst,mobile}+{inst,employmentType} (P1-R) |
+| P1-04 | Student | ✅ | full lifecycle fields, unique {inst,displayId}, validityEnd cron; +{inst,mobile}+{inst,instrumentId} (P1-R) |
+| P1-05 | EnrollmentRequest | ✅ | handledBy subdoc, paginate |
+| P1-06 | Batch | ✅ | refs instrument/dayPattern/timeSlot/teacher, setting status default |
+| P1-07 | DayPattern · TimeSlot · Instrument | ✅ | derived label hooks + pre(findOneAndUpdate) re-derive; unique compound indexes |
+| P1-08 | Attendance · Holiday | ✅ | unique {student,batch,date} on attendance |
+| P1-09 | Payment · RentInvoice · RazorpayWebhookEvent | ✅ | paginate on all three; RazorpayWebhookEvent has 12-month TTL on receivedAt (T-001 done) |
+| P1-10 | AuditLog (immutable) | ✅ | pre-update + pre-delete hooks throw; no updatedAt |
+| P1-11 | UniqueIdCounter | ✅ | unique {inst,entityType} |
+| P1-12 | packages/types — interfaces for all models | ✅ | models.ts + api.ts + index barrel → H2 |
+| P1-R | gstack /plan-eng-review on models (indexes, isolation) | ✅ | 5 fixes: {inst,mobile}/{inst,instrumentId}/{inst,employmentType} indexes; DayPattern+TimeSlot label re-derive on findOneAndUpdate; Institution slug $setOnInsert guard. T5 (security invariant tests) pending |
 
 ## PHASE 2 — AUTH + PBAC MIDDLEWARE
 | ID | Task | Status | Notes |
 |----|------|--------|-------|
-| P2-01 | config: db, jwt (per-panel secrets), helper, auditLog (w:0), specialFunctions (slug, displayId), strings | ⬜ | |
-| P2-02 | operatorAuth + 2FA (TOTP) | ⬜ | |
-| P2-03 | resolveInstitution (cache, 404 unknown, 403 suspended) | ⬜ | |
-| P2-04 | instAuth(panel) — 2-level tokenVersion + panelAccess check | ⬜ | |
-| P2-05 | scopeGuard | ⬜ | actor.institutionId === institution._id |
-| P2-06 | panelGuard('admin') — PBAC | ⬜ | |
-| P2-07 | impersonation god-token issue + accept (bypass scope/panel, stamp impersonatedBy) | ⬜ | |
-| P2-08 | login rate limiting + cookie path-scoping | ⬜ | |
-| P2-R | gstack /cso on all middleware | ⬜ | ⚠️ CRITICAL — do not skip |
+| P2-01 | config: db, jwt (per-panel secrets), helper, auditLog (w:0), specialFunctions (slug, displayId), strings, totp, s3 + Phase 7 stubs (mailer/razorpay/socket/cron) | ✅ | 12 files |
+| P2-02 | operatorAuth + 2FA (TOTP) | ✅ | twoFactorCompleted claim required |
+| P2-03 | resolveInstitution (cache, 404 unknown, 403 suspended) | ✅ | TTL 5 min + invalidateInstitution(slug) |
+| P2-04 | instAuth(panel) — 2-level tokenVersion + panelAccess check | ✅ | god-token path short-circuits |
+| P2-05 | scopeGuard | ✅ | actor.institutionId === institution._id; god bypass |
+| P2-06 | panelGuard('admin') — PBAC | ✅ | god bypass |
+| P2-07 | impersonation god-token issue + accept (bypass scope/panel, stamp impersonatedBy) | ✅ | issueGodCookie + impersonatedByFromActor |
+| P2-08 | login rate limiting + cookie path-scoping | ✅ | loginLimiter, operatorLoginLimiter, apiLimiter |
+| P2-R | gstack /cso on all middleware | ✅ | 5 checkpoint Qs verified clean; 2 HIGH findings fixed (.gitignore + lockfile); nodemailer 6→8 + node-cron 3→4 upgraded; 3 Phase 3 mandatory contracts documented |
 
 ## PHASE 3 — OPERATOR (SaaS) APIs
 | ID | Task | Status | Notes |
 |----|------|--------|-------|
-| P3-01 | Auth controllers (operator login/2fa/logout/me) | ⬜ | |
-| P3-02 | InstitutionController — CRUD, slug gen, activate | ⬜ | |
-| P3-03 | grant-admin / revoke-admin (panelAccess + mode + tokenVersion) | ⬜ | scenario 3 button |
-| P3-04 | suspend / reactivate / terminate | ⬜ | |
-| P3-05 | impersonate endpoint | ⬜ | |
-| P3-06 | Cross-institution Students view (tagged) | ⬜ | god-mode query |
-| P3-07 | Cross-institution Teachers view (tagged, salary/rent) | ⬜ | |
-| P3-08 | Payments (student fees) + RentInvoices + mark-paid | ⬜ | two streams |
-| P3-09 | Changes History (global audit) + filters | ⬜ | |
-| P3-10 | Dashboard aggregations + Settings | ⬜ | |
-| P3-11 | routes/operator.js | ⬜ | |
-| P3-R | gstack /review on operator controllers | ⬜ | |
+| P3-01 | Auth controllers (operator login/2fa/logout/me) | ✅ | 2-step 2FA-mandatory; challengeToken→TOTP→operator_token; constant-time-ish compare |
+| P3-02 | InstitutionController — CRUD, slug gen, activate | ✅ | create(slug+owner teacher, ownerTempPassword once), list(batched counts), get(detail), update(no slug/mode) |
+| P3-03 | grant-admin / revoke-admin (panelAccess + mode + tokenVersion) | ✅ | P2-R: bumps owner+inst tokenVersion, invalidateInstitution(slug), audit TOGGLE_MODE |
+| P3-04 | suspend / reactivate / terminate | ✅ | suspend+terminate bump inst.tokenVersion; all 3 invalidateInstitution(slug) |
+| P3-05 | impersonate endpoint | ✅ | issueGodCookie path-scoped; returns url+expiresInSec; audit IMPERSONATE_START |
+| P3-06 | Cross-institution Students view (tagged) | ✅ | list+get, institution/teacher/batch/instrument tags, filters |
+| P3-07 | Cross-institution Teachers view (tagged, salary/rent) | ✅ | amount=salary or owner rent; activeBatches; role owner/staff |
+| P3-08 | Payments (student fees) + RentInvoices + mark-paid | ✅ | fees stream+summary, rent-invoices stream, markRentPaid audits MARK_RENT_PAID |
+| P3-09 | Changes History (global audit) + filters | ✅ | AuditLog timeline, filters institutionId/entityType/action/actorRole/actorName/date |
+| P3-10 | Dashboard aggregations + Settings | ✅ | dashboard counts+revenue+recent+overdue; settings profile/2FA-enrol/instruments |
+| P3-11 | routes/operator.js + auth.js wired in server.js | ✅ | 29 routes; operatorAuth gate; apiLimiter+operatorLoginLimiter |
+| P3-R | gstack /review on operator controllers | ✅ | 5 fixes: existingTeacher isolation guard, grant/revoke idempotency (no mass-logout), impersonate targetUserId required, update audits branding/rent |
 
 ## PHASE 4 — INSTITUTION APIs
 | ID | Task | Status | Notes |
 |----|------|--------|-------|
-| P4-01 | inst auth controllers (admin/teacher/student login, me, logout) | ⬜ | branding in response |
-| P4-02 | admin: Requests (list/create/approve/reject) | ⬜ | two-step enrollment |
-| P4-03 | admin: Students (list/detail/create/patch/activity) | ⬜ | per-student audit feed |
-| P4-04 | admin: Teachers (list/create/patch) | ⬜ | admin cannot grant 'admin' |
-| P4-05 | admin: Batches (list/create/patch, name auto-encode) | ⬜ | |
-| P4-06 | admin: Attendance grid | ⬜ | |
-| P4-07 | admin: Day-patterns + Time-slots (CRUD + toggles) | ⬜ | |
-| P4-08 | admin: Payments (manual entry + reconciliation feed) | ⬜ | |
-| P4-09 | teacher: batches, attendance mark, holidays, me | ⬜ | Socket.io on mark |
-| P4-10 | student: dashboard, classes, timetable, me | ⬜ | branding only |
-| P4-11 | routes/institution.js (full middleware chains) | ⬜ | |
-| P4-R | gstack /cso — institutionId isolation grep on EVERY controller | ⬜ | ⚠️ CRITICAL — do not skip |
+| P4-01 | inst auth controllers (admin/teacher/student login, me, logout) | ✅ | JWT embeds instVersion+userVersion (P2-R #1); brandingPublic only; path-scoped cookie |
+| P4-02 | admin: Requests (list/create/approve/reject) | ✅ | approve→Student (displayId+tempPassword), links request |
+| P4-03 | admin: Students (list/detail/create/patch/activity) | ✅ | whitelisted editable fields, every diff audited; activity=AuditLog by entityId |
+| P4-04 | admin: Teachers (list/create/patch) | ✅ | rejects panelAccess/isOwner/employmentType (operator-only); temp password once |
+| P4-05 | admin: Batches (list/create/patch, name auto-encode) | ✅ | refs verified in-institution; encodeBatchName; studentCount maintained |
+| P4-06 | admin: Attendance grid | ✅ | batch+range→dates[]+rows{marks}; holidays folded in |
+| P4-07 | admin: Day-patterns + Time-slots (CRUD + toggles) | ✅ | dup→400; label hooks; toggles audited |
+| P4-08 | admin: Payments (manual entry + reconciliation feed) | ✅ | paid fee bumps Student.paidAmount; webhook feed read-only |
+| P4-09 | teacher: batches, attendance mark, holidays, me | ✅ | double-scope (inst+own teacherId); mark upserts+emit; holiday credits/reverses |
+| P4-10 | student: dashboard, classes, timetable, me | ✅ | own data only; brandingPublic; no Max Music identifiers |
+| P4-11 | routes/institution.js (full middleware chains) | ✅ | 46 routes; resolveInstitution→instAuth→scopeGuard→[panelGuard] |
+| P4-R | gstack /cso — institutionId isolation grep on EVERY controller | ✅ | 1 HIGH fixed: studentRefsValid() rejects foreign teacher/batch/instrument refs in student create/patch + request approve (cross-tenant populate leak). 5 checkpoint Qs otherwise clean |
 
 ## PHASE 5 — OPERATOR PANEL FRONTEND
 | ID | Task | Status | Notes |
