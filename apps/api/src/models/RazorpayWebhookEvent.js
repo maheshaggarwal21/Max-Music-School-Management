@@ -19,7 +19,11 @@ const RazorpayWebhookEventSchema = new mongoose.Schema(
 );
 
 RazorpayWebhookEventSchema.index({ paymentId: 1 }, { sparse: true });
-RazorpayWebhookEventSchema.index({ receivedAt: -1 });
+// TTL: auto-expire raw reconciliation events after 12 months (T-001). The
+// authoritative money ledger lives in the Payment model and is NOT expired —
+// only this raw webhook feed. A single ascending TTL index also serves the
+// receivedAt sort (Mongo scans it in reverse for descending order).
+RazorpayWebhookEventSchema.index({ receivedAt: 1 }, { expireAfterSeconds: 365 * 24 * 3600 });
 RazorpayWebhookEventSchema.index({ institutionId: 1, receivedAt: -1 });
 
 RazorpayWebhookEventSchema.plugin(mongoosePaginate);

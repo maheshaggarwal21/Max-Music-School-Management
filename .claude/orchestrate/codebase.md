@@ -40,7 +40,7 @@ apps/api/
     │   ├── Holiday.js
     │   ├── Payment.js
     │   ├── RentInvoice.js             ← platform-level (operator revenue)
-    │   ├── RazorpayWebhookEvent.js    ← platform-level (reconciliation feed)
+    │   ├── RazorpayWebhookEvent.js    ← platform-level (reconciliation feed); 12-month TTL on receivedAt (T-001)
     │   ├── AuditLog.js                ← immutable; Changes History + per-student activity
     │   └── UniqueIdCounter.js         ← per-institution display-ID sequences
     │   # DEFERRED (reserve names): VideoChapter, VideoSession, StudentVideoProgress,

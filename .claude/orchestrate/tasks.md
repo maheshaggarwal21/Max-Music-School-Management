@@ -61,7 +61,7 @@
 | P1-06 | Batch | ✅ | refs instrument/dayPattern/timeSlot/teacher, setting status default |
 | P1-07 | DayPattern · TimeSlot · Instrument | ✅ | derived label hooks + pre(findOneAndUpdate) re-derive; unique compound indexes |
 | P1-08 | Attendance · Holiday | ✅ | unique {student,batch,date} on attendance |
-| P1-09 | Payment · RentInvoice · RazorpayWebhookEvent | ✅ | paginate on all three |
+| P1-09 | Payment · RentInvoice · RazorpayWebhookEvent | ✅ | paginate on all three; RazorpayWebhookEvent has 12-month TTL on receivedAt (T-001 done) |
 | P1-10 | AuditLog (immutable) | ✅ | pre-update + pre-delete hooks throw; no updatedAt |
 | P1-11 | UniqueIdCounter | ✅ | unique {inst,entityType} |
 | P1-12 | packages/types — interfaces for all models | ✅ | models.ts + api.ts + index barrel → H2 |
