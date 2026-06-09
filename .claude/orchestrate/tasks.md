@@ -43,8 +43,8 @@
 | P0-01 | Root package.json + Turborepo workspaces | **A** | ✅ | |
 | P0-02 | turbo.json pipeline | **A** | ✅ | → H1: Dev B unblocked |
 | P0-03 | apps/api skeleton (package.json + src/server.js + full folder tree) | **A** | ✅ | all stubs created |
-| P0-04 | 4 Next.js apps (operator + 3 institution panels) | **B** | ⬜ | wait for H1 |
-| P0-05 | packages/ui · types · utils skeletons | **B** | ⬜ | wait for H1 |
+| P0-04 | 4 Next.js apps (operator + 3 institution panels) | **B** | ✅ | wait for H1 |
+| P0-05 | packages/ui · types · utils skeletons | **B** | ✅ | wait for H1 |
 | P0-06 | nginx.conf — path-regex routing + operator/api server blocks | **A** | ✅ | |
 | P0-07 | ecosystem.config.js (PM2: api + 4 panels) | **A** | ✅ | 5 processes: api:4000 + panels:3000-3003 |
 | P0-08 | .env.example (PLATFORM_DOMAIN, OPERATOR_DOMAIN, secrets, Mongo, S3, Razorpay, SMTP) | **A** | ✅ | |
@@ -115,24 +115,24 @@
 ## PHASE 5 — OPERATOR PANEL FRONTEND
 | ID | Task | Status | Notes |
 |----|------|--------|-------|
-| P5-01 | packages/ui core (DataTable, Modal, StatusBadge, StatsCard, Sidebar, Form, SearchBar, Avatar) | ⬜ | Steel Blue brand |
-| P5-02 | operator-panel: layout + login (2FA) | ⬜ | |
-| P5-03 | Dashboard | ⬜ | |
-| P5-04 | Institutions (list, create modal, detail, mode/grant/suspend, impersonate) | ⬜ | |
-| P5-05 | Students (cross-inst, tags, filters) | ⬜ | |
-| P5-06 | Teachers (cross-inst, tags, salary/rent) | ⬜ | |
-| P5-07 | Payments (fees + rents) | ⬜ | |
-| P5-08 | Changes History (timeline + before/after expand + filters) | ⬜ | |
-| P5-09 | Settings (profile, 2FA, default rent, instruments) | ⬜ | |
+| P5-01 | packages/ui core (DataTable, Modal, StatusBadge, StatsCard, Sidebar, Form, SearchBar, Avatar) | ✅ | Steel Blue brand |
+| P5-02 | operator-panel: layout + login (2FA) | ✅ | |
+| P5-03 | Dashboard | ✅ | |
+| P5-04 | Institutions (list, create modal, detail, mode/grant/suspend, impersonate) | ✅ | |
+| P5-05 | Students (cross-inst, tags, filters) | ✅ | |
+| P5-06 | Teachers (cross-inst, tags, salary/rent) | ✅ | |
+| P5-07 | Payments (fees + rents) | ✅ | |
+| P5-08 | Changes History (timeline + before/after expand + filters) | ✅ | |
+| P5-09 | Settings (profile, 2FA, default rent, instruments) | ✅ | |
 | P5-R | gstack /qa on operator panel | ⬜ | |
 
 ## PHASE 6 — INSTITUTION PANELS FRONTEND
 | ID | Task | Status | Notes |
 |----|------|--------|-------|
-| P6-01 | White-label theming layer (branding → CSS vars, logo, title) | ⬜ | no Max Music anywhere |
-| P6-02 | institution-admin-panel — 8 tabs + student detail popup w/ activity feed | ⬜ | |
-| P6-03 | institution-teacher-panel — batches, attendance, holidays | ⬜ | |
-| P6-04 | institution-student-panel — dashboard, classes, profile | ⬜ | |
+| P6-01 | White-label theming layer (branding → CSS vars, logo, title) | ✅ | no Max Music anywhere |
+| P6-02 | institution-admin-panel — 8 tabs + student detail popup w/ activity feed | ✅ | |
+| P6-03 | institution-teacher-panel — batches, attendance, holidays | ✅ | |
+| P6-04 | institution-student-panel — dashboard, classes, profile | ✅ | |
 | P6-R | gstack /qa — both managed (impersonation) + autonomous flows; LEAK CHECK | ⬜ | grep bundles for "maxmusic" |
 
 ## PHASE 7 — PAYMENTS + CRONS + NOTIFICATIONS

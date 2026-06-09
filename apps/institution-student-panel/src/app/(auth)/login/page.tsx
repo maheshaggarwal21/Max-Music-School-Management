@@ -1,0 +1,180 @@
+"use client";
+import * as React from "react";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { ArrowRight, Loader2 } from "lucide-react";
+import { toast } from "sonner";
+import {
+  BlurFade,
+  BorderBeam,
+  BrandingProvider,
+  Button,
+  GradientText,
+  Input,
+  ShinyText,
+  SpotlightCard,
+} from "@maxmusic/ui";
+
+import { api, mockable, studentAuthPath } from "@/lib/api";
+import { MOCK_BRANDING, MOCK_LOGIN_RESPONSE, type StudentLoginResponse } from "@/lib/mocks";
+import type { ApiResponse, BrandingPublic } from "@/lib/types";
+
+// WHITE-LABEL: this page is branding-led — the institution's school name,
+// logo and color are the ONLY identity ever shown. No operator branding, ever.
+//
+// BLOCKED (Dev A): there is no public pre-login branding endpoint in
+// CONTRACTS.md yet (branding currently arrives in the login response). Until
+// `GET /api/inst/:slug/branding` exists, real mode renders a neutral hero
+// before sign-in; mock mode uses MOCK_BRANDING.
+
+export default function LoginPage() {
+  const router = useRouter();
+  const [branding, setBranding] = useState<BrandingPublic | null>(null);
+  const [mobile, setMobile] = useState("");
+  const [password, setPassword] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    mockable<BrandingPublic | null>(
+      // Real call pending the public branding contract (see BLOCKED note above).
+      () => Promise.resolve(null),
+      MOCK_BRANDING
+    ).then((b) => {
+      if (cancelled) return;
+      setBranding(b);
+      if (b?.schoolName) document.title = b.schoolName;
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const schoolName = branding?.schoolName ?? "Your Music School";
+  const initial = schoolName.trim().charAt(0).toUpperCase() || "♪";
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!mobile || !password) {
+      toast.error("Please enter your mobile number and password");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await mockable(
+        () =>
+          api.post<ApiResponse<StudentLoginResponse>>(studentAuthPath("/login"), {
+            mobile,
+            password,
+          }),
+        {
+          success: true,
+          message: "Welcome back!",
+          data: MOCK_LOGIN_RESPONSE,
+        } as ApiResponse<StudentLoginResponse>,
+        600
+      );
+      toast.success(`Welcome back! Loading your classes…`);
+      router.push("/dashboard");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Sign in failed");
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <BrandingProvider branding={branding}>
+      <main className="relative flex min-h-dvh items-center justify-center overflow-hidden bg-background p-6">
+        {/* Ambient brand glow */}
+        <div className="pointer-events-none absolute inset-0 overflow-hidden">
+          <div
+            className="absolute left-1/2 top-[-80px] h-[340px] w-[560px] -translate-x-1/2 rounded-full opacity-[0.07] blur-[110px]"
+            style={{ backgroundColor: "var(--brand-primary)" }}
+          />
+        </div>
+
+        <div className="w-full max-w-sm">
+          {/* School hero — institution identity only */}
+          <BlurFade delay={0}>
+            <div className="mb-8 flex flex-col items-center gap-3 text-center">
+              {branding?.logoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={branding.logoUrl}
+                  alt={schoolName}
+                  className="h-16 w-16 rounded-2xl object-cover shadow-lg"
+                />
+              ) : (
+                <span
+                  className="flex h-16 w-16 items-center justify-center rounded-2xl bg-brand/10 text-2xl font-bold text-brand"
+                  style={{ boxShadow: "var(--glow-primary-sm)" }}
+                >
+                  {initial}
+                </span>
+              )}
+              <GradientText className="text-2xl font-bold">{schoolName}</GradientText>
+              {branding?.tagline && (
+                <ShinyText text={branding.tagline} speed={5} className="text-sm" />
+              )}
+            </div>
+          </BlurFade>
+
+          <BlurFade delay={0.1}>
+            <SpotlightCard className="relative overflow-hidden rounded-2xl border border-border bg-card p-6 shadow-sm">
+              <BorderBeam size={60} duration={8} />
+              <div className="mb-5 space-y-1">
+                <h1 className="text-lg font-semibold">Welcome back</h1>
+                <p className="text-sm text-muted-foreground">
+                  Sign in to see your classes, schedule and payments.
+                </p>
+              </div>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <Input
+                  label="Mobile number"
+                  type="tel"
+                  inputMode="numeric"
+                  autoComplete="tel"
+                  placeholder="10-digit mobile number"
+                  value={mobile}
+                  onChange={(e) => setMobile(e.target.value)}
+                  required
+                />
+                <Input
+                  label="Password"
+                  type="password"
+                  autoComplete="current-password"
+                  placeholder="Your password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                />
+                <Button
+                  variant="brand"
+                  size="lg"
+                  type="submit"
+                  disabled={submitting}
+                  className="group h-12 w-full rounded-full transition-all duration-300"
+                >
+                  {submitting ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <>
+                      Sign in
+                      <ArrowRight className="ml-2 h-4 w-4 transition-transform duration-300 group-hover:translate-x-1" />
+                    </>
+                  )}
+                </Button>
+              </form>
+            </SpotlightCard>
+          </BlurFade>
+
+          <BlurFade delay={0.2}>
+            <p className="mt-6 text-center text-xs text-muted-foreground">
+              Forgot your password? Ask your school to reset it for you.
+            </p>
+          </BlurFade>
+        </div>
+      </main>
+    </BrandingProvider>
+  );
+}
