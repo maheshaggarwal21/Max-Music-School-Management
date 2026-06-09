@@ -47,7 +47,7 @@ app.use((err, req, res, next) => {
 
 // ── Bootstrap ────────────────────────────────────────────────────────────────
 async function start() {
-  // Phase 2: await require('./config/db').connect();
+  await require('./config/db').connect();
   // Phase 7: require('./config/socket').init(server);
   // Phase 7: require('./config/cron').init();
 

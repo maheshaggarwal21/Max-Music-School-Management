@@ -1,6 +1,30 @@
 'use strict';
-// TODO: Phase 1 — fields: institutionId (required), batchId, studentId, teacherId, date,
-//                 status (present|absent|holiday|credited)
-//                 indexes: { institutionId:1, batchId:1, date:1 }, { institutionId:1, studentId:1, date:-1 }
-//                 unique: { institutionId, batchId, studentId, date }
-module.exports = {};
+
+const mongoose = require('mongoose');
+
+const MarkedBySchema = new mongoose.Schema(
+  {
+    actorId:   { type: String, required: true },
+    actorRole: { type: String, enum: ['superadmin', 'institution_admin', 'teacher', 'system'], required: true },
+  },
+  { _id: false }
+);
+
+const AttendanceSchema = new mongoose.Schema(
+  {
+    institutionId: { type: mongoose.Schema.Types.ObjectId, ref: 'Institution', required: true, index: true },
+    batchId:       { type: mongoose.Schema.Types.ObjectId, ref: 'Batch', required: true },
+    studentId:     { type: mongoose.Schema.Types.ObjectId, ref: 'Student', required: true },
+    teacherId:     { type: mongoose.Schema.Types.ObjectId, ref: 'Teacher' },
+    date:          { type: Date, required: true },
+    status:        { type: String, enum: ['present', 'absent', 'holiday', 'credited'], required: true },
+    markedBy:      { type: MarkedBySchema },
+  },
+  { timestamps: true }
+);
+
+AttendanceSchema.index({ institutionId: 1, batchId: 1, date: 1 });
+AttendanceSchema.index({ institutionId: 1, studentId: 1, date: -1 });
+AttendanceSchema.index({ studentId: 1, batchId: 1, date: 1 }, { unique: true });
+
+module.exports = mongoose.model('Attendance', AttendanceSchema);

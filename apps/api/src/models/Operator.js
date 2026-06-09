@@ -1,4 +1,19 @@
 'use strict';
-// TODO: Phase 1 — fields: name, email, passwordHash (select:false), totpSecret (select:false),
-//                 twoFactorEnabled, tokenVersion, createdAt
-module.exports = {};
+
+const mongoose = require('mongoose');
+
+const OperatorSchema = new mongoose.Schema(
+  {
+    name:              { type: String, required: true, trim: true },
+    email:             { type: String, required: true, unique: true, lowercase: true, trim: true },
+    passwordHash:      { type: String, required: true, select: false },
+    role:              { type: String, enum: ['superadmin'], default: 'superadmin', required: true },
+    totpSecret:        { type: String, select: false },
+    twoFactorEnabled:  { type: Boolean, default: true },
+    tokenVersion:      { type: Number, default: 0 },
+    lastLoginAt:       { type: Date },
+  },
+  { timestamps: true }
+);
+
+module.exports = mongoose.model('Operator', OperatorSchema);

@@ -1,3 +1,9 @@
 'use strict';
-// TODO: Phase 7 — Razorpay client init; verifyWebhookSignature(body, signature) → boolean
-module.exports = {};
+
+// Phase 7 — Razorpay client + webhook signature verification.
+
+function verifyWebhookSignature() {
+  throw new Error('Razorpay webhook verification not implemented (Phase 7)');
+}
+
+module.exports = { verifyWebhookSignature };
