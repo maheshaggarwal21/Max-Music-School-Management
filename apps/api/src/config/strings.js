@@ -43,6 +43,7 @@ module.exports = {
   STUDENT_CREATED:       'Student created',
   STUDENT_UPDATED:       'Student updated',
   STUDENT_NOT_FOUND:     'Student not found',
+  STUDENT_BAD_REFS:      'Teacher, batch or instrument is invalid for this institution',
   BATCH_CREATED:         'Batch created',
   BATCH_UPDATED:         'Batch updated',
   REQUEST_CREATED:       'Request submitted',

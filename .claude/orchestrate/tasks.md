@@ -9,8 +9,8 @@
 
 ## CURRENT SESSION GOAL
 **Role:** Dev A — backend · infra · security (see `team-division.md` for full split)
-**Phase:** Phase 4 (Institution APIs) ✅ — 10 controllers + 46 routes. P4-R /cso pending (MANDATORY).
-**Next action:** P4-R /cso — institutionId isolation audit on every institution controller (MANDATORY before Phase 5).
+**Phase:** Phase 4 ✅ + P4-R /cso ✅ (1 HIGH fixed). Backend (Phases 0-4) COMPLETE. Phase 5 (operator panel frontend, Dev B) next.
+**Next action:** Handoff to Dev B for Phase 5/6 frontend, OR Dev A starts Phase 7 (payments/cron/email/socket). All API contracts in CONTRACTS.md.
 **P2-R contracts — LIVE in code (verify in P4-R /cso):** (1) login JWTs embed instVersion+userVersion via config/instAuthHelpers.issuePanelCookie; (2) grant/revoke/suspend/terminate bump tokenVersion; (3) institution state changes call invalidateInstitution(slug).
 **Blocking dependency:** P4-R /cso must pass before Phase 5 (frontend) — confirms no cross-institution leak in any /api/inst/:slug/* controller.
 
@@ -110,7 +110,7 @@
 | P4-09 | teacher: batches, attendance mark, holidays, me | ✅ | double-scope (inst+own teacherId); mark upserts+emit; holiday credits/reverses |
 | P4-10 | student: dashboard, classes, timetable, me | ✅ | own data only; brandingPublic; no Max Music identifiers |
 | P4-11 | routes/institution.js (full middleware chains) | ✅ | 46 routes; resolveInstitution→instAuth→scopeGuard→[panelGuard] |
-| P4-R | gstack /cso — institutionId isolation grep on EVERY controller | ⬜ | ⚠️ CRITICAL — do not skip |
+| P4-R | gstack /cso — institutionId isolation grep on EVERY controller | ✅ | 1 HIGH fixed: studentRefsValid() rejects foreign teacher/batch/instrument refs in student create/patch + request approve (cross-tenant populate leak). 5 checkpoint Qs otherwise clean |
 
 ## PHASE 5 — OPERATOR PANEL FRONTEND
 | ID | Task | Status | Notes |

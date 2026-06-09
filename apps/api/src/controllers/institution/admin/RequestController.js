@@ -4,6 +4,7 @@ const EnrollmentRequest = require('../../../models/EnrollmentRequest');
 const Student = require('../../../models/Student');
 const Batch   = require('../../../models/Batch');
 const { nextDisplayId } = require('../../../config/specialFunctions');
+const { studentRefsValid } = require('../../../config/refGuard');
 const { hash, randomTempPassword } = require('../../../config/password');
 const { auditLog, actorFromReq } = require('../../../config/auditLog');
 const { ok, created, badRequest, notFound, paginated } = require('../../../config/helper');
@@ -108,6 +109,11 @@ exports.approve = async (req, res, next) => {
       teacherId, batchId, instrumentId, classType,
       validityDays, paidAmount, paymentStatus,
     } = req.body || {};
+
+    // GOLDEN RULE: reject foreign teacher/batch/instrument refs before creating the Student.
+    if (!(await studentRefsValid(inst, { teacherId, batchId, instrumentId }))) {
+      return badRequest(res, S.STUDENT_BAD_REFS);
+    }
 
     const displayId = await nextDisplayId(inst, 'student');
     const tempPassword = randomTempPassword();

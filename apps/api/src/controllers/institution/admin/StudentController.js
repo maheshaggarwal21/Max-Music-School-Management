@@ -5,6 +5,7 @@ const Batch      = require('../../../models/Batch');
 const Attendance = require('../../../models/Attendance');
 const AuditLog   = require('../../../models/AuditLog');
 const { nextDisplayId } = require('../../../config/specialFunctions');
+const { studentRefsValid } = require('../../../config/refGuard');
 const { hash, randomTempPassword } = require('../../../config/password');
 const { auditLog, actorFromReq, diff } = require('../../../config/auditLog');
 const { ok, created, badRequest, notFound, paginated } = require('../../../config/helper');
@@ -123,6 +124,9 @@ exports.create = async (req, res, next) => {
     const { name, mobile } = req.body || {};
     if (!name || !mobile) return badRequest(res, S.VALIDATION_FAILED);
 
+    // GOLDEN RULE: foreign teacher/batch/instrument refs must be rejected before persist.
+    if (!(await studentRefsValid(inst, req.body))) return badRequest(res, S.STUDENT_BAD_REFS);
+
     const displayId = await nextDisplayId(inst, 'student');
     const tempPassword = randomTempPassword();
     const passwordHash = await hash(tempPassword);
@@ -161,6 +165,9 @@ exports.patch = async (req, res, next) => {
     const inst = req.institution._id;
     const student = await Student.findOne({ _id: req.params.id, institutionId: inst });
     if (!student) return notFound(res, S.STUDENT_NOT_FOUND);
+
+    // GOLDEN RULE: reject foreign teacher/batch/instrument refs before persist.
+    if (!(await studentRefsValid(inst, req.body))) return badRequest(res, S.STUDENT_BAD_REFS);
 
     const before = student.toObject();
     const prevBatch = before.batchId ? String(before.batchId) : null;
