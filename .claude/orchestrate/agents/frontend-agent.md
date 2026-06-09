@@ -1,23 +1,23 @@
 # Frontend Agent
 > Identity: You are the Frontend Agent. You own all Next.js apps and the shared UI package.
-> This file defines the FULL design system, animation library, and component standards
-> extracted from the BoltClaw reference codebase — apply every pattern here to every panel.
-> Brand color is Steel Blue #5B8DEF. There is NO pink anywhere.
+> This file defines the FULL design system, animation library, and component standards.
+> Brand color is Steel Blue #5B8DEF for the operator panel.
+> Institution panels override the brand color from `Institution.branding.primaryColor`.
 
 ---
 
 ## YOUR DOMAIN
 
 ```
-apps/admin-panel/
-apps/teacher-panel/
-apps/student-panel/
-apps/institution-admin-panel/   (Phase 6)
-apps/institution-teacher-panel/
-apps/institution-student-panel/
-packages/ui/                    ← Build ALL shared components here first
+apps/operator-panel/              ← :3000  operator superadmin (Steel Blue brand, always)
+apps/institution-admin-panel/     ← :3001  institution admin (branding from Institution.branding)
+apps/institution-teacher-panel/   ← :3002  institution teacher (same branding override)
+apps/institution-student-panel/   ← :3003  institution student (same branding override)
+packages/ui/                      ← Build ALL shared components here first
 packages/utils/
 ```
+
+**You do NOT touch:** any file under `apps/api/`.
 
 ---
 
@@ -67,7 +67,8 @@ packages/utils/
 Apple / Linear / Vercel dashboard quality. Clean, minimal, professional.
 - Pure warm off-white backgrounds, never harsh white `#ffffff`
 - Deep charcoal text, never pure black
-- Steel Blue `#5B8DEF` as the ONLY brand accent — no pink, no purple, no gradients except within the steel-blue family
+- Steel Blue `#5B8DEF` as the ONLY brand accent on the **operator panel** — no pink, no purple, no gradients except within the steel-blue family
+- Institution panels use `Institution.branding.primaryColor` as their brand accent via CSS variable override
 - Subtle glows and border beams, not bright neons
 - `Inter` font, weight 400/500/600 only
 
@@ -81,7 +82,7 @@ Apple / Linear / Vercel dashboard quality. Clean, minimal, professional.
 export const theme = {
   colors: {
     brand: {
-      primary: "#5B8DEF",        // Steel Blue — the ONLY brand accent
+      primary: "#5B8DEF",        // Steel Blue — operator panel default; overridden per institution
       primaryLight: "#7BA3F3",
       primaryDark: "#4A7ADE",
       primaryDeep: "#3968C7",
@@ -1144,16 +1145,24 @@ This allows each institution to have its own accent color while ALL components
 (buttons, sidebar active states, stat card icons, border beams, badges) automatically
 adopt that color — because everything reads from `--brand-primary`.
 
+**CRITICAL white-label rule:** The layout must NEVER render "Max Music School", the operator
+logo, or `<OPERATOR_DOMAIN>`. Only `branding.schoolName`, `branding.logoUrl`, and
+`branding.primaryColor` are shown. The `<title>` tag uses `branding.schoolName`.
+
 ```typescript
 // apps/institution-admin-panel/src/app/layout.tsx
 export default async function Layout({ children }) {
-  const branding = await fetchInstitutionBranding();
-  // Default to steel blue if no custom color set
+  // Fetch branding from /api/inst/:slug/auth/admin/login (returns BrandingPublic)
+  // or from a dedicated /api/inst/:slug/branding endpoint
+  const branding = await fetchInstitutionBranding(slug);
   const primary = branding?.primaryColor ?? "#5B8DEF";
 
-  // Compute related tones for full palette consistency
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        {/* Title shows institution name ONLY — never "Max Music School" */}
+        <title>{branding?.schoolName ?? "Music School"}</title>
+      </head>
       <body style={{
         "--brand-primary": primary,
         "--brand-primary-light": primary + "dd",
@@ -1176,8 +1185,12 @@ export default async function Layout({ children }) {
 
 ## API CLIENT (apps/[panel]/src/lib/api.ts)
 
+Institution apps build their base URL from slug + panel:
 ```typescript
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api/v1/admin";
+// For institution panels: NEXT_PUBLIC_API_URL = https://api.<PLATFORM_DOMAIN>/api/inst
+// Final call: `${BASE_URL}/${slug}/admin/students`
+
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL!;  // never hardcode, never fallback to localhost in prod
 
 class ApiClient {
   private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
@@ -1195,6 +1208,7 @@ class ApiClient {
   get<T>(ep: string) { return this.request<T>(ep); }
   post<T>(ep: string, b: unknown) { return this.request<T>(ep, { method: "POST", body: JSON.stringify(b) }); }
   put<T>(ep: string, b: unknown) { return this.request<T>(ep, { method: "PUT", body: JSON.stringify(b) }); }
+  patch<T>(ep: string, b: unknown) { return this.request<T>(ep, { method: "PATCH", body: JSON.stringify(b) }); }
   delete<T>(ep: string) { return this.request<T>(ep, { method: "DELETE" }); }
 }
 export const api = new ApiClient();
@@ -1235,11 +1249,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 - **Never** import from `framer-motion` — always `motion/react`
 - **Never** import from `@radix-ui/react-slot` — always `radix-ui`
 - **Never** use `#e91e8c` or any pink/magenta color — brand is Steel Blue `#5B8DEF`
+- **Never** render "Max Music School", the operator logo, or `<OPERATOR_DOMAIN>` on any institution panel
 - **Always** wrap page sections in `<BlurFade inView delay={n}>`
 - **Always** put `<BorderBeam />` as first child of every card
 - **Always** wrap stat cards in `<SpotlightCard>`
 - **Always** use `<Modal>` with `AnimatePresence` — never a bare conditional render
 - **Always** use the `api` client — never raw `fetch` in components
+- **Always** set institution panel `<title>` to `branding.schoolName` only
 
 ---
 

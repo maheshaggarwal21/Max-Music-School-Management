@@ -15,7 +15,7 @@ packages/types/models.ts       ← You own this
 scripts/seed.js                ← You own this
 ```
 
-**You do NOT touch:** middleware auth files (you write the wiring, auth-agent writes the logic), any frontend file.
+**You do NOT touch:** middleware auth files (you write the route wiring; auth-agent writes the middleware logic), any frontend file.
 
 ---
 
@@ -29,71 +29,45 @@ scripts/seed.js                ← You own this
 
 ---
 
-## CONTROLLER TEMPLATE
+## CONTROLLER TEMPLATE — OPERATOR (cross-institution, god-mode)
 
-Every controller follows this exact structure. No exceptions.
+Operator controllers query across ALL institutions. No `institutionId` filter required here.
 
 ```javascript
-// controllers/v1/admin/StudentController.js
-const Student = require('../../../models/StudentModel');
-const Helper = require('../../../config/helper');
-const { auditLog } = require('../../../config/auditLog');
+// controllers/operator/StudentsController.js
+const Student = require('../../models/Student');
+const Helper = require('../../config/helper');
+const { auditLog } = require('../../config/auditLog');
 
 module.exports = {
 
-  getStudents: async (req, res) => {
+  listStudents: async (req, res) => {
     try {
-      const { page = 1, limit = 50, search } = req.query;
-      const query = { status: { $ne: 'deleted' } };
+      const { page = 1, limit = 50, search, institutionId } = req.query;
+      const query = {};
+      if (institutionId) query.institutionId = institutionId;
       if (search) query.$or = [
         { name: { $regex: search, $options: 'i' } },
-        { email: { $regex: search, $options: 'i' } }
+        { email: { $regex: search, $options: 'i' } },
       ];
 
       const [students, total] = await Promise.all([
         Student.find(query)
-          .select('-password -jwt_token -__v')
-          .sort({ _id: -1 })
+          .select('-passwordHash -tokenVersion -__v')
+          .populate('institutionId', 'name slug')
+          .sort({ createdAt: -1 })
           .skip((page - 1) * limit)
           .limit(Number(limit))
           .lean(),
-        Student.countDocuments(query)
+        Student.countDocuments(query),
       ]);
 
-      return Helper.response(res, 200, 'Students fetched successfully', {
-        data: students,
-        pagination: { page: Number(page), limit: Number(limit), total, pages: Math.ceil(total / limit) }
+      return Helper.response(res, 200, 'Students fetched', {
+        items: students,
+        pagination: { page: Number(page), limit: Number(limit), total, pages: Math.ceil(total / limit) },
       });
     } catch (err) {
-      console.error('[StudentController.getStudents]', err);
-      return Helper.response(res, 500, 'Internal server error');
-    }
-  },
-
-  updateStudent: async (req, res) => {
-    try {
-      const { _id, ...updates } = req.body;
-      const before = await Student.findById(_id).lean();
-      if (!before) return Helper.response(res, 404, 'Student not found');
-
-      const after = await Student.findByIdAndUpdate(_id, updates, { new: true, runValidators: true }).lean();
-
-      // AUDIT LOG — required on every write
-      await auditLog({
-        institutionId: null,   // null = main school
-        actorId: req.admin._id,
-        actorRole: 'superadmin',
-        action: 'UPDATE_STUDENT',
-        entityType: 'student',
-        entityId: _id,
-        before,
-        after,
-        ip: req.ip,
-      });
-
-      return Helper.response(res, 200, 'Student updated', { student: after });
-    } catch (err) {
-      console.error('[StudentController.updateStudent]', err);
+      console.error('[Operator.StudentsController.listStudents]', err);
       return Helper.response(res, 500, 'Internal server error');
     }
   },
@@ -102,51 +76,93 @@ module.exports = {
 
 ---
 
-## V2 CONTROLLER TEMPLATE (institution-scoped)
+## CONTROLLER TEMPLATE — INSTITUTION-SCOPED
 
-For every v2 institution controller, the query pattern is different:
+Every institution controller MUST filter by `institutionId`. No exceptions.
 
 ```javascript
-// controllers/v2/institution/admin/StudentController.js
-const Student = require('../../../../models/StudentModel');
-const Helper = require('../../../../config/helper');
-const { auditLog } = require('../../../../config/auditLog');
+// controllers/institution/admin/StudentController.js
+const Student = require('../../../models/Student');
+const Helper = require('../../../config/helper');
+const { auditLog } = require('../../../config/auditLog');
 
 module.exports = {
 
-  getStudents: async (req, res) => {
+  listStudents: async (req, res) => {
     try {
       // req.institution is set by resolveInstitution middleware
-      // req.actor is set by institutionAdminAuth middleware
-      const { page = 1, limit = 50 } = req.query;
+      // req.actor is set by instAuth middleware
+      const { page = 1, limit = 50, search } = req.query;
 
       // GOLDEN RULE: institutionId in EVERY query
-      const query = {
-        institutionId: req.institution._id,
-        status: { $ne: 'deleted' }
-      };
+      const query = { institutionId: req.institution._id };
+      if (search) query.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { displayId: { $regex: search, $options: 'i' } },
+      ];
 
       const [students, total] = await Promise.all([
-        Student.find(query).select('-password -jwt_token -__v').sort({ _id: -1 })
-          .skip((page - 1) * limit).limit(Number(limit)).lean(),
-        Student.countDocuments(query)
+        Student.find(query)
+          .select('-passwordHash -tokenVersion -__v')
+          .sort({ createdAt: -1 })
+          .skip((page - 1) * limit)
+          .limit(Number(limit))
+          .lean(),
+        Student.countDocuments(query),
       ]);
 
       return Helper.response(res, 200, 'Students fetched', {
-        data: students,
-        pagination: { page: Number(page), limit: Number(limit), total, pages: Math.ceil(total / limit) }
+        items: students,
+        pagination: { page: Number(page), limit: Number(limit), total, pages: Math.ceil(total / limit) },
       });
     } catch (err) {
-      console.error('[Inst.StudentController.getStudents]', err);
+      console.error('[Inst.Admin.StudentController.listStudents]', err);
+      return Helper.response(res, 500, 'Internal server error');
+    }
+  },
+
+  updateStudent: async (req, res) => {
+    try {
+      const { studentId } = req.params;
+      const updates = req.body;
+
+      // GOLDEN RULE: scope findOne by institutionId
+      const before = await Student.findOne({ _id: studentId, institutionId: req.institution._id }).lean();
+      if (!before) return Helper.response(res, 404, 'Student not found');
+
+      const after = await Student.findOneAndUpdate(
+        { _id: studentId, institutionId: req.institution._id },
+        updates,
+        { new: true, runValidators: true }
+      ).lean();
+
+      // AUDIT LOG — required on every write, fire-and-forget (w: 0)
+      auditLog({
+        institutionId: req.institution._id,
+        actorId: req.actor._id,
+        actorRole: req.actor.role,
+        actorName: req.actor.name,
+        impersonatedBy: req.impersonatedBy ?? null,
+        action: 'UPDATE_STUDENT',
+        entityType: 'Student',
+        entityId: studentId,
+        entityLabel: `Student: ${after.name}`,
+        changes: [],   // build [{field, from, to}] from diff(before, after)
+        ip: req.ip,
+      });
+
+      return Helper.response(res, 200, 'Student updated', { student: after });
+    } catch (err) {
+      console.error('[Inst.Admin.StudentController.updateStudent]', err);
       return Helper.response(res, 500, 'Internal server error');
     }
   },
 };
 ```
 
-**SELF-CHECK after every v2 controller:**
+**SELF-CHECK after every institution controller:**
 ```bash
-grep -n "\.find\|\.findOne\|\.findOneAndUpdate\|\.updateMany\|\.deleteOne" [file] | grep -v "institutionId"
+grep -nE "\.find|\.findOne|\.findOneAndUpdate|\.updateMany|\.deleteOne|\.aggregate" [file] | grep -v "institutionId"
 # Zero output = safe. Any output = FIX IT before marking ✅
 ```
 
@@ -155,35 +171,64 @@ grep -n "\.find\|\.findOne\|\.findOneAndUpdate\|\.updateMany\|\.deleteOne" [file
 ## ROUTE TEMPLATE
 
 ```javascript
-// routes/v1/admin.js
+// routes/auth.js  →  /api/auth/operator/*
 const router = require('express').Router();
-const adminAuth = require('../../middleware/v1/adminAuth');
-const StudentController = require('../../controllers/v1/admin/StudentController');
+const OperatorAuthController = require('../controllers/operator/AuthController');
 
-// Auth routes (no middleware)
-router.post('/login', AdminController.login);
-
-// Protected routes
-router.get('/students', adminAuth, StudentController.getStudents);
-router.put('/students', adminAuth, StudentController.updateStudent);
-router.delete('/students/:id', adminAuth, StudentController.deleteStudent);
+router.post('/operator/login', OperatorAuthController.login);
+router.post('/operator/verify-2fa', OperatorAuthController.verify2fa);
+router.post('/operator/logout', OperatorAuthController.logout);
+router.get('/operator/me', OperatorAuthController.me);
 
 module.exports = router;
 ```
 
 ```javascript
-// routes/v2/institution.js
+// routes/operator.js  →  /api/operator/*
 const router = require('express').Router();
-const resolveInstitution = require('../../middleware/v2/resolveInstitution');
-const institutionAdminAuth = require('../../middleware/v2/institutionAdminAuth');
-const scopeGuard = require('../../middleware/v2/scopeGuard');
-const modeGuard = require('../../middleware/v2/modeGuard');
-const StudentController = require('../../controllers/v2/institution/admin/StudentController');
+const operatorAuth = require('../middleware/operatorAuth');
+const InstitutionController = require('../controllers/operator/InstitutionController');
+const StudentsController = require('../controllers/operator/StudentsController');
 
-const adminChain = [resolveInstitution, institutionAdminAuth, scopeGuard, modeGuard('autonomous')];
+router.use(operatorAuth);  // all operator routes require operator JWT
 
-router.get('/:slug/admin/students', adminChain, StudentController.getStudents);
-router.put('/:slug/admin/students', adminChain, StudentController.updateStudent);
+router.get('/institutions', InstitutionController.list);
+router.post('/institutions', InstitutionController.create);
+router.get('/institutions/:id', InstitutionController.detail);
+router.patch('/institutions/:id/grant-admin', InstitutionController.grantAdmin);
+router.patch('/institutions/:id/revoke-admin', InstitutionController.revokeAdmin);
+router.patch('/institutions/:id/suspend', InstitutionController.suspend);
+router.patch('/institutions/:id/terminate', InstitutionController.terminate);
+router.post('/institutions/:id/impersonate', InstitutionController.impersonate);
+
+router.get('/students', StudentsController.listStudents);
+
+module.exports = router;
+```
+
+```javascript
+// routes/institution.js  →  /api/inst/:slug/*
+const router = require('express').Router({ mergeParams: true });
+const resolveInstitution  = require('../middleware/resolveInstitution');
+const instAuth            = require('../middleware/instAuth');
+const scopeGuard          = require('../middleware/scopeGuard');
+const panelGuard          = require('../middleware/panelGuard');
+const StudentController   = require('../controllers/institution/admin/StudentController');
+const TeacherAppController = require('../controllers/institution/teacher/TeacherAppController');
+
+// Institution auth routes (no session middleware)
+router.post('/:slug/auth/admin/login',   require('../controllers/institution/AuthController').adminLogin);
+router.post('/:slug/auth/teacher/login', require('../controllers/institution/AuthController').teacherLogin);
+router.post('/:slug/auth/student/login', require('../controllers/institution/AuthController').studentLogin);
+
+// Admin routes chain: resolveInstitution → instAuth('admin') → scopeGuard → panelGuard('admin')
+const adminChain = [resolveInstitution, instAuth('admin'), scopeGuard, panelGuard('admin')];
+router.get('/:slug/admin/students',         adminChain, StudentController.listStudents);
+router.patch('/:slug/admin/students/:studentId', adminChain, StudentController.updateStudent);
+
+// Teacher routes chain: resolveInstitution → instAuth('teacher') → scopeGuard
+const teacherChain = [resolveInstitution, instAuth('teacher'), scopeGuard];
+router.get('/:slug/teacher/batches', teacherChain, TeacherAppController.listBatches);
 
 module.exports = router;
 ```
@@ -195,101 +240,97 @@ module.exports = router;
 Always use this. Never write `res.json()` or `res.status()` directly.
 
 ```javascript
-Helper.response(res, 200, 'Students fetched', { data: students, pagination })
+Helper.response(res, 200, 'Students fetched', { items: students, pagination })
 Helper.response(res, 404, 'Student not found')
 Helper.response(res, 500, 'Internal server error')
 
 // Shape returned:
 { success: boolean, message: string, data: object | null }
+// List endpoints nest as: data: { items: [...], pagination: { page, limit, total, pages } }
 ```
 
 ---
 
 ## MODEL TEMPLATE
 
-Every model follows this exact structure:
+Every institution-scoped model follows this pattern. `institutionId` is **required**, never null.
 
 ```javascript
-// models/StudentModel.js
+// models/Student.js
 const mongoose = require('mongoose');
-const mongoosePaginate = require('mongoose-paginate');
-mongoose.set('debug', false);
+const mongoosePaginate = require('mongoose-paginate-v2');  // NOTE: v2, not v1
 
 const studentSchema = new mongoose.Schema({
 
-  // ── Core fields ────────────────────────────────────────────────────
-  institutionId: {              // NULL = main school, ObjectId = institution tenant
+  // ── Tenant scope — REQUIRED, never null ────────────────────────────
+  institutionId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Institution',
-    default: null,
+    required: true,
     index: true,
   },
 
-  name:   { type: String, default: '', trim: true },
-  email:  { type: String, default: '', lowercase: true, trim: true },
+  displayId: { type: String, default: '' },   // e.g. "SITARH-001001", from UniqueIdCounter
+
+  name:         { type: String, required: true, trim: true },
+  email:        { type: String, default: '', lowercase: true, trim: true },
   mobileNumber: { type: String, default: '' },
-  alternativeMobileNumber: { type: String, default: '' },
-  gender: { type: String, enum: ['male', 'female', ''], default: '' },
-  dateOfBirth: { type: Date },
-  state:  { type: String, default: '' },
+  gender:       { type: String, enum: ['male', 'female', 'other', ''], default: '' },
+  dateOfBirth:  { type: Date },
+  state:        { type: String, default: '' },
+  profilePic:   { type: String, default: '' },  // S3 URL
 
-  password:  { type: String, default: '' },        // bcrypt hash only
-  jwt_token: { type: String, default: '' },         // current active token
+  passwordHash: { type: String, select: false },
+  tokenVersion: { type: Number, default: 0, select: false },
 
-  profilePic: { type: String, default: '' },        // S3 URL
-
-  status: {
+  joinStatus: {
     type: String,
-    enum: ['active', 'inactive', 'deleted'],
-    default: 'active',
+    enum: ['trial', 'active_soon', 'active', 'inactive'],
+    default: 'trial',
   },
+  category: { type: String, enum: ['regular', 'trial'], default: 'regular' },
 
-  uniqueId: { type: String, default: '' },          // e.g. "106928" or "SITARH-001001"
+  validityStart: { type: Date },
+  validityEnd:   { type: Date },
+  validityDays:  { type: Number, default: 0 },
+  paidClasses:   { type: Number, default: 0 },
+  upcomingClasses: { type: Number, default: 0 },
+  paidAmount:    { type: Number, default: 0 },
+  upcomingAmount: { type: Number, default: 0 },
 
-  // ── Relations ────────────────────────────────────────────────────
-  requestId:           { type: mongoose.Schema.Types.ObjectId, ref: 'Request' },
-  lastClassId:         { type: mongoose.Schema.Types.ObjectId, ref: 'Class' },
-  allAssignedClassIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Class' }],
-  suitableDays:        { type: mongoose.Schema.Types.ObjectId, ref: 'DayPattern' },
-  suitableTime:        { type: mongoose.Schema.Types.ObjectId, ref: 'TimeSlot' },
+  batchId: { type: mongoose.Schema.Types.ObjectId, ref: 'Batch', default: null },
 
-  // ── Password reset ───────────────────────────────────────────────
-  temporaryKey:           { type: String },
-  temporaryKeyExpiration: { type: Date },
-  otp:                    { type: Number },
+  recoveryOtp:    { type: String, select: false },
+  otpExpiresAt:   { type: Date },
 
-  createdDate: { type: Date, default: Date.now },
-  updatedDate: { type: Date, default: Date.now },
-}, {
-  timestamps: { createdAt: 'createdDate', updatedAt: 'updatedDate' },
-});
+}, { timestamps: true });
 
-// ── Indexes ────────────────────────────────────────────────────────
-studentSchema.index({ institutionId: 1, createdDate: -1 });  // paginated list
-studentSchema.index({ institutionId: 1, status: 1 });         // filtered list
-studentSchema.index({ email: 1 });
-studentSchema.index({ mobileNumber: 1 });
-studentSchema.index({ uniqueId: 1 });
+// ── Indexes ─────────────────────────────────────────────────────────
+studentSchema.index({ institutionId: 1, createdAt: -1 });
+studentSchema.index({ institutionId: 1, joinStatus: 1 });
+studentSchema.index({ institutionId: 1, displayId: 1 }, { unique: true, sparse: true });
 
 studentSchema.plugin(mongoosePaginate);
 
 module.exports = mongoose.model('Student', studentSchema);
 ```
 
+**Platform-level models** (Operator, Institution, RentInvoice, RazorpayWebhookEvent) do NOT have `institutionId`.
+**Instrument, DayPattern, TimeSlot** are institution-scoped — always have `institutionId`.
+
 ---
 
-## INSTITUTION MODEL
+## INSTITUTION MODEL (abbreviated — full spec in data-model.md)
 
 ```javascript
-// models/InstitutionModel.js
+// models/Institution.js
 const institutionSchema = new mongoose.Schema({
 
-  name:   { type: String, required: true, trim: true },
-  slug:   { type: String, required: true, unique: true, lowercase: true, trim: true },
-  // slug is IMMUTABLE after creation. e.g. "sitar-house-delhi"
+  name:  { type: String, required: true, trim: true },
+  slug:  { type: String, required: true, unique: true, lowercase: true, trim: true },
+  // Slug is IMMUTABLE after creation — never expose an update route for it
 
   ownerTeacherId: { type: mongoose.Schema.Types.ObjectId, ref: 'Teacher', default: null },
-  createdBySaasAdmin: { type: mongoose.Schema.Types.ObjectId, ref: 'Admin', required: true },
 
   mode: { type: String, enum: ['managed', 'autonomous'], default: 'managed' },
   status: {
@@ -300,72 +341,70 @@ const institutionSchema = new mongoose.Schema({
 
   tokenVersion: { type: Number, default: 0 },
 
-  plan: {
-    type: { type: String, enum: ['trial', 'basic', 'pro'], default: 'trial' },
-    startDate:    { type: Date },
-    renewalDate:  { type: Date },
-    billingCycle: { type: String, enum: ['monthly', 'annual'], default: 'monthly' },
-    paidAmount:   { type: Number, default: 0 },
-  },
-
   branding: {
     schoolName:   { type: String, default: '' },
     logoUrl:      { type: String, default: '' },
-    primaryColor: { type: String, default: '#e91e8c' },
+    primaryColor: { type: String, default: '#5B8DEF' },
     tagline:      { type: String, default: '' },
   },
 
-  adminCredentialsDeliveredAt:   { type: Date, default: null },
-  teacherCredentialsDeliveredAt: { type: Date, default: null },
+  rent: {
+    monthlyAmount: { type: Number, default: 0 },
+    dueDay:        { type: Number, default: 1 },
+    status:        { type: String, enum: ['current', 'due', 'overdue'], default: 'current' },
+  },
 
-  createdDate: { type: Date, default: Date.now },
-  updatedDate: { type: Date, default: Date.now },
-});
+}, { timestamps: true });
 
 institutionSchema.index({ slug: 1 });
 institutionSchema.index({ status: 1 });
 institutionSchema.index({ ownerTeacherId: 1 });
 ```
 
+See `orchestrate/data-model.md` for ALL 16 model specs.
+
 ---
 
 ## AUDIT LOG MODEL
 
 ```javascript
-// models/AuditLogModel.js
+// models/AuditLog.js
 const auditLogSchema = new mongoose.Schema({
 
+  // institutionId is required — every operational write is scoped
   institutionId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Institution',
-    default: null,
+    required: true,
+    index: true,
   },
 
   actorId:   { type: String, required: true },
   actorRole: {
     type: String,
-    enum: ['superadmin', 'institution_admin', 'teacher', 'student', 'system', 'cron'],
+    enum: ['superadmin', 'institution_admin', 'teacher', 'student', 'system'],
     required: true,
   },
   actorName: { type: String, default: '' },
+  impersonatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'Operator', default: null },
 
-  action:     { type: String, required: true },
-  entityType: { type: String, required: true },
-  entityId:   { type: String, required: true },
+  action:      { type: String, required: true },
+  entityType:  { type: String, required: true },
+  entityId:    { type: String, required: true },
+  entityLabel: { type: String, default: '' },
 
-  before: { type: mongoose.Schema.Types.Mixed, default: null },
-  after:  { type: mongoose.Schema.Types.Mixed, default: null },
+  changes: [{ field: String, from: mongoose.Schema.Types.Mixed, to: mongoose.Schema.Types.Mixed }],
+  before:  { type: mongoose.Schema.Types.Mixed, default: null },
+  after:   { type: mongoose.Schema.Types.Mixed, default: null },
 
   ip:        { type: String, default: '' },
-  userAgent: { type: String, default: '' },
-  note:      { type: String, default: '' },
 
-  createdDate: { type: Date, default: Date.now },
-  // NO updatedAt — audit logs are immutable once written
-});
+  createdAt: { type: Date, default: Date.now },
+  // NO updatedAt — audit logs are immutable; no { timestamps: true } on this schema
+}, { timestamps: false });
 
-auditLogSchema.index({ institutionId: 1, createdDate: -1 });
-auditLogSchema.index({ actorId: 1, createdDate: -1 });
+auditLogSchema.index({ institutionId: 1, createdAt: -1 });
+auditLogSchema.index({ actorId: 1, createdAt: -1 });
 auditLogSchema.index({ entityType: 1, entityId: 1 });
 auditLogSchema.index({ institutionId: 1, entityType: 1, entityId: 1 });
 ```
@@ -374,23 +413,24 @@ auditLogSchema.index({ institutionId: 1, entityType: 1, entityId: 1 });
 
 ## MODEL RULES
 
-1. **Every model gets `institutionId`** (except AdminModel, ContactModel, RazorpayWebhookModel).
-2. **Every model gets compound indexes**: `{ institutionId: 1, createdDate: -1 }` and `{ institutionId: 1, status: 1 }` at minimum.
-3. **Never remove existing fields.** Add only.
-4. **Passwords are stored as bcrypt hashes only.** Never store plaintext.
-5. **Strip sensitive fields before auditLog()**: password, jwt_token, temporaryKey, otp.
-6. **UniqueIdModel needs a `prefix` field** and compound index `{ institutionId: 1, type: 1 }`.
+1. **Every institution-scoped model gets `institutionId: { required: true }`** — never `default: null`.
+   Platform-only models (Operator, Institution, RentInvoice, RazorpayWebhookEvent) are the sole exceptions.
+2. **Every institution-scoped model gets compound indexes**: `{ institutionId: 1, createdAt: -1 }` and `{ institutionId: 1, <status field>: 1 }` at minimum.
+3. **Use `mongoose-paginate-v2`**, not `mongoose-paginate`.
+4. **Sensitive fields use `select: false`**: `passwordHash`, `tokenVersion`, `recoveryOtp`, `totpSecret`.
+5. **Strip sensitive fields before `auditLog()`**: passwordHash, tokenVersion, recoveryOtp, otp, totpSecret.
+6. **Slug is immutable** — no setter, no update route.
+7. **AuditLog has no `{ timestamps: true }`** — it has its own `createdAt: Date.now`, no `updatedAt`.
 
 ---
 
 ## SEED SCRIPT
 
 `scripts/seed.js` must create:
-1. Superadmin: `{ email: 'admin@maxmusic.com', password: 'changeme123', role: 'superadmin' }`
-2. Default instruments: Guitar, Piano, Tabla, Violin, Flute, Keyboard, Drums, Vocals (all `institutionId: null`)
-3. Default day patterns: `[Mon-Wed-Fri]`, `[Tue-Thu-Sat]`, `[Mon-Tue-Wed-Thu-Fri-Sat]`
-4. Default time slots: 30-minute windows from 6AM to 10PM (all `institutionId: null`)
-5. UniqueId records: `{ type: 'student', prefix: '', lastuniqueId: '100000', institutionId: null }` and `{ type: 'teacher', ... }`
+1. Operator (superadmin): `{ name: 'Max Music Admin', email: from .env, role: 'operator' }` with bcrypt-hashed password and TOTP setup
+2. Default instruments: Guitar, Piano, Tabla, Violin, Flute, Keyboard, Drums, Vocals
+   - These are **platform-level** (no `institutionId`) — used as a template; each institution copies them
+3. A demo institution (slug: `demo-school`) with one owner teacher
 
 ---
 
@@ -401,15 +441,20 @@ After every model is written, update `models.ts` with the matching interface:
 ```typescript
 export interface IStudent {
   _id: Types.ObjectId;
-  institutionId: Types.ObjectId | null;
+  institutionId: Types.ObjectId;   // required — never null
+  displayId: string;
   name: string;
   email: string;
   mobileNumber: string;
-  status: 'active' | 'inactive' | 'deleted';
-  uniqueId: string;
-  requestId?: Types.ObjectId;
-  createdDate: Date;
-  updatedDate: Date;
+  joinStatus: 'trial' | 'active_soon' | 'active' | 'inactive';
+  category: 'regular' | 'trial';
+  validityStart?: Date;
+  validityEnd?: Date;
+  paidAmount: number;
+  upcomingAmount: number;
+  batchId?: Types.ObjectId;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export interface IInstitution {
@@ -420,9 +465,10 @@ export interface IInstitution {
   mode: 'managed' | 'autonomous';
   status: 'pending' | 'active' | 'suspended' | 'terminated';
   tokenVersion: number;
-  plan: { type: 'trial' | 'basic' | 'pro'; startDate?: Date; renewalDate?: Date; };
-  branding: { schoolName: string; logoUrl: string; primaryColor: string; };
-  createdDate: Date;
+  branding: { schoolName: string; logoUrl: string; primaryColor: string; tagline: string; };
+  rent: { monthlyAmount: number; dueDay: number; status: 'current' | 'due' | 'overdue'; };
+  createdAt: Date;
+  updatedAt: Date;
 }
 ```
 
@@ -430,8 +476,8 @@ export interface IInstitution {
 
 ## AFTER COMPLETING A TASK
 
-1. Run the grep self-check on every v2 controller you wrote
+1. Run the grep self-check on every institution controller you wrote
 2. Update tasks.md: mark your task ✅
 3. Update codebase.md: mark file status ✅
-4. Update packages/types/models.ts with the new interface (for models)
+4. Update `packages/types/models.ts` with new interface (for models)
 5. If you completed a phase, trigger: "review-agent: Phase X ready for review"

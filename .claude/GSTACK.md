@@ -34,9 +34,10 @@ Running `/cso` on a large codebase is expensive — it reads many files.
 Before running any gstack command, make sure Claude Code has these files in context:
 
 ```
-.claude/CLAUDE.md           ← Always — this is the project bible
-.claude/CONTRACTS.md        ← For review/security skills
-.claude/orchestrate/tasks.md ← For planning/review phases
+.claude/CLAUDE.md                    ← Always — this is the project bible
+.claude/CONTRACTS.md                 ← For review/security skills
+.claude/orchestrate/tasks.md         ← For planning/review phases
+.claude/orchestrate/data-model.md    ← For schema/model reviews
 ```
 
 To explicitly give context before a skill runs:
@@ -104,89 +105,103 @@ To explicitly give context before a skill runs:
 
 ## Which Skills to Use and When (This Project)
 
-### Phase 0 — Before writing a single line of code
-```
-/office-hours
-```
-Feed it the monorepo structure from CLAUDE.md + the institution mode table.
-Ask: "Review the multi-tenant architecture. What are the top 3 risks in
-the institutionId isolation approach? What would you change?"
-
 ### Phase 1 — After all models are written
 ```
 /plan-eng-review
 ```
-Feed it all model files. Check:
-- Does every model that should have institutionId actually have it?
+Feed it all model files from `apps/api/src/models/`. Check:
+- Does every institution-scoped model have a required, indexed `institutionId`?
 - Are compound indexes correct for the query patterns?
 - Are there any missing indexes that will cause slow queries at scale?
+- Does AuditLog have `{ w: 0 }` and no `updatedAt`?
 
-### Phase 2 — After all middleware is written
+### Phase 2 — After all middleware is written (CRITICAL)
 ```
 /cso
 ```
 **Most important gstack run on the whole project.**
 Read these files into context first:
 ```
-apps/api/src/middleware/v2/resolveInstitution.js
-apps/api/src/middleware/v2/scopeGuard.js
-apps/api/src/middleware/v2/modeGuard.js
-apps/api/src/middleware/v2/institutionAdminAuth.js
+apps/api/src/middleware/resolveInstitution.js
+apps/api/src/middleware/scopeGuard.js
+apps/api/src/middleware/panelGuard.js
+apps/api/src/middleware/instAuth.js
+apps/api/src/middleware/impersonation.js
 apps/api/src/config/jwt.js
 ```
-Tell /cso to specifically check:
+Tell `/cso` to specifically check:
 1. Can a user from Institution A ever get data from Institution B?
-2. Is the tokenVersion check actually invalidating tokens on mode toggle?
-3. Does modeGuard block managed-mode institutions from admin routes?
-4. Is there any path where scopeGuard's superadmin bypass can be spoofed?
+2. Is the two-level tokenVersion check (institution + user) actually invalidating tokens on mode toggle and grant/revoke?
+3. Does panelGuard block teachers without `'admin'` in panelAccess from admin routes?
+4. Is there any path where scopeGuard's god-token bypass can be spoofed?
+5. Are institution cookies path-scoped to `/api/inst/:slug` so they can't be sent cross-institution?
 
-### Phase 3 — After v1 controllers are written
+### Phase 3 — After operator controllers are written
 ```
 /review
 ```
 Run per controller file, not on the whole codebase at once.
-Ask /review to check: no password/jwt_token in responses, auditLog() on every
-write, pagination on every list, no raw error messages in 500s.
+Ask `/review` to check:
+- No password/passwordHash/recoveryOtp/otp in any response
+- `auditLog()` called on every write, with `{ w: 0 }` — never synchronous/blocking
+- Pagination on every list endpoint
+- No raw `err.message` or stack traces in 500 responses
+- All responses via `Helper.response()` — no bare `res.json()`
 
-### Phase 4 — After main school frontend is done
-```
-/qa
-```
-/qa uses Playwright. Feed it:
-- The login URL (localhost:3001)
-- Test credentials from seed.js
-- A list of pages to walk through
-
-Example prompt:
-"Login to admin panel at localhost:3001/login with email admin@maxmusic.com
-and password changeme123. Navigate to /new-requests, verify table loads and
-shows pagination. Navigate to /students, search for 'test', verify filtering."
-
-### Phase 5 — After institution backend is written (CRITICAL)
+### Phase 4 — After institution controllers are written (CRITICAL)
 ```
 /cso  ← run again
 ```
-Feed it ALL v2 institution controllers. Ask specifically:
-"Check every MongoDB query in the v2/institution controllers.
-Does every single query include institutionId as a filter?
-Show me any query that doesn't."
+Feed it ALL institution controllers under `apps/api/src/controllers/institution/`.
+Ask specifically:
+"Check every MongoDB query in the institution controllers.
+Does every single query include `institutionId` as a filter?
+Show me any query that doesn't — that is a multi-tenant data isolation bug."
 
-Always end your /cso prompt with:
-"Additionally, check every MongoDB query in the v2 institution controllers
-and confirm institutionId is present in every query filter."
+Self-check command to run before invoking `/cso`:
+```bash
+grep -nE "\.find|\.findOne|\.findOneAndUpdate|\.updateMany|\.deleteOne|\.aggregate" \
+  apps/api/src/controllers/institution/**/*.js | grep -v institutionId
+# Zero output = safe. Any output = fix before calling /cso.
+```
+
+### Phase 5 — After operator panel frontend is done
+```
+/qa
+```
+`/qa` uses Playwright. Feed it:
+- The operator panel login URL (localhost:3000)
+- Test credentials from `scripts/seed.js`
+- A list of pages: dashboard, institutions list, create institution, students cross-view, teachers cross-view, payments, changes history
+- The 2FA flow (TOTP required on operator login)
+
+### Phase 6 — After institution panels frontend is done
+```
+/qa  ← run again
+```
+Test both paths:
+1. **Autonomous institution** — owner logs in as admin, then as teacher (same credentials)
+2. **Managed institution** — superadmin impersonates, verifies brand shows institution name only
+
+**White-label leak check — run this before /qa:**
+```bash
+# Grep built bundles for any "Max Music" or operator domain reference
+grep -rn "Max Music\|maxmusic\|OPERATOR_DOMAIN" apps/institution-*/
+# Expected: zero results
+```
 
 ### Before any deploy
 ```
 /ship
 ```
-Feed it: ecosystem.config.js, nginx.conf, .env.example
+Feed it: `ecosystem.config.js`, `nginx.conf`, `.env.example`
 
 ---
 
 ## Two NON-NEGOTIABLE /cso Runs
 
 1. **After Phase 2 middleware** — The middleware is the only thing standing between tenants
-2. **After Phase 5 institution controllers** — Where cross-tenant data leaks happen
+2. **After Phase 4 institution controllers** — Where cross-tenant data leaks happen
 
 Never skip these two.
 
@@ -196,9 +211,8 @@ Never skip these two.
 
 | Skill | When | Input | What to look for |
 |-------|------|-------|-----------------|
-| /office-hours | Pre-Phase 0 | Architecture description | Design risks |
-| /plan-eng-review | After Phase 1 | All model files | Schema correctness |
-| /review | After Phase 2, 3, 5 | Controller files | Code quality, security |
-| /cso | After Phase 2 + Phase 5 | Middleware + controllers | Auth bypass, data isolation |
-| /qa | After Phase 4 + Phase 6 | Running app URL | UI flows, broken pages |
+| /plan-eng-review | After Phase 1 | All model files | Schema correctness, indexes |
+| /review | After Phase 3, 4 | Controller files | Code quality, security basics |
+| /cso | After Phase 2 + Phase 4 | Middleware + controllers | Auth bypass, data isolation |
+| /qa | After Phase 5 + Phase 6 | Running app URL | UI flows, white-label leak |
 | /ship | Before deploy | Config files | Missing env vars, PM2, SSL |
