@@ -9,8 +9,8 @@
 
 ## CURRENT SESSION GOAL
 **Role:** Dev A — backend · infra · security (see `team-division.md` for full split)
-**Phase:** Phase 3 ✅ + P3-R /review ✅. Phase 4 (Institution APIs) ← CURRENT.
-**Next action:** Phase 4 — institution auth + admin/teacher/student controllers. ⚠️ P4-R /cso mandatory at end (institutionId isolation grep on EVERY controller).
+**Phase:** Phase 4 (Institution APIs) ✅ — 10 controllers + 46 routes. P4-R /cso pending (MANDATORY).
+**Next action:** P4-R /cso — institutionId isolation audit on every institution controller (MANDATORY before Phase 5).
 **Blocking dependency:** Phase 3 controllers MUST honour 3 mandatory contracts from P2-R: (1) embed instVersion+userVersion in JWT at login; (2) bump tokenVersion on grant/revoke/suspend/terminate; (3) call invalidateInstitution(slug) after any institution state change.
 
 ---
@@ -98,17 +98,17 @@
 ## PHASE 4 — INSTITUTION APIs
 | ID | Task | Status | Notes |
 |----|------|--------|-------|
-| P4-01 | inst auth controllers (admin/teacher/student login, me, logout) | ⬜ | branding in response |
-| P4-02 | admin: Requests (list/create/approve/reject) | ⬜ | two-step enrollment |
-| P4-03 | admin: Students (list/detail/create/patch/activity) | ⬜ | per-student audit feed |
-| P4-04 | admin: Teachers (list/create/patch) | ⬜ | admin cannot grant 'admin' |
-| P4-05 | admin: Batches (list/create/patch, name auto-encode) | ⬜ | |
-| P4-06 | admin: Attendance grid | ⬜ | |
-| P4-07 | admin: Day-patterns + Time-slots (CRUD + toggles) | ⬜ | |
-| P4-08 | admin: Payments (manual entry + reconciliation feed) | ⬜ | |
-| P4-09 | teacher: batches, attendance mark, holidays, me | ⬜ | Socket.io on mark |
-| P4-10 | student: dashboard, classes, timetable, me | ⬜ | branding only |
-| P4-11 | routes/institution.js (full middleware chains) | ⬜ | |
+| P4-01 | inst auth controllers (admin/teacher/student login, me, logout) | ✅ | JWT embeds instVersion+userVersion (P2-R #1); brandingPublic only; path-scoped cookie |
+| P4-02 | admin: Requests (list/create/approve/reject) | ✅ | approve→Student (displayId+tempPassword), links request |
+| P4-03 | admin: Students (list/detail/create/patch/activity) | ✅ | whitelisted editable fields, every diff audited; activity=AuditLog by entityId |
+| P4-04 | admin: Teachers (list/create/patch) | ✅ | rejects panelAccess/isOwner/employmentType (operator-only); temp password once |
+| P4-05 | admin: Batches (list/create/patch, name auto-encode) | ✅ | refs verified in-institution; encodeBatchName; studentCount maintained |
+| P4-06 | admin: Attendance grid | ✅ | batch+range→dates[]+rows{marks}; holidays folded in |
+| P4-07 | admin: Day-patterns + Time-slots (CRUD + toggles) | ✅ | dup→400; label hooks; toggles audited |
+| P4-08 | admin: Payments (manual entry + reconciliation feed) | ✅ | paid fee bumps Student.paidAmount; webhook feed read-only |
+| P4-09 | teacher: batches, attendance mark, holidays, me | ✅ | double-scope (inst+own teacherId); mark upserts+emit; holiday credits/reverses |
+| P4-10 | student: dashboard, classes, timetable, me | ✅ | own data only; brandingPublic; no Max Music identifiers |
+| P4-11 | routes/institution.js (full middleware chains) | ✅ | 46 routes; resolveInstitution→instAuth→scopeGuard→[panelGuard] |
 | P4-R | gstack /cso — institutionId isolation grep on EVERY controller | ⬜ | ⚠️ CRITICAL — do not skip |
 
 ## PHASE 5 — OPERATOR PANEL FRONTEND

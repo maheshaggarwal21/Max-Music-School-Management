@@ -246,6 +246,7 @@ GET    /requests                 → Paginated<RequestItem>   ?status=pending|ap
 POST   /requests                 { name, mobile, email?, preferredDayPatternId?, preferredTimeSlotId?, instrumentId? }
 POST   /requests/:id/approve     { teacherId?, batchId?, instrumentId?, classType?, validityDays?, paidAmount?, paymentStatus? }
                                    → creates Student (displayId issued), links request. audit: APPROVE_REQUEST
+                                   → data: { student:{_id,displayId,name}, tempPassword }  // tempPassword surfaced ONCE (Phase 7 emails it)
 POST   /requests/:id/reject      { reason? }
 ```
 ```typescript

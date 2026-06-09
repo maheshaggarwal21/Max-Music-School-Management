@@ -48,6 +48,14 @@ module.exports = {
   REQUEST_CREATED:       'Request submitted',
   REQUEST_APPROVED:      'Request approved',
   REQUEST_REJECTED:      'Request rejected',
+  REQUEST_NOT_FOUND:     'Request not found',
+  REQUEST_NOT_PENDING:   'Request is no longer pending',
+  TEACHER_PANEL_ACCESS_FORBIDDEN: 'Admin cannot set panel access or ownership',
+  BATCH_NOT_FOUND:       'Batch not found',
+  BATCH_BAD_REFS:        'Instrument, day pattern, time slot or teacher is invalid for this institution',
+  DAY_PATTERN_DUPLICATE: 'That day pattern already exists',
+  TIME_SLOT_DUPLICATE:   'That time slot already exists',
+  TIME_SLOT_RANGE_INVALID: 'End time must be after start time',
 
   ACTIONS: {
     CREATE_INSTITUTION:    'CREATE_INSTITUTION',
