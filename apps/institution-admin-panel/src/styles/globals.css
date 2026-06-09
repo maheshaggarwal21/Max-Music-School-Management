@@ -1,0 +1,15 @@
+/*
+ * Institution admin panel stylesheet.
+ * Pulls the full shared design-system css (tailwind v4 + tw-animate-css + tokens
+ * + keyframes) from @maxmusic/ui via its package exports map.
+ * If this @import ever breaks, inline packages/ui/src/styles/globals.css here.
+ */
+@import "@maxmusic/ui/styles/globals.css";
+
+/*
+ * Tailwind must scan the workspace packages for class names used inside
+ * shared components (bg-brand, border-(length:--border-beam-width), …).
+ * Paths are relative to THIS file: apps/institution-admin-panel/src/styles → repo root is 4 up.
+ */
+@source "../../../../packages/ui/src";
+@source "../../../../packages/utils/src";

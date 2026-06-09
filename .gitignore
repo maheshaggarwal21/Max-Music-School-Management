@@ -1,2 +1,8 @@
 
 *.png
+node_modules
+.next/
+.turbo/
+.env
+.env.local
+.gstack/

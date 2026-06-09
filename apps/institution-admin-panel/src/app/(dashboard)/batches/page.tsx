@@ -1,0 +1,292 @@
+"use client";
+import { useEffect, useMemo, useState } from "react";
+import { Clock, Layers, Loader2, Music2, Plus, User } from "lucide-react";
+import { toast } from "sonner";
+import {
+  BlurFade, BorderBeam, Button, Modal, Select, SpotlightCard, StatusBadge, cn,
+} from "@maxmusic/ui";
+import { api, adminPath, mockable } from "@/lib/api";
+import {
+  MOCK_BATCHES, MOCK_DAY_PATTERNS, MOCK_INSTRUMENTS, MOCK_TEACHERS,
+  MOCK_TIME_SLOTS, encodeBatchNamePreview, ok, paginate,
+} from "@/lib/mocks";
+import type { ApiResponse, BatchRow, BatchStatus, Paginated } from "@/lib/types";
+import { PageShell } from "@/components/page-shell";
+import { EmptyState } from "@/components/empty-state";
+import { CardsSkeleton } from "@/components/skeletons";
+
+const STATUS_ORDER: BatchStatus[] = ["active", "setting", "inactive", "archived"];
+
+const STATUS_HINT: Record<BatchStatus, string> = {
+  active: "Running batches with a teacher assigned",
+  setting: "Setting Phase — waiting for a teacher",
+  inactive: "Paused batches",
+  archived: "Completed or retired batches",
+};
+
+interface BatchForm {
+  instrumentId: string | null;
+  dayPatternId: string | null;
+  timeSlotId: string | null;
+  teacherId: string | null;
+  mode: "online" | "offline";
+}
+
+const EMPTY_FORM: BatchForm = {
+  instrumentId: null, dayPatternId: null, timeSlotId: null, teacherId: null, mode: "online",
+};
+
+export default function BatchesPage() {
+  const [batches, setBatches] = useState<BatchRow[] | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [form, setForm] = useState<BatchForm>(EMPTY_FORM);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    mockable(
+      () => api.get<ApiResponse<Paginated<BatchRow>>>(adminPath("/batches?page=1&limit=100")),
+      ok(paginate(MOCK_BATCHES))
+    ).then((r) => !cancelled && setBatches(r.data?.items ?? []));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const grouped = useMemo(() => {
+    const g = new Map<BatchStatus, BatchRow[]>();
+    for (const s of STATUS_ORDER) g.set(s, []);
+    for (const b of batches ?? []) g.get(b.status)?.push(b);
+    return g;
+  }, [batches]);
+
+  // Auto-generated batch name preview (mirrors backend encodeBatchName).
+  const namePreview = useMemo(() => {
+    const instrument = MOCK_INSTRUMENTS.find((i) => i._id === form.instrumentId);
+    const dp = MOCK_DAY_PATTERNS.find((d) => d._id === form.dayPatternId);
+    const ts = MOCK_TIME_SLOTS.find((t) => t._id === form.timeSlotId);
+    return encodeBatchNamePreview(
+      instrument?.name ?? null,
+      dp?.days ?? null,
+      ts?.label ?? null,
+      form.mode
+    );
+  }, [form]);
+
+  const create = async () => {
+    if (!form.instrumentId) return toast.error("Select an instrument");
+    if (!form.dayPatternId) return toast.error("Select a day pattern");
+    if (!form.timeSlotId) return toast.error("Select a time slot");
+    setSaving(true);
+    try {
+      await mockable(
+        () =>
+          api.post<ApiResponse>(adminPath("/batches"), {
+            instrumentId: form.instrumentId,
+            dayPatternId: form.dayPatternId,
+            timeSlotId: form.timeSlotId,
+            teacherId: form.teacherId ?? undefined,
+          }),
+        ok(null),
+        500
+      );
+      const instrument = MOCK_INSTRUMENTS.find((i) => i._id === form.instrumentId)!;
+      const dp = MOCK_DAY_PATTERNS.find((d) => d._id === form.dayPatternId)!;
+      const ts = MOCK_TIME_SLOTS.find((t) => t._id === form.timeSlotId)!;
+      const teacher = MOCK_TEACHERS.find((t) => t._id === form.teacherId) ?? null;
+      setBatches((prev) => [
+        {
+          _id: `bat_local_${Date.now()}`,
+          name: namePreview,
+          instrument: { _id: instrument._id, name: instrument.name },
+          dayPattern: { _id: dp._id, label: dp.label },
+          timeSlot: { _id: ts._id, label: ts.label },
+          teacher: teacher ? { _id: teacher._id, name: teacher.name } : null,
+          studentCount: 0,
+          status: teacher ? "active" : "setting",
+        },
+        ...(prev ?? []),
+      ]);
+      toast.success(`Batch "${namePreview}" created`);
+      setCreating(false);
+      setForm(EMPTY_FORM);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <PageShell
+      title="Batches"
+      subtitle={
+        batches
+          ? `${grouped.get("active")?.length ?? 0} active · ${grouped.get("setting")?.length ?? 0} in setting phase`
+          : "Compose instrument + days + time into batches"
+      }
+      actions={
+        <Button variant="brand" className="group rounded-full" onClick={() => setCreating(true)}>
+          Create Batch
+          <Plus className="ml-1 h-4 w-4 transition-transform duration-300 group-hover:rotate-90" />
+        </Button>
+      }
+    >
+      {!batches ? (
+        <CardsSkeleton count={6} />
+      ) : batches.length === 0 ? (
+        <EmptyState
+          icon={Layers}
+          title="No batches yet"
+          hint="Create your first batch by combining an instrument, day pattern and time slot."
+          action={
+            <Button variant="brand" className="group rounded-full" onClick={() => setCreating(true)}>
+              Create Batch
+              <Plus className="ml-1 h-4 w-4 transition-transform duration-300 group-hover:rotate-90" />
+            </Button>
+          }
+        />
+      ) : (
+        STATUS_ORDER.map((status, sectionIdx) => {
+          const items = grouped.get(status) ?? [];
+          if (items.length === 0) return null;
+          return (
+            <BlurFade key={status} delay={0.1 + sectionIdx * 0.1}>
+              <section>
+                <div className="mb-3 flex items-center gap-2">
+                  <StatusBadge status={status} />
+                  <span className="text-xs text-muted-foreground">
+                    {items.length} · {STATUS_HINT[status]}
+                  </span>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                  {items.map((b) => (
+                    <SpotlightCard
+                      key={b._id}
+                      className={cn(
+                        "relative overflow-hidden rounded-xl border border-border bg-card p-5 transition-all duration-300 hover:-translate-y-1",
+                        status === "archived" && "opacity-70"
+                      )}
+                    >
+                      <BorderBeam size={40} duration={12} />
+                      <p className="font-mono text-sm font-semibold">{b.name}</p>
+                      <div className="mt-3 space-y-1.5 text-xs text-muted-foreground">
+                        <p className="flex items-center gap-2">
+                          <Music2 className="h-3.5 w-3.5 text-brand" />
+                          {b.instrument?.name ?? "—"}
+                        </p>
+                        <p className="flex items-center gap-2">
+                          <Clock className="h-3.5 w-3.5 text-brand" />
+                          {b.dayPattern?.label ?? "—"} · {b.timeSlot?.label ?? "—"}
+                        </p>
+                        <p className="flex items-center gap-2">
+                          <User className="h-3.5 w-3.5 text-brand" />
+                          {b.teacher ? (
+                            b.teacher.name
+                          ) : (
+                            <span className="font-medium text-amber-500">Setting Phase — no teacher</span>
+                          )}
+                        </p>
+                      </div>
+                      <div className="mt-4 flex items-center justify-between">
+                        <span className="rounded-full bg-brand/10 px-2.5 py-1 text-[11px] font-semibold text-brand">
+                          {b.studentCount} student{b.studentCount === 1 ? "" : "s"}
+                        </span>
+                        <StatusBadge status={b.status} />
+                      </div>
+                    </SpotlightCard>
+                  ))}
+                </div>
+              </section>
+            </BlurFade>
+          );
+        })
+      )}
+
+      {/* Create batch modal */}
+      <Modal
+        open={creating}
+        onClose={() => setCreating(false)}
+        title="Create Batch"
+        subtitle="Instrument + suitable days + suitable time → auto-named batch"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setCreating(false)} disabled={saving}>
+              Cancel
+            </Button>
+            <Button variant="brand" onClick={create} disabled={saving}>
+              {saving && <Loader2 className="h-4 w-4 animate-spin" />}
+              Create Batch
+            </Button>
+          </>
+        }
+      >
+        <div className="flex flex-col gap-3">
+          <Select
+            label="Instrument"
+            required
+            placeholder="Select instrument"
+            options={MOCK_INSTRUMENTS.map((i) => ({ value: i._id, label: i.name }))}
+            value={form.instrumentId}
+            onChange={(v) => setForm({ ...form, instrumentId: v })}
+          />
+          <div className="grid grid-cols-2 gap-3">
+            <Select
+              label="Day pattern"
+              required
+              placeholder="Suitable days"
+              options={MOCK_DAY_PATTERNS.filter((d) => d.isActive).map((d) => ({
+                value: d._id, label: d.label,
+              }))}
+              value={form.dayPatternId}
+              onChange={(v) => setForm({ ...form, dayPatternId: v })}
+            />
+            <Select
+              label="Time slot"
+              required
+              placeholder="Suitable time"
+              options={MOCK_TIME_SLOTS.map((t) => ({ value: t._id, label: t.label }))}
+              value={form.timeSlotId}
+              onChange={(v) => setForm({ ...form, timeSlotId: v })}
+            />
+          </div>
+          <Select
+            label="Teacher (optional — empty ⇒ Setting Phase)"
+            placeholder="Assign later"
+            options={MOCK_TEACHERS.filter((t) => t.status === "active").map((t) => ({
+              value: t._id, label: t.name,
+            }))}
+            value={form.teacherId}
+            onChange={(v) => setForm({ ...form, teacherId: v })}
+          />
+          {/* Mode toggle */}
+          <div className="flex flex-col gap-1.5">
+            <span className="text-xs font-medium text-foreground">Mode</span>
+            <div className="flex gap-1 rounded-lg bg-muted/60 p-1">
+              {(["online", "offline"] as const).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setForm({ ...form, mode: m })}
+                  className={cn(
+                    "flex-1 rounded-md px-3 py-1.5 text-xs font-semibold capitalize transition-all",
+                    form.mode === m
+                      ? "bg-card text-brand shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {m}
+                </button>
+              ))}
+            </div>
+          </div>
+          {/* Auto-generated name preview */}
+          <div className="rounded-lg border border-brand/30 bg-brand/5 px-3 py-2.5">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Batch name (auto-generated)
+            </p>
+            <p className="mt-0.5 font-mono text-sm font-semibold text-brand">{namePreview}</p>
+          </div>
+        </div>
+      </Modal>
+    </PageShell>
+  );
+}
