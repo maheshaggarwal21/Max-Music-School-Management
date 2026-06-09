@@ -77,7 +77,9 @@ Dev A does NOT touch:
 - `apps/operator-panel/**`, `apps/institution-*-panel/**` (Dev B)
 - `packages/ui/**`, `packages/utils/**` (Dev B)
 
-**H1 + H2 complete** — scaffold + 16 models + `packages/types` ready. **P1-R /plan-eng-review ✅** (5 model fixes). **P2-R /cso ✅** — 5 checkpoint Qs clean; .gitignore + lockfile + nodemailer@8 + node-cron@4 fixed. **Phase 3 (Operator APIs) ✅** — 9 controllers + 29 routes behind `operatorAuth`. **P3-R /review ✅** — 5 fixes (existingTeacher isolation guard, grant/revoke idempotency = no mass-logout, impersonate targetUserId required, audit accuracy). **Phase 4 (Institution APIs) ✅** — 10 controllers + 46 routes under `/api/inst/:slug/*`; golden-rule isolation self-check clean; every login JWT embeds `instVersion`+`userVersion`; brandingPublic-only (white-label). **P4-R CURRENT** — `/cso` MANDATORY institution-isolation audit before Phase 5.
+**H1 + H2 complete** — scaffold + 16 models + `packages/types` ready. **P1-R /plan-eng-review ✅** (5 model fixes). **P2-R /cso ✅** — 5 checkpoint Qs clean; .gitignore + lockfile + nodemailer@8 + node-cron@4 fixed. **Phase 3 (Operator APIs) ✅** — 9 controllers + 29 routes behind `operatorAuth`. **P3-R /review ✅** — 5 fixes (existingTeacher isolation guard, grant/revoke idempotency = no mass-logout, impersonate targetUserId required, audit accuracy). **Phase 4 (Institution APIs) ✅** — 10 controllers + 46 routes under `/api/inst/:slug/*`; every login JWT embeds `instVersion`+`userVersion`; brandingPublic-only (white-label). **P4-R /cso ✅** — 1 HIGH fixed (`config/refGuard.studentRefsValid` rejects cross-institution teacher/batch/instrument refs in student create/patch + request approve — they leaked foreign labels via populate); other 4 checkpoint Qs clean. **BACKEND COMPLETE (Phases 0-4).** Next: Phase 5/6 frontend (Dev B) or Phase 7 backend (payments/cron/email/socket).
+
+> **Isolation lesson (P4-R):** scoping the `:id` lookup by `institutionId` is NOT enough — client-supplied foreign-key refs (`teacherId`/`batchId`/`instrumentId`) in create/patch bodies must ALSO be verified to belong to the institution before persist, or a foreign id leaks the other tenant's data through Mongoose `populate` (which has no tenant filter). Always run refs through `config/refGuard`.
 
 The 3 implementation contracts from P2-R are now LIVE in code: (1) login JWTs embed `instVersion`+`userVersion` (via `config/instAuthHelpers.issuePanelCookie`); (2) grant/revoke/suspend/terminate bump `tokenVersion`; (3) every institution state change calls `invalidateInstitution(slug)`.
 
@@ -251,8 +253,8 @@ Phase 0 — Monorepo scaffold        ✅ DONE  [A: api + nginx + PM2 + env]  [B:
 Phase 1 — Mongoose models + types  ✅ DONE  [A only]  (P1-R /plan-eng-review ✅)
 Phase 2 — Auth + PBAC middleware   ✅ DONE  [A only]  (P2-R /cso ✅)
 Phase 3 — Operator APIs            ✅ DONE  [A only]  (P3-R /review ✅)
-Phase 4 — Institution APIs         ✅ DONE  [A only]  ← P4-R /cso MANDATORY (pending)
-Phase 5 — Operator panel frontend       [B only]  ← /qa
+Phase 4 — Institution APIs         ✅ DONE  [A only]  (P4-R /cso ✅) — BACKEND COMPLETE
+Phase 5 — Operator panel frontend       ← NEXT  [B only]  ← /qa
 Phase 6 — Institution panels frontend   [B only]  ← /qa + leak check
 Phase 7 — Payments · cron · emails · Socket.io   [A: backend]  [B: UI wiring]
 Phase 8 — QA + security audit + deploy  [A: isolation + /cso + deploy]  [B: bundle leak check + /qa]
