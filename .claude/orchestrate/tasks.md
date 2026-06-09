@@ -9,8 +9,8 @@
 
 ## CURRENT SESSION GOAL
 **Role:** Dev A — backend · infra · security (see `team-division.md` for full split)
-**Phase:** Phase 3 (Operator APIs) ✅ — 9 controllers + routes wired. P3-R /review pending.
-**Next action:** P3-R gstack /review on operator controllers, then Phase 4 (Institution APIs).
+**Phase:** Phase 3 ✅ + P3-R /review ✅. Phase 4 (Institution APIs) ← CURRENT.
+**Next action:** Phase 4 — institution auth + admin/teacher/student controllers. ⚠️ P4-R /cso mandatory at end (institutionId isolation grep on EVERY controller).
 **Blocking dependency:** Phase 3 controllers MUST honour 3 mandatory contracts from P2-R: (1) embed instVersion+userVersion in JWT at login; (2) bump tokenVersion on grant/revoke/suspend/terminate; (3) call invalidateInstitution(slug) after any institution state change.
 
 ---
@@ -93,7 +93,7 @@
 | P3-09 | Changes History (global audit) + filters | ✅ | AuditLog timeline, filters institutionId/entityType/action/actorRole/actorName/date |
 | P3-10 | Dashboard aggregations + Settings | ✅ | dashboard counts+revenue+recent+overdue; settings profile/2FA-enrol/instruments |
 | P3-11 | routes/operator.js + auth.js wired in server.js | ✅ | 29 routes; operatorAuth gate; apiLimiter+operatorLoginLimiter |
-| P3-R | gstack /review on operator controllers | ⬜ | |
+| P3-R | gstack /review on operator controllers | ✅ | 5 fixes: existingTeacher isolation guard, grant/revoke idempotency (no mass-logout), impersonate targetUserId required, update audits branding/rent |
 
 ## PHASE 4 — INSTITUTION APIs
 | ID | Task | Status | Notes |
