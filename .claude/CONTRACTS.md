@@ -127,7 +127,8 @@ interface InstitutionListItem {
   rent?: { amount: number; billingCycle: 'monthly'; firstDueDate: string };  // required iff autonomous
   branding?: { schoolName?: string; primaryColor?: string; tagline?: string } }
 // data
-{ institution: InstitutionListItem }
+{ institution: InstitutionListItem;
+  ownerTempPassword: string | null }   // returned ONCE for inline-created owner; null if existingTeacherId. Phase 7 emails instead.
 // Effects: creates Institution(pending) + owner Teacher; if autonomous, owner.panelAccess=['teacher','admin'].
 // audit: CREATE_INSTITUTION
 ```
@@ -205,7 +206,7 @@ interface OperatorPaymentRow {
   status: 'paid'|'overdue'|'partial'|'free';
   method: 'razorpay'|'manual'|'cash'; paidAt: string|null;
 }
-// summary header (separate call or embedded): { collectedThisMonth, overdue, pending }
+// summary embedded in data alongside items+pagination: data.summary = { collectedThisMonth, overdue, pending }
 ```
 
 ### GET /rent-invoices   → Paginated<RentInvoiceItem>

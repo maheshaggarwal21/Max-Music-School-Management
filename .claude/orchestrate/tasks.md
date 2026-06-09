@@ -9,8 +9,8 @@
 
 ## CURRENT SESSION GOAL
 **Role:** Dev A — backend · infra · security (see `team-division.md` for full split)
-**Phase:** Phase 2 ✅ + P2-R /cso ✅. Phase 3 (Operator APIs) ← CURRENT.
-**Next action:** Phase 3 controllers — start with P3-01 operator auth.
+**Phase:** Phase 3 (Operator APIs) ✅ — 9 controllers + routes wired. P3-R /review pending.
+**Next action:** P3-R gstack /review on operator controllers, then Phase 4 (Institution APIs).
 **Blocking dependency:** Phase 3 controllers MUST honour 3 mandatory contracts from P2-R: (1) embed instVersion+userVersion in JWT at login; (2) bump tokenVersion on grant/revoke/suspend/terminate; (3) call invalidateInstitution(slug) after any institution state change.
 
 ---
@@ -82,17 +82,17 @@
 ## PHASE 3 — OPERATOR (SaaS) APIs
 | ID | Task | Status | Notes |
 |----|------|--------|-------|
-| P3-01 | Auth controllers (operator login/2fa/logout/me) | ⬜ | |
-| P3-02 | InstitutionController — CRUD, slug gen, activate | ⬜ | |
-| P3-03 | grant-admin / revoke-admin (panelAccess + mode + tokenVersion) | ⬜ | scenario 3 button |
-| P3-04 | suspend / reactivate / terminate | ⬜ | |
-| P3-05 | impersonate endpoint | ⬜ | |
-| P3-06 | Cross-institution Students view (tagged) | ⬜ | god-mode query |
-| P3-07 | Cross-institution Teachers view (tagged, salary/rent) | ⬜ | |
-| P3-08 | Payments (student fees) + RentInvoices + mark-paid | ⬜ | two streams |
-| P3-09 | Changes History (global audit) + filters | ⬜ | |
-| P3-10 | Dashboard aggregations + Settings | ⬜ | |
-| P3-11 | routes/operator.js | ⬜ | |
+| P3-01 | Auth controllers (operator login/2fa/logout/me) | ✅ | 2-step 2FA-mandatory; challengeToken→TOTP→operator_token; constant-time-ish compare |
+| P3-02 | InstitutionController — CRUD, slug gen, activate | ✅ | create(slug+owner teacher, ownerTempPassword once), list(batched counts), get(detail), update(no slug/mode) |
+| P3-03 | grant-admin / revoke-admin (panelAccess + mode + tokenVersion) | ✅ | P2-R: bumps owner+inst tokenVersion, invalidateInstitution(slug), audit TOGGLE_MODE |
+| P3-04 | suspend / reactivate / terminate | ✅ | suspend+terminate bump inst.tokenVersion; all 3 invalidateInstitution(slug) |
+| P3-05 | impersonate endpoint | ✅ | issueGodCookie path-scoped; returns url+expiresInSec; audit IMPERSONATE_START |
+| P3-06 | Cross-institution Students view (tagged) | ✅ | list+get, institution/teacher/batch/instrument tags, filters |
+| P3-07 | Cross-institution Teachers view (tagged, salary/rent) | ✅ | amount=salary or owner rent; activeBatches; role owner/staff |
+| P3-08 | Payments (student fees) + RentInvoices + mark-paid | ✅ | fees stream+summary, rent-invoices stream, markRentPaid audits MARK_RENT_PAID |
+| P3-09 | Changes History (global audit) + filters | ✅ | AuditLog timeline, filters institutionId/entityType/action/actorRole/actorName/date |
+| P3-10 | Dashboard aggregations + Settings | ✅ | dashboard counts+revenue+recent+overdue; settings profile/2FA-enrol/instruments |
+| P3-11 | routes/operator.js + auth.js wired in server.js | ✅ | 29 routes; operatorAuth gate; apiLimiter+operatorLoginLimiter |
 | P3-R | gstack /review on operator controllers | ⬜ | |
 
 ## PHASE 4 — INSTITUTION APIs
