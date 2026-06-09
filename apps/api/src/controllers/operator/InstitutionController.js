@@ -137,6 +137,14 @@ exports.create = async (req, res, next) => {
         await Institution.deleteOne({ _id: institution._id });
         return notFound(res, S.TEACHER_NOT_FOUND);
       }
+      // Isolation guard: a Teacher is scoped to ONE institution. Refuse to move
+      // a teacher who already belongs to a different school (that would orphan
+      // their students/batches there). Onboard such people via inline owner.
+      if (ownerTeacher.institutionId &&
+          String(ownerTeacher.institutionId) !== String(institution._id)) {
+        await Institution.deleteOne({ _id: institution._id });
+        return badRequest(res, S.TEACHER_BELONGS_ELSEWHERE);
+      }
       ownerTeacher.institutionId  = institution._id;
       ownerTeacher.isOwner        = true;
       ownerTeacher.panelAccess    = panelAccess;
@@ -267,7 +275,7 @@ exports.update = async (req, res, next) => {
     await inst.save();
     invalidateInstitution(inst.slug);
 
-    const changes = diff(before, inst.toObject(), ['name', 'contactEmail']);
+    const changes = diff(before, inst.toObject(), ['name', 'contactEmail', 'branding', 'rent']);
     await auditLog({
       institutionId: inst._id,
       ...actorFromReq(req),
@@ -295,6 +303,13 @@ exports.grantAdmin = async (req, res, next) => {
     const owner = await Teacher.findById(inst.ownerTeacherId);
     if (!owner) return badRequest(res, S.INST_NO_OWNER);
 
+    // Idempotent: if already granted, do NOT bump tokenVersion (that would mass-
+    // logout the whole institution on a redundant click). Return current state.
+    if (inst.mode === 'autonomous' && owner.panelAccess.includes('admin')) {
+      return ok(res, S.INST_GRANT_ADMIN, { institution: await oneListItem(inst) });
+    }
+
+    const prevMode = inst.mode;
     if (!owner.panelAccess.includes('admin')) owner.panelAccess.push('admin');
     owner.employmentType = 'rent';
     owner.tokenVersion  += 1;                 // P2-R: per-user logout
@@ -313,7 +328,7 @@ exports.grantAdmin = async (req, res, next) => {
       entityType:  'Institution',
       entityId:    inst._id,
       entityLabel: `Institution: ${inst.name}`,
-      changes:     [{ field: 'mode', from: 'managed', to: 'autonomous' }],
+      changes:     [{ field: 'mode', from: prevMode, to: 'autonomous' }],
       ip:          req.ip,
     });
 
@@ -333,6 +348,12 @@ exports.revokeAdmin = async (req, res, next) => {
     const owner = await Teacher.findById(inst.ownerTeacherId);
     if (!owner) return badRequest(res, S.INST_NO_OWNER);
 
+    // Idempotent: if already managed and admin already removed, no-op (no mass logout).
+    if (inst.mode === 'managed' && !owner.panelAccess.includes('admin')) {
+      return ok(res, S.INST_REVOKE_ADMIN, { institution: await oneListItem(inst) });
+    }
+
+    const prevMode = inst.mode;
     owner.panelAccess    = owner.panelAccess.filter(p => p !== 'admin');
     owner.employmentType = 'salary';
     owner.tokenVersion  += 1;
@@ -351,7 +372,7 @@ exports.revokeAdmin = async (req, res, next) => {
       entityType:  'Institution',
       entityId:    inst._id,
       entityLabel: `Institution: ${inst.name}`,
-      changes:     [{ field: 'mode', from: 'autonomous', to: 'managed' }],
+      changes:     [{ field: 'mode', from: prevMode, to: 'managed' }],
       ip:          req.ip,
     });
 
@@ -471,8 +492,11 @@ exports.impersonate = async (req, res, next) => {
     const { panel, targetUserId } = req.body || {};
     if (!['admin', 'teacher', 'student'].includes(panel)) return badRequest(res, S.VALIDATION_FAILED);
 
-    // For admin, default the target to the owner teacher.
+    // For admin, default the target to the owner teacher. teacher/student MUST
+    // name a target — without one the synthesized actor carries the operator id
+    // in that role and every req.actor._id query returns nothing (dead session).
     const resolvedTarget = targetUserId || (panel === 'admin' ? inst.ownerTeacherId : undefined);
+    if (!resolvedTarget) return badRequest(res, S.VALIDATION_FAILED);
 
     issueGodCookie(res, {
       operator:    req.operator,

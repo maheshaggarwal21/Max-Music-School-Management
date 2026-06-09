@@ -39,6 +39,7 @@ module.exports = {
   TEACHER_CREATED:       'Teacher created',
   TEACHER_UPDATED:       'Teacher updated',
   TEACHER_NOT_FOUND:     'Teacher not found',
+  TEACHER_BELONGS_ELSEWHERE: 'That teacher already belongs to another institution',
   STUDENT_CREATED:       'Student created',
   STUDENT_UPDATED:       'Student updated',
   STUDENT_NOT_FOUND:     'Student not found',
