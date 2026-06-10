@@ -7,6 +7,8 @@ const { nextDisplayId } = require('../../../config/specialFunctions');
 const { hash, randomTempPassword } = require('../../../config/password');
 const { auditLog, actorFromReq, diff } = require('../../../config/auditLog');
 const { ok, created, badRequest, notFound, paginated } = require('../../../config/helper');
+const { sendMail } = require('../../../config/mailer');
+const { teacherWelcome } = require('../../../config/emailTemplates');
 const S = require('../../../config/strings');
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -107,6 +109,20 @@ exports.create = async (req, res, next) => {
       after: { displayId: teacher.displayId, employmentType: teacher.employmentType },
       ip: req.ip,
     });
+
+    // Email the teacher their temporary password (fail-soft).
+    if (teacher.email) {
+      const slug = req.institution.slug;
+      const panelUrl = `${process.env.PLATFORM_DOMAIN_URL || ''}/${slug}/teacher`;
+      const tpl = teacherWelcome({
+        schoolName:   req.institution.branding.schoolName,
+        primaryColor: req.institution.branding.primaryColor,
+        teacherName:  teacher.name,
+        panelUrl,
+        tempPassword,
+      });
+      sendMail({ to: teacher.email, ...tpl, institution: req.institution }).catch(() => {});
+    }
 
     return created(res, S.TEACHER_CREATED, {
       teacher: { _id: String(teacher._id), displayId: teacher.displayId, name: teacher.name },

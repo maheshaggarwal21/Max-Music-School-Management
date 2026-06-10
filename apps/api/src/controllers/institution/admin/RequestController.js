@@ -8,6 +8,8 @@ const { studentRefsValid } = require('../../../config/refGuard');
 const { hash, randomTempPassword } = require('../../../config/password');
 const { auditLog, actorFromReq } = require('../../../config/auditLog');
 const { ok, created, badRequest, notFound, paginated } = require('../../../config/helper');
+const { sendMail } = require('../../../config/mailer');
+const { studentWelcome } = require('../../../config/emailTemplates');
 const S = require('../../../config/strings');
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -182,7 +184,20 @@ exports.approve = async (req, res, next) => {
       ip: req.ip,
     });
 
-    // tempPassword surfaced ONCE for the admin to relay (Phase 7 emails it instead).
+    // Email the student their temporary password (fail-soft; only if email on file).
+    if (student.email) {
+      const slug = req.institution.slug;
+      const panelUrl = `${process.env.PLATFORM_DOMAIN_URL || ''}/${slug}/student`;
+      const tpl = studentWelcome({
+        schoolName:   req.institution.branding.schoolName,
+        primaryColor: req.institution.branding.primaryColor,
+        studentName:  student.name,
+        panelUrl,
+        tempPassword,
+      });
+      sendMail({ to: student.email, ...tpl, institution: req.institution }).catch(() => {});
+    }
+
     return created(res, S.REQUEST_APPROVED, {
       student: { _id: String(student._id), displayId: student.displayId, name: student.name },
       tempPassword,
