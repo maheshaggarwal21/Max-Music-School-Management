@@ -120,6 +120,23 @@ History of the old split is in `team-division.md` (reference only).
 > (15-min window); P3 `@maxmusic` npm scope appears in client bundle module paths (not the brand, not
 > rendered). **Next: fix the 2 P2s, then /qa full 3-scenario E2E (L8), then /ship + VPS deploy (L9–L13).**
 
+> **Full E2E /qa (2026-06-11, IN PROGRESS): both P2s FIXED + operator panel phase COMPLETE.**
+> Feature inventory of every tab/clickable/workflow in all 4 panels: `documentation/feature-inventory/`.
+> BUG-01 fixed via derived `daysKey` + unique `{institutionId,daysKey}` and live-DB migration
+> (`scripts/migrate-daypattern-dayskey.js`, commit `ca0b244`); BUG-02 fixed via React 18 `useId()`
+> (`85e2b47`, browser-verified zero hydration warnings). Operator panel: every tab + workflow exercised
+> live in the browser; **6 live-mode contract bugs found, fixed (one commit each), re-verified** —
+> ISSUE-002 unguarded `item.changes` crash (5 consumers); ISSUE-003 fee chart rendered MOCK data in
+> live mode → real `revenue.feeTrend` aggregation; ISSUE-004 list filters treated the `'all'` sentinel
+> as a literal (4 controllers); ISSUE-005 detail page didn't unwrap the `{institution}` envelope;
+> ISSUE-006 Settings crash + phantom 2FA endpoints → `defaultRent` persisted on Operator, full settings
+> payload, one-step mandatory-2FA card; ISSUE-007 `PATCH /operator/{students,teachers}/:id` didn't exist →
+> implemented with audited per-field diffs. Pattern: **frontend built on mock shapes, live API drifted —
+> only live click-through catches these.** Details: `AUDIT.md §7` + `documentation/qa-e2e-2026-06-11.md`.
+> **Constraint:** the box runs ONE panel dev-server at a time (7.5 GB RAM; 4 at once OOM-killed one) —
+> QA is panel-by-panel. Remaining: admin → teacher → student phases, ISSUE-001 (BlurFade `ref` warning),
+> impersonation banner, final report.
+
 **H1 + H2 complete** — scaffold + 16 models + `packages/types` ready. **P1-R /plan-eng-review ✅** (5 model fixes). **P2-R /cso ✅** — 5 checkpoint Qs clean; .gitignore + lockfile + nodemailer@8 + node-cron@4 fixed. **Phase 3 (Operator APIs) ✅** — 9 controllers + 29 routes behind `operatorAuth`. **P3-R /review ✅** — 5 fixes (existingTeacher isolation guard, grant/revoke idempotency = no mass-logout, impersonate targetUserId required, audit accuracy). **Phase 4 (Institution APIs) ✅** — 10 controllers + 46 routes under `/api/inst/:slug/*`; every login JWT embeds `instVersion`+`userVersion`; brandingPublic-only (white-label). **P4-R /cso ✅** — 1 HIGH fixed (`config/refGuard.studentRefsValid` rejects cross-institution teacher/batch/instrument refs in student create/patch + request approve — they leaked foreign labels via populate); other 4 checkpoint Qs clean. **BACKEND COMPLETE (Phases 0-4).** **Frontend integration (current session) ✅** — Dev B's 4-panel frontend merged (PR #1). Dev A pass over it: (1) **H2 type migration** — all 4 apps now import the shared contract (`ApiResponse`/`Paginated`/`BrandingPublic` + enums) from `@maxmusic/types` instead of local mirrors (drift eliminated); (2) **`[slug]` routing fix** — the 3 institution panels were flat route-groups (`/dashboard`) that 404 behind nginx; restructured to real `app/[slug]/<panel>/(auth|dashboard)/*` with slug-aware nav, validated by `next build` ×4; (3) **multi-tenant slug fixes** — 401-redirect now `/<slug>/<panel>/login` (was hardcoded `/login`), teacher panel now derives slug from the URL (was a build-time `NEXT_PUBLIC_INSTITUTION_SLUG` env var = one-slug-per-build); (4) **new public `GET /api/inst/:slug/branding`** endpoint (controller + route + CONTRACTS) wired into all 3 login pages — clears the teacher TODO(H5) + student BLOCKED notes. **Phase 7 backend (current session) ✅** — (1) **Socket.io** (`config/socket.js`) shares the HTTP server, rooms keyed by institutionId; auth via a short-lived `JWT_SECRET_SOCKET` token minted by `GET /:slug/{admin,teacher}/realtime-token` (panel cookies are path-scoped so they can't reach `/socket.io`); room derives from the VERIFIED token only; `emitToInstitution` (already called by teacher `markAttendance`) now live → unblocks teacher `TODO(H3)` backend-side. (2) **Daily cron** (`config/cron.js`, 00:05 `CRON_TZ`) advances `active_soon→active`, expires validity→inactive (both audited per-student as the `system` actor), and flags overdue rent. (3) **Razorpay webhook** (`POST /api/webhooks/razorpay`, `WebhookController`) mounted pre-json with `express.raw`; timing-safe HMAC verify (fails closed), idempotent by paymentId+eventType, tenant from payload `notes`; read-only RazorpayWebhookEvent feed only. (4) **Branded mailer** (`config/mailer.js`) lazy transport, From-name = institution `branding.schoolName` (never "Max Music"), fails soft. All smoke-tested. Next: H4/H5 live wiring (`NEXT_PUBLIC_API_URL` + `/qa`); Dev B wires `TODO(H3)` client to realtime-token + Socket.io; then Phase 8 (QA + deploy).
 
 > **Isolation lesson (P4-R):** scoping the `:id` lookup by `institutionId` is NOT enough — client-supplied foreign-key refs (`teacherId`/`batchId`/`instrumentId`) in create/patch bodies must ALSO be verified to belong to the institution before persist, or a foreign id leaks the other tenant's data through Mongoose `populate` (which has no tenant filter). Always run refs through `config/refGuard`.
@@ -315,10 +332,17 @@ Phase 8 — Finish: live wiring + QA + deploy
   L5 Socket.io client TODO(H3)           ✅ DONE — teacher lib/socket.ts (realtime-token → socket rooms)
   L6 mailer trigger wiring               ✅ DONE — P7-04 (owner/teacher/student welcome + grant-admin)
   L7 operator 2FA live check             ✅ DONE (2026-06-11) — TOTP 2FA login → dashboard in browser
-  L8 /qa E2E (3 onboarding scenarios)    ◑ PARTIAL — /qa ran (login+white-label verified); full 3-scenario E2E pending
+  L8 /qa full E2E                        🔄 IN PROGRESS (2026-06-11) — inventory of all 4 panels written
+                                           (documentation/feature-inventory/); BOTH P2s FIXED (daysKey
+                                           ca0b244 + useId 85e2b47, DB migrated); OPERATOR PANEL DONE —
+                                           6 live-mode contract bugs found+fixed+re-verified
+                                           (ISSUE-002..007, AUDIT.md §7 + documentation/qa-e2e-2026-06-11.md);
+                                           admin/teacher/student phases + ISSUE-001 next. NOTE: box fits
+                                           ONE panel dev-server at a time (7.5GB RAM) — QA panel-by-panel.
   L9 /ship                               ⏸ HELD (user decision — not pushed)
   L10–L13 nginx/TLS/PM2/VPS deploy       ← pending (local deploy done; VPS not)
-  OPEN BUGS                              2 × P2 — DayPattern multikey index · Input useId hydration (AUDIT.md §6)
+  OPEN BUGS                              P3 only — ISSUE-001 BlurFade ref-warning · ClassSession index ·
+                                           god-token tokenVersion window (AUDIT.md §6 status list)
 ```
 
 Handoffs: H1 ✅ · H2 ✅ (packages/types exported — Dev B can wire typed responses) · H3 ✅ (Phase 2 done) · H4 ✅ (Phase 3 operator API contracts in CONTRACTS.md) · H5 ✅ (Phase 4 institution API contracts in CONTRACTS.md — Dev B can build all 4 panels) · H6 after Phase 7.

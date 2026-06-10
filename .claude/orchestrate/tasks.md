@@ -13,7 +13,8 @@
 **Live deploy DONE (2026-06-11):** all 5 processes up locally vs Mongo Atlas; all 4 panel logins verified (API + browser, incl. operator TOTP 2FA). SWC binary fix (`@next/swc-win32-x64-msvc@14.2.33` + `NEXT_IGNORE_INCORRECT_LOCKFILE=1`); start panels independently, not via turbo. Creds via `scripts/dev-credentials.js`, verified by `scripts/verify-logins.js`.
 **gstack pipeline re-run DONE (2026-06-11) — ✅ all 6 PASS** (eng-review + cso×2 + review + qa×2). Isolation/audit/white-label/PBAC/2FA clean. See `../AUDIT.md §6`.
 **Full end-to-end audit (2026-06-10) — ✅ PASS** (`../AUDIT.md`): isolation, refGuard, audit-logging, white-label, token storage, slug immutability, types/build all clean.
-**Next action:** fix the **2 open P2 bugs** → (a) `models/DayPattern.js:38` multikey unique index (use derived sorted `daysKey`); (b) `packages/ui/src/components/form/input.tsx:15` counter → React 18 `useId()`. Then `/qa` full 3-scenario E2E (P8-03), then `/ship` (currently HELD) + VPS deploy (L11–L13 / P8-04–06 infra ready).
+**Full E2E `/qa` IN PROGRESS (2026-06-11):** feature inventory of all 4 panels written (`documentation/feature-inventory/`); both P2 bugs FIXED (BUG-01 `daysKey` + live-DB migration `ca0b244`; BUG-02 `useId()` `85e2b47`); **operator panel phase COMPLETE — 6 live-mode contract bugs found, fixed, browser re-verified (ISSUE-002..007, see `documentation/qa-e2e-2026-06-11.md` + AUDIT.md §7)**. Box fits only ONE Next dev panel + API at a time (7.5 GB RAM) — QA proceeds panel-by-panel.
+**Next action:** continue E2E — admin panel (incl. BUG-01 UI re-verify via 2 day-patterns sharing a day, enrollment approve, holidays, attendance grid, branding, slug request, impersonation banner) → teacher panel (attendance + Socket.io) → student panel → fix ISSUE-001 (`BlurFade` ref warning) → final QA report. Then `/ship` (currently HELD) + VPS deploy (L11–L13).
 **Blocking dependency:** VPS deploy needs production `.env` (S3/SMTP/Razorpay creds + real domains).
 
 ---
@@ -181,14 +182,28 @@
 |---------|-----------|-------------|
 | — | — | none yet |
 
-## OPEN BUGS (from gstack re-run 2026-06-11 — not yet fixed, /ship held)
-| ID | Sev | File | Bug | Fix |
-|----|-----|------|-----|-----|
-| BUG-01 | P2 | `apps/api/src/models/DayPattern.js:38` | `index({institutionId,days},{unique})` is multikey-unique (days is an array) → 2 patterns sharing any one day collide on E11000; intent is unique day-SET | drop unique multikey; derived sorted `daysKey` string + unique `{institutionId,daysKey}` (or controller set-uniqueness) |
-| BUG-02 | P2 | `packages/ui/src/components/form/input.tsx:15` | module-level counter `mm-input-${++inputAutoId}` diverges server vs client → hydration mismatch on every form, all 4 panels | replace with React 18 `useId()` |
-| BUG-03 | P3 | `apps/api/src/models/ClassSession.js:28` | possibly missing `{institutionId,targetDate}` index | verify vs queries; add only if "today's classes for institution" is queried |
-| BUG-04 | P3 | `packages/ui` | `ref is not a prop` React warning | pass ref via forwardRef / different prop |
-| BUG-05 | INFO | `apps/api/src/middleware/instAuth.js:73` | god-token path doesn't re-check `operator.tokenVersion` (15-min window) | re-check tokenVersion on god path if operator revocation must be instant |
+## OPEN BUGS — updated during full E2E /qa 2026-06-11 (fixes committed; /ship still held)
+| ID | Sev | File | Bug | Status |
+|----|-----|------|-----|--------|
+| BUG-01 | P2 | `apps/api/src/models/DayPattern.js` | multikey unique `{institutionId,days}` → E11000 on any shared day | ✅ FIXED `ca0b244` — derived `daysKey` + unique `{institutionId,daysKey}`; live DB migrated (`scripts/migrate-daypattern-dayskey.js`); UI re-verify in admin phase |
+| BUG-02 | P2 | `packages/ui/.../form/input.tsx` | module-counter id → hydration mismatch on every form | ✅ FIXED `85e2b47` — React 18 `useId()`; browser-verified zero warnings |
+| BUG-03 | P3 | `apps/api/src/models/ClassSession.js:28` | possibly missing `{institutionId,targetDate}` index | open — verify vs queries |
+| BUG-04 | P3 | `packages/ui` `BlurFade` | `ref is not a prop` warning (framer-motion `AnimatePresence/PopChild`) | open = ISSUE-001; fix in E2E close-out |
+| BUG-05 | INFO | `apps/api/src/middleware/instAuth.js:73` | god-token path doesn't re-check `operator.tokenVersion` (15-min window) | open — only if instant operator revocation required |
+
+### E2E /qa live-mode contract bugs (2026-06-11) — all FIXED + browser re-verified
+| ID | Sev | Panel | Bug | Commit |
+|----|-----|-------|-----|--------|
+| ISSUE-002 | critical | operator (+admin components) | dashboard crash — unguarded `item.changes.length`, live audit items omit `changes`; 5 consumers guarded | `e1433ca` |
+| ISSUE-003 | high | operator | fee chart hardcoded `MOCK_FEE_TREND` in live mode → real `revenue.feeTrend` API aggregation | `93d5b12` |
+| ISSUE-004 | high | operator API | Students/Teachers/Payments/Changes filtered on literal `'all'` sentinel → empty lists | `504d72a` |
+| ISSUE-005 | critical | operator | institution detail crash — live `{institution}` envelope vs bare mock shape | `5fddb67` |
+| ISSUE-006 | critical | operator | Settings crash + phantom 2FA endpoints → defaultRent on Operator model, full settings payload, one-step mandatory-2FA card, instruments card mock-only | `5567ba6` |
+| ISSUE-007 | high | operator API | god-mode edit PATCH routes didn't exist → implemented audited `PATCH /operator/{students,teachers}/:id` | `cfc8c06` |
+
+> Full detail + evidence: `documentation/qa-e2e-2026-06-11.md` · AUDIT.md §7.
+> Environment anomaly: unaudited bulk mock dataset (30 `STU-10NN` students) written to `demo-school`
+> mid-session by something OUTSIDE this repo (same Atlas dev DB) — rotate dev MONGO_URI if unexpected.
 
 ---
 

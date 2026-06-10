@@ -105,22 +105,44 @@ Living board: `orchestrate/tasks.md` · Architecture: `ARCHITECTURE.md` · API: 
 (`refGuard`/`ownBatch`/`loadSelf`) before use; operator controllers leak no secrets, audit every write incl.
 `IMPERSONATE_START`, paginate every list; white-label clean at source AND runtime.
 
-### Open findings (not yet fixed — `/ship` held)
+### Open findings — status after the 2026-06-11 full E2E `/qa` (see §7)
 
-- **P2 (conf 8) — DayPattern unique multikey index.** `apps/api/src/models/DayPattern.js:38`
-  `index({ institutionId: 1, days: 1 }, { unique: true })` on the array field `days` is MULTIKEY-unique →
-  two patterns in one institution sharing any single day (Mon-Wed-Fri then Mon-Thu) throw `E11000` on the
-  second insert. Intent is unique day-SET. **Fix:** drop the unique multikey; add a derived sorted `daysKey`
-  string field with a unique `{institutionId, daysKey}` index (or enforce set-uniqueness in the controller).
-- **P2 (conf 9) — Input component hydration mismatch.** `packages/ui/src/components/form/input.tsx:15`
-  `autoId.current = \`mm-input-${++inputAutoId}\`` uses a module-level counter that diverges server
-  (process-singleton, keeps counting across requests) vs client (resets per load) → React `htmlFor did not
-  match` hydration warning on EVERY form across all 4 panels (caught live in browser `/qa`). Functionally the
-  forms still work. **Fix:** replace the counter with React 18 `useId()` (Next 14 supports it).
+- ✅ **FIXED — P2 DayPattern unique multikey index** → derived `daysKey` + unique
+  `{institutionId, daysKey}`; live DB migrated via `scripts/migrate-daypattern-dayskey.js` (`ca0b244`).
+- ✅ **FIXED — P2 Input hydration mismatch** → React 18 `useId()`; browser-verified zero
+  hydration warnings (`85e2b47`).
 - **P3 — ClassSession** `models/ClassSession.js:28` may lack a `{institutionId, targetDate}` index (verify vs queries).
-- **P3 — `ref is not a prop`** console warning from the same `@maxmusic/ui` package.
+- **P3 — `ref is not a prop`** console warning — traced to `packages/ui` `BlurFade` →
+  framer-motion `AnimatePresence/PopChild`; fix planned in the E2E close-out (ISSUE-001).
 - **P3 — `@maxmusic` npm scope** appears in client bundle module paths (not the brand, not rendered — rename only for maximal white-label paranoia).
 - **INFO — god-token path** (`middleware/instAuth.js:73`) doesn't re-check `operator.tokenVersion`; a deactivated operator's outstanding god token stays valid until its 15-min TTL.
+
+---
+
+## 7. FULL E2E `/qa` — LIVE-MODE CONTRACT BUGS (2026-06-11, in progress)
+
+> Exhaustive browser click-through of every tab/workflow against the LIVE stack, driven by
+> `documentation/feature-inventory/`. Full narrative + evidence: `documentation/qa-e2e-2026-06-11.md`.
+> **Theme of every finding: the frontend was built against mock shapes; live API shapes/routes drifted.**
+> Prior audits were source-only or login-depth — these only surface when every workflow runs live.
+
+**Operator panel — 6 bugs found, fixed (one commit each), and browser re-verified:**
+| ID | Sev | Bug → fix |
+|---|---|---|
+| ISSUE-002 | critical | dashboard crash: unguarded `item.changes.length` on live audit items (5 consumers guarded) — `e1433ca` |
+| ISSUE-003 | high | fee chart rendered `MOCK_FEE_TREND` in live mode → real `revenue.feeTrend` aggregation — `93d5b12` |
+| ISSUE-004 | high | list filters sent `'all'` sentinel; 4 controllers filtered on the literal → 0 rows — `504d72a` |
+| ISSUE-005 | critical | institution detail crash: live `{institution}` envelope vs bare mock shape — `5fddb67` |
+| ISSUE-006 | critical | Settings crash + phantom 2FA endpoints → defaultRent persisted on Operator; full settings payload; one-step mandatory-2FA card — `5567ba6` |
+| ISSUE-007 | high | god-mode edit modals PATCHed routes that didn't exist → implemented audited `PATCH /operator/{students,teachers}/:id` — `cfc8c06` |
+
+Verified workflows: TOTP login · create institution · grant-admin (scenario 3) · suspend/reactivate ·
+god-mode student edit (audit + activity rail) · default-rent save round-trip · all 9 tabs render with live data.
+Remaining: admin/teacher/student panel phases + ISSUE-001 + impersonation banner (see qa-e2e doc §Remaining).
+
+**Environment note:** an unaudited bulk demo dataset (30 `STU-10NN` students + teachers/batches)
+appeared in `demo-school` via direct DB write during the session — no repo code generates it;
+likely another machine/process on the same Atlas dev DB. Rotate dev `MONGO_URI` if unexpected.
 
 ---
 
