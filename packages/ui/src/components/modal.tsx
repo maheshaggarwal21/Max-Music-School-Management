@@ -12,12 +12,17 @@ export interface ModalProps {
   subtitle?: React.ReactNode;
   children?: React.ReactNode;
   footer?: React.ReactNode;
+  /** Tailwind max-width class for the panel (default "max-w-lg"). */
+  maxWidthClassName?: string;
 }
 
 const FOCUSABLE =
   'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
-export function Modal({ open, onClose, title, subtitle, children, footer }: ModalProps) {
+export function Modal({
+  open, onClose, title, subtitle, children, footer,
+  maxWidthClassName = "max-w-lg",
+}: ModalProps) {
   const panelRef = useRef<HTMLDivElement>(null);
 
   // Escape to close + basic focus trap
@@ -90,7 +95,7 @@ export function Modal({ open, onClose, title, subtitle, children, footer }: Moda
               role="dialog"
               aria-modal="true"
               tabIndex={-1}
-              className="relative w-full max-w-lg overflow-hidden rounded-2xl border border-border bg-card shadow-2xl outline-none"
+              className={`relative w-full ${maxWidthClassName} overflow-hidden rounded-2xl border border-border bg-card shadow-2xl outline-none`}
             >
               <BorderBeam size={80} duration={8} />
               <div className="flex items-start justify-between p-6">

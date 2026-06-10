@@ -7,17 +7,23 @@
 // No operator identity ever appears here.
 
 import type {
+  AdminDashboardData,
   AdminSession,
   ApiResponse,
   AttendanceGrid,
   AuditLogItem,
+  BatchAttendanceClass,
+  BatchDetail,
   BatchRow,
+  BatchStudentItem,
   BrandingPublic,
+  ClassSessionItem,
   DayPatternItem,
   HolidayItem,
   Paginated,
   PaymentRow,
   RequestItem,
+  SchoolProfileData,
   StudentDetail,
   StudentRow,
   TeacherRow,
@@ -556,6 +562,159 @@ export function mockStudentActivity(studentId: string): AuditLogItem[] {
     });
   }
   return entries.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+}
+
+// ── Dashboard (GET /admin/dashboard) ──────────────────────────────────────────
+
+export const MOCK_DASHBOARD: AdminDashboardData = {
+  stats: {
+    students: { total: 14, trial: 3, activeSoon: 2, active: 8, inactive: 1 },
+    teachers: { active: 4 },
+    batches: { active: 4 },
+    feesThisMonth: 3050000, // ₹30,500
+  },
+  todaysClasses: [
+    { _id: "bat_01", name: "Guit 5:00-6:00 PM (MWF) ON", time: "5:00-6:00 PM", teacher: "Rahul Verma", studentCount: 4 },
+    { _id: "bat_04", name: "Voca 7:00-8:00 AM (MWF) ON", time: "7:00-8:00 AM", teacher: "Priya Deshmukh", studentCount: 3 },
+  ],
+  enrollmentTrend: [
+    { month: "2025-07", newStudents: 0, cumulative: 1 },
+    { month: "2025-08", newStudents: 0, cumulative: 1 },
+    { month: "2025-09", newStudents: 0, cumulative: 1 },
+    { month: "2025-10", newStudents: 0, cumulative: 1 },
+    { month: "2025-11", newStudents: 0, cumulative: 1 },
+    { month: "2025-12", newStudents: 1, cumulative: 2 },
+    { month: "2026-01", newStudents: 2, cumulative: 4 },
+    { month: "2026-02", newStudents: 2, cumulative: 6 },
+    { month: "2026-03", newStudents: 2, cumulative: 8 },
+    { month: "2026-04", newStudents: 2, cumulative: 10 },
+    { month: "2026-05", newStudents: 0, cumulative: 10 },
+    { month: "2026-06", newStudents: 4, cumulative: 14 },
+  ],
+  attendanceByBatch: [
+    { batchId: "bat_03", name: "Tabl 7:00-8:00 PM (TTS) OF", present: 9, absent: 4, total: 13, rate: 69 },
+    { batchId: "bat_02", name: "Pian 6:00-7:00 PM (TTS) ON", present: 19, absent: 5, total: 24, rate: 79 },
+    { batchId: "bat_04", name: "Voca 7:00-8:00 AM (MWF) ON", present: 30, absent: 6, total: 36, rate: 83 },
+    { batchId: "bat_01", name: "Guit 5:00-6:00 PM (MWF) ON", present: 46, absent: 6, total: 52, rate: 88 },
+  ],
+};
+
+// ── Batch detail · roster · sessions · per-class attendance ───────────────────
+
+export function mockBatchDetail(batchId: string): BatchDetail | null {
+  const batch = MOCK_BATCHES.find((b) => b._id === batchId);
+  if (!batch) return null;
+  const pattern = MOCK_DAY_PATTERNS.find((p) => p._id === batch.dayPattern?._id);
+  const slot = MOCK_TIME_SLOTS.find((t) => t._id === batch.timeSlot?._id);
+  return {
+    ...batch,
+    mode: batch.name.endsWith("OF") ? "offline" : "online",
+    dayPatternDays: pattern?.days ?? [],
+    timeRange: slot ? { startTime: slot.startTime, endTime: slot.endTime } : null,
+    createdAt: "2026-01-05T09:00:00.000Z",
+  };
+}
+
+export function mockBatchRoster(batchId: string): BatchStudentItem[] {
+  return mockBatchStudents(batchId).map((s) => ({
+    _id: s._id, displayId: s.displayId, name: s.name, mobile: s.mobile,
+    joinStatus: s.joinStatus, category: s.category,
+    validityEnd: s.validityEnd, paidClasses: s.paidClasses,
+  }));
+}
+
+export function mockBatchSessions(batchId: string): ClassSessionItem[] {
+  const seeds: Array<[string, string]> = [
+    ["2026-06-08", "https://us06web.zoom.us/j/81067712345"],
+    ["2026-06-03", "https://zoom.us/j/99824746677"],
+    ["2026-06-01", "https://zoom.us/j/93220381420"],
+    ["2026-05-27", "https://zoom.us/j/91442267781"],
+  ];
+  return seeds.map(([date, url], i) => ({
+    _id: `ses_${batchId}_${i}`,
+    meetingUrl: url,
+    targetDate: `${date}T00:00:00.000Z`,
+    launchedAt: `${date}T06:57:00.000Z`,
+    launchedBy: { actorRole: "institution_admin" },
+  }));
+}
+
+export function mockBatchAttendanceClasses(batchId: string): BatchAttendanceClass[] {
+  const today = new Date();
+  const grid = mockAttendanceGrid(batchId, today.getFullYear(), today.getMonth());
+  return grid.dates
+    .filter((d) => new Date(`${d}T00:00:00`) <= today)
+    .map((date) => {
+      const counts = { present: 0, absent: 0, holiday: 0, credited: 0 };
+      for (const row of grid.rows) {
+        const m = row.marks[date];
+        if (m && m !== "unmarked") counts[m]++;
+      }
+      return { date, ...counts, total: counts.present + counts.absent + counts.holiday + counts.credited };
+    })
+    .filter((c) => c.total > 0)
+    .reverse();
+}
+
+// ── School profile (GET /settings/profile) ────────────────────────────────────
+
+export const MOCK_PROFILE: SchoolProfileData = {
+  branding: MOCK_BRANDING,
+  pendingSlugRequest: null,
+};
+
+// ── Per-teacher activity feed (AuditLog entries, entityId = teacher) ──────────
+
+export function mockTeacherActivity(teacherId: string): AuditLogItem[] {
+  const t = MOCK_TEACHERS.find((x) => x._id === teacherId);
+  if (!t) return [];
+  const base = {
+    institution: { _id: "inst_01", name: MOCK_BRANDING.schoolName },
+    impersonatedBy: null, entityType: "Teacher", entityId: t._id,
+    entityLabel: `Teacher: ${t.name}`, before: null, after: null, ip: null,
+  };
+  return [
+    {
+      ...base, _id: `aud_${teacherId}_2`, actorRole: "institution_admin",
+      actorName: "Priya Deshmukh", action: "UPDATE_TEACHER",
+      changes: [{ field: "kpiPercent", from: (t.kpiPercent ?? 80) - 4, to: t.kpiPercent ?? 80 }],
+      createdAt: "2026-06-02T11:20:00.000Z",
+    },
+    {
+      ...base, _id: `aud_${teacherId}_1`, actorRole: "institution_admin",
+      actorName: "Priya Deshmukh", action: "CREATE_TEACHER",
+      changes: [], createdAt: "2026-01-10T09:00:00.000Z",
+    },
+  ];
+}
+
+/**
+ * Synthesize an AuditLogItem locally so mock mode (and optimistic UI) can show
+ * an edit in the activity timeline the instant it is saved.
+ */
+export function localAuditEntry(args: {
+  action: string;
+  entityType: "Student" | "Teacher";
+  entityId: string;
+  entityLabel: string;
+  changes: { field: string; from: unknown; to: unknown }[];
+}): AuditLogItem {
+  return {
+    _id: `aud_local_${args.entityId}_${Date.now()}`,
+    institution: { _id: "inst_01", name: MOCK_BRANDING.schoolName },
+    actorRole: "institution_admin",
+    actorName: MOCK_SESSION.user.name,
+    impersonatedBy: null,
+    action: args.action,
+    entityType: args.entityType,
+    entityId: args.entityId,
+    entityLabel: args.entityLabel,
+    changes: args.changes,
+    before: null,
+    after: null,
+    ip: null,
+    createdAt: new Date().toISOString(),
+  };
 }
 
 // ── Attendance grid generator ─────────────────────────────────────────────────

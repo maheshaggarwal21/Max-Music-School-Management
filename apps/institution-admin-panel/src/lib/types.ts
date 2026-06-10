@@ -183,6 +183,80 @@ export interface AdminSession {
   institution: BrandingPublic;
 }
 
+// ── Dashboard (GET /api/inst/:slug/admin/dashboard) ──────────────────────────
+
+export interface AdminDashboardData {
+  stats: {
+    students: { total: number; trial: number; activeSoon: number; active: number; inactive: number };
+    teachers: { active: number };
+    batches: { active: number };
+    feesThisMonth: number; // paise
+  };
+  todaysClasses: {
+    _id: string;
+    name: string;
+    time: string | null;
+    teacher: string | null;
+    studentCount: number;
+  }[];
+  /** Last 12 months — new students per month + cumulative total. */
+  enrollmentTrend: { month: string; newStudents: number; cumulative: number }[];
+  /** Present-rate per batch over the last 30 days, worst first. */
+  attendanceByBatch: {
+    batchId: string;
+    name: string;
+    present: number;
+    absent: number;
+    total: number;
+    rate: number; // 0-100
+  }[];
+}
+
+// ── Batch detail (GET /batches/:id · /batches/:id/students · /sessions) ──────
+
+export interface BatchDetail extends BatchRow {
+  mode: "online" | "offline";
+  dayPatternDays: string[];
+  timeRange: { startTime: string; endTime: string } | null;
+  createdAt: string;
+}
+
+export interface BatchStudentItem {
+  _id: string;
+  displayId: string;
+  name: string;
+  mobile: string;
+  joinStatus: JoinStatus;
+  category: "regular" | "trial";
+  validityEnd: string | null;
+  paidClasses: number;
+}
+
+export interface ClassSessionItem {
+  _id: string;
+  meetingUrl: string;
+  targetDate: string;
+  launchedAt: string;
+  launchedBy: { actorRole: string } | null;
+}
+
+/** One row per marked class date (GET /batches/:id/attendance-summary). */
+export interface BatchAttendanceClass {
+  date: string;
+  present: number;
+  absent: number;
+  holiday: number;
+  credited: number;
+  total: number;
+}
+
+// ── School profile (GET /settings/profile · PATCH /settings/branding) ────────
+
+export interface SchoolProfileData {
+  branding: BrandingPublic;
+  pendingSlugRequest: { _id: string; requestedSlug: string; createdAt: string } | null;
+}
+
 // ── Audit log (GET /students/:id/activity → Paginated<AuditLogItem>) ─────────
 
 export interface AuditLogItem {

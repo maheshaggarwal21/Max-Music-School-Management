@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import {
-  CalendarCheck, Inbox, Layers, LayoutDashboard, Loader2,
+  CalendarCheck, CalendarDays, Clock, Inbox, Layers, LayoutDashboard, Loader2,
   Settings, Users, Wallet, GraduationCap,
 } from "lucide-react";
 import {
@@ -12,6 +12,7 @@ import { api, authPath, mockable } from "@/lib/api";
 import { MOCK_SESSION, ok } from "@/lib/mocks";
 import type { AdminSession, ApiResponse } from "@/lib/types";
 import { OperatorBanner } from "@/components/operator-banner";
+import { TopNav } from "@/components/top-nav";
 
 // WHITE-LABEL: every brand surface in this shell (sidebar name, logo, accent
 // color, document.title via BrandingProvider) comes ONLY from the session's
@@ -40,7 +41,11 @@ const NAV_SECTIONS: SidebarSection[] = [
   },
   {
     label: "Configure",
-    items: [{ label: "Settings", href: "/settings", icon: Settings }],
+    items: [
+      { label: "Suitable Days", href: "/suitable-days", icon: CalendarDays },
+      { label: "Suitable Times", href: "/suitable-times", icon: Clock },
+      { label: "Settings", href: "/settings", icon: Settings },
+    ],
   },
 ];
 
@@ -108,7 +113,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               </div>
             }
           />
-          <main className="flex-1 overflow-y-auto">{children}</main>
+          {/* Top nav lives in the content column — it never overlaps the sidebar */}
+          <div className="flex min-w-0 flex-1 flex-col">
+            <TopNav
+              adminName={session.user.name}
+              schoolName={session.institution.schoolName}
+              logoUrl={session.institution.logoUrl}
+            />
+            <main className="min-h-0 flex-1 overflow-y-auto">{children}</main>
+          </div>
         </div>
       </div>
     </BrandingProvider>
