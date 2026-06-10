@@ -2,7 +2,8 @@
 
 const Teacher = require('../../models/Teacher');
 const Batch   = require('../../models/Batch');
-const { ok, notFound, paginated } = require('../../config/helper');
+const { ok, notFound, badRequest, paginated } = require('../../config/helper');
+const { auditLog, actorFromReq } = require('../../config/auditLog');
 const S = require('../../config/strings');
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -83,6 +84,62 @@ exports.get = async (req, res, next) => {
     if (!t) return notFound(res, S.TEACHER_NOT_FOUND);
     const bMap = await activeBatchMap([t._id]);
     return ok(res, S.OK, { teacher: serialize(t, bMap.get(String(t._id)) || 0) });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// God-mode edit from the operator panel. Profile + salary + status only —
+// panelAccess and institution are managed via the institution lifecycle actions.
+exports.patch = async (req, res, next) => {
+  try {
+    const teacher = await Teacher.findById(req.params.id);
+    if (!teacher) return notFound(res, S.TEACHER_NOT_FOUND);
+
+    const b = req.body || {};
+    const changes = [];
+    const apply = (field, value) => {
+      const from = teacher[field] ?? null;
+      if (String(from) === String(value)) return;
+      changes.push({ field, from, to: value });
+      teacher[field] = value;
+    };
+
+    if (typeof b.name === 'string' && b.name.trim()) apply('name', b.name.trim());
+    if (typeof b.mobile === 'string' && b.mobile.trim()) {
+      if (!/^\d{10}$/.test(b.mobile.trim())) return badRequest(res, S.VALIDATION_FAILED);
+      apply('mobile', b.mobile.trim());
+    }
+    if (b.salaryAmount !== undefined) {
+      const n = Number(b.salaryAmount);
+      if (!Number.isFinite(n) || n < 0) return badRequest(res, S.VALIDATION_FAILED);
+      apply('salaryAmount', Math.round(n));
+    }
+    if (b.status !== undefined) {
+      if (!['active', 'inactive'].includes(b.status)) return badRequest(res, S.VALIDATION_FAILED);
+      const wasActive = teacher.status === 'active';
+      apply('status', b.status);
+      // Deactivation logs the teacher out everywhere (two-level invalidation).
+      if (wasActive && b.status === 'inactive') teacher.tokenVersion += 1;
+    }
+
+    if (changes.length) {
+      await teacher.save();
+      await auditLog({
+        institutionId: teacher.institutionId,
+        ...actorFromReq(req),
+        action:      'UPDATE_TEACHER',
+        entityType:  'Teacher',
+        entityId:    teacher._id,
+        entityLabel: `Teacher: ${teacher.name}`,
+        changes,
+        ip: req.ip,
+      });
+    }
+
+    const fresh = await Teacher.findById(teacher._id).populate(POPULATE).lean();
+    const bMap = await activeBatchMap([fresh._id]);
+    return ok(res, S.UPDATED, { teacher: serialize(fresh, bMap.get(String(fresh._id)) || 0) });
   } catch (err) {
     next(err);
   }

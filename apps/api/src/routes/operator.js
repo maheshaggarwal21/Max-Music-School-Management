@@ -32,10 +32,12 @@ router.post('/institutions/:id/terminate',    Institution.terminate);
 router.post('/institutions/:id/impersonate',  Institution.impersonate);
 
 // Cross-institution collections
-router.get('/students',     Students.list);
-router.get('/students/:id', Students.get);
-router.get('/teachers',     Teachers.list);
-router.get('/teachers/:id', Teachers.get);
+router.get('/students',       Students.list);
+router.get('/students/:id',   Students.get);
+router.patch('/students/:id', Students.patch);
+router.get('/teachers',       Teachers.list);
+router.get('/teachers/:id',   Teachers.get);
+router.patch('/teachers/:id', Teachers.patch);
 
 // Money
 router.get('/payments',                  Payments.listStudentFees);
