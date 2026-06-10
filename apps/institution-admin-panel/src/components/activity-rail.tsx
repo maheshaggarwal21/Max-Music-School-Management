@@ -58,7 +58,7 @@ interface RailNode {
 function flatten(items: AuditLogItem[]): RailNode[] {
   const nodes: RailNode[] = [];
   for (const item of items) {
-    if (item.changes.length === 0) {
+    if (!item.changes?.length) {
       nodes.push({
         key: item._id,
         field: null,

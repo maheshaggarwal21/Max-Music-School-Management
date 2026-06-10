@@ -235,7 +235,7 @@ export default function ChangesPage() {
                               {item.entityLabel ?? `${item.entityType} ${item.entityId}`}
                             </p>
 
-                            {item.changes.length > 0 && (
+                            {!!item.changes?.length && (
                               <div className="mt-2 space-y-1">
                                 {item.changes.map((c, ci) => (
                                   <p key={ci} className="text-xs">

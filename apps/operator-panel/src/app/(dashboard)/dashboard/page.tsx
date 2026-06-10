@@ -24,7 +24,7 @@ import { MOCK_FEE_TREND, mockDashboard } from "@/lib/mocks";
 import type { ApiResponse, AuditLogItem, OperatorDashboardData } from "@/lib/types";
 
 function activityLine(item: AuditLogItem): string {
-  if (item.changes.length > 0) {
+  if (item.changes?.length) {
     const c = item.changes[0];
     return `${c.field.toUpperCase()} changed from ${JSON.stringify(c.from)} to ${JSON.stringify(c.to)}`;
   }

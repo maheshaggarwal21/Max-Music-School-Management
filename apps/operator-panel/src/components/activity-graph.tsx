@@ -149,7 +149,7 @@ export function ActivityGraph({
                 const isLive = liveIndex !== -1;
                 // bottom-most live entry lands first, so the batch reads as a stream
                 const delay = isLive ? (liveBatch.length - 1 - liveIndex) * 0.13 : 0;
-                const changes = e.changes.length
+                const changes = e.changes?.length
                   ? e.changes
                   : [{ field: e.action.toLowerCase(), from: null, to: null }];
                 const Icon = fieldIcon(changes[0].field);

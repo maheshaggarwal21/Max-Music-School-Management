@@ -77,7 +77,7 @@ export function ActivityFeed({ items }: { items: AuditLogItem[] }) {
               {" · "}
               <span className="uppercase tracking-wide">{item.actorRole.replace(/_/g, " ")}</span>
             </p>
-            {item.changes.length > 0 && (
+            {!!item.changes?.length && (
               <div className="mt-1.5 space-y-1">
                 {item.changes.map((c, i) => (
                   <p key={i} className="rounded-md bg-muted/60 px-2 py-1 text-[11px] text-muted-foreground">
