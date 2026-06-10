@@ -7,13 +7,10 @@ export interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> 
   error?: string;
 }
 
-let inputAutoId = 0;
-
 export const Input = React.forwardRef<HTMLInputElement, InputProps>(
   ({ label, error, required, className, id, ...props }, ref) => {
-    const autoId = React.useRef<string>();
-    if (!autoId.current) autoId.current = `mm-input-${++inputAutoId}`;
-    const inputId = id ?? autoId.current;
+    const reactId = React.useId();
+    const inputId = id ?? `mm-input-${reactId}`;
 
     return (
       <div className="flex w-full flex-col gap-1.5">
