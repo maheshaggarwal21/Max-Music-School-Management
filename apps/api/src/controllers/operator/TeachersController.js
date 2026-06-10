@@ -58,8 +58,8 @@ exports.list = async (req, res, next) => {
 
     const filter = {};
     if (institutionId)   filter.institutionId = institutionId;
-    if (employmentType)  filter.employmentType = employmentType;
-    if (status)          filter.status = status;
+    if (employmentType && employmentType !== 'all') filter.employmentType = employmentType;
+    if (status && status !== 'all')                 filter.status = status;
     if (search) {
       const rx = new RegExp(escapeRegex(search), 'i');
       filter.$or = [{ name: rx }, { mobile: rx }, { email: rx }, { displayId: rx }];

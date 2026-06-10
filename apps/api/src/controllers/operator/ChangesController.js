@@ -43,7 +43,7 @@ exports.list = async (req, res, next) => {
     if (institutionId) filter.institutionId = institutionId;
     if (entityType)    filter.entityType = entityType;
     if (action)        filter.action = action;
-    if (actorRole)     filter.actorRole = actorRole;
+    if (actorRole && actorRole !== 'all') filter.actorRole = actorRole;
     if (actorName)     filter.actorName = new RegExp(escapeRegex(actorName), 'i');
     if (from || to) {
       filter.createdAt = {};

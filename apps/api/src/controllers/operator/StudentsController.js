@@ -49,8 +49,8 @@ exports.list = async (req, res, next) => {
 
     const filter = {};
     if (institutionId) filter.institutionId = institutionId;
-    if (status)        filter.status = status;
-    if (joinStatus)    filter.joinStatus = joinStatus;
+    if (status && status !== 'all')         filter.status = status;
+    if (joinStatus && joinStatus !== 'all') filter.joinStatus = joinStatus;
     if (instrumentId)  filter.instrumentId = instrumentId;
     if (teacherId)     filter.teacherId = teacherId;
     if (search) {
