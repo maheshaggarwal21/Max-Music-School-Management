@@ -108,6 +108,9 @@ exports.approve = async (req, res, next) => {
     const {
       teacherId, batchId, instrumentId, classType,
       validityDays, paidAmount, paymentStatus,
+      mode, sessionType, joinStatus,
+      validityStart: bodyStart, validityEnd: bodyEnd,
+      paidClasses, upcomingClasses, upcomingAmount,
     } = req.body || {};
 
     // GOLDEN RULE: reject foreign teacher/batch/instrument refs before creating the Student.
@@ -120,10 +123,16 @@ exports.approve = async (req, res, next) => {
     const passwordHash = await hash(tempPassword);
 
     const now = new Date();
-    let validityStart, validityEnd;
-    if (validityDays && Number(validityDays) > 0) {
+    // Explicit start/end dates from the approval form win; else derive from validityDays.
+    let validityStart, validityEnd, effectiveDays;
+    if (bodyStart && bodyEnd && !Number.isNaN(new Date(bodyStart).getTime()) && !Number.isNaN(new Date(bodyEnd).getTime())) {
+      validityStart = new Date(bodyStart);
+      validityEnd   = new Date(bodyEnd);
+      effectiveDays = Math.max(0, Math.round((validityEnd - validityStart) / (24 * 60 * 60 * 1000)));
+    } else if (validityDays && Number(validityDays) > 0) {
       validityStart = now;
       validityEnd = new Date(now.getTime() + Number(validityDays) * 24 * 60 * 60 * 1000);
+      effectiveDays = Number(validityDays);
     }
 
     const student = await Student.create({
@@ -136,11 +145,16 @@ exports.approve = async (req, res, next) => {
       batchId:      batchId || undefined,
       instrumentId: instrumentId || reqDoc.instrumentId || undefined,
       classType:    classType || undefined,
-      joinStatus:   'trial',
+      mode:         mode || undefined,
+      sessionType:  sessionType || undefined,
+      joinStatus:   joinStatus || 'trial',
       category:     paymentStatus === 'paid' ? 'regular' : 'trial',
       validityStart, validityEnd,
-      validityDays: validityDays ? Number(validityDays) : undefined,
+      validityDays: effectiveDays,
+      paidClasses:     typeof paidClasses === 'number' ? paidClasses : undefined,
+      upcomingClasses: typeof upcomingClasses === 'number' ? upcomingClasses : undefined,
       paidAmount:   typeof paidAmount === 'number' ? paidAmount : 0,
+      upcomingAmount: typeof upcomingAmount === 'number' ? upcomingAmount : undefined,
       requestId:    reqDoc._id,
       passwordHash,
       status: 'active',

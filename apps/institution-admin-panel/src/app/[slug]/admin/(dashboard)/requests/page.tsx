@@ -15,6 +15,7 @@ import {
 import type { ApiResponse, Paginated, RequestItem } from "@/lib/types";
 import { PageShell } from "@/components/page-shell";
 import { ConfirmModal } from "@/components/confirm-modal";
+import { ApproveRequestModal } from "@/components/approve-request-modal";
 import { EmptyState } from "@/components/empty-state";
 import { TableSkeleton } from "@/components/skeletons";
 
@@ -34,8 +35,6 @@ export default function RequestsPage() {
 
   // approve / reject targets
   const [approving, setApproving] = useState<RequestItem | null>(null);
-  const [approveTeacherId, setApproveTeacherId] = useState<string | null>(null);
-  const [approveValidityDays, setApproveValidityDays] = useState("60");
   const [rejecting, setRejecting] = useState<RequestItem | null>(null);
   const [rejectReason, setRejectReason] = useState("");
 
@@ -66,23 +65,6 @@ export default function RequestsPage() {
     for (const r of requests ?? []) c[r.status] += 1;
     return c;
   }, [requests]);
-
-  const approve = async () => {
-    if (!approving) return;
-    await mockable(
-      () =>
-        api.post<ApiResponse>(adminPath(`/requests/${approving._id}/approve`), {
-          teacherId: approveTeacherId ?? undefined,
-          validityDays: Number(approveValidityDays) || undefined,
-        }),
-      ok(null),
-      500
-    );
-    setRequests((prev) =>
-      (prev ?? []).map((r) => (r._id === approving._id ? { ...r, status: "approved" } : r))
-    );
-    toast.success(`${approving.name} approved — student record created`);
-  };
 
   const reject = async () => {
     if (!rejecting) return;
@@ -187,11 +169,7 @@ export default function RequestsPage() {
               size="sm"
               variant="brand"
               className="rounded-full"
-              onClick={() => {
-                setApproving(r);
-                setApproveTeacherId(null);
-                setApproveValidityDays("60");
-              }}
+              onClick={() => setApproving(r)}
             >
               <Check className="h-3.5 w-3.5" /> Approve
             </Button>
@@ -265,39 +243,19 @@ export default function RequestsPage() {
         )}
       </BlurFade>
 
-      {/* Approve confirm */}
-      <ConfirmModal
-        open={!!approving}
+      {/* Approve — full "Request Details" edit form; on success the new
+          student is immediately visible in the Students tab. */}
+      <ApproveRequestModal
+        request={approving}
         onClose={() => setApproving(null)}
-        title="Approve enrollment request"
-        message={
-          approving
-            ? `${approving.name} will be enrolled${approving.instrument ? ` for ${approving.instrument.name}` : ""} and a student record will be created.`
-            : undefined
-        }
-        confirmLabel="Approve & Create Student"
-        onConfirm={approve}
-      >
-        <div className="flex flex-col gap-3">
-          <Select
-            label="Assign teacher (optional)"
-            placeholder="Choose later"
-            options={MOCK_TEACHERS.filter((t) => t.status === "active").map((t) => ({
-              value: t._id,
-              label: t.name,
-            }))}
-            value={approveTeacherId}
-            onChange={setApproveTeacherId}
-          />
-          <Input
-            label="Validity (days)"
-            type="number"
-            min={1}
-            value={approveValidityDays}
-            onChange={(e) => setApproveValidityDays(e.target.value)}
-          />
-        </div>
-      </ConfirmModal>
+        onApproved={(requestId) => {
+          setRequests((prev) =>
+            (prev ?? []).map((r) =>
+              r._id === requestId ? { ...r, status: "approved" } : r
+            )
+          );
+        }}
+      />
 
       {/* Reject confirm */}
       <ConfirmModal

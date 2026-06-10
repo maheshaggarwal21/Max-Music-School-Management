@@ -11,6 +11,7 @@ const Teachers    = require('../controllers/operator/TeachersController');
 const Payments    = require('../controllers/operator/PaymentsController');
 const Changes     = require('../controllers/operator/ChangesController');
 const Settings    = require('../controllers/operator/SettingsController');
+const SlugRequests = require('../controllers/operator/SlugRequestController');
 
 // Gate the whole namespace.
 router.use(operatorAuth);
@@ -40,6 +41,11 @@ router.get('/teachers/:id', Teachers.get);
 router.get('/payments',                  Payments.listStudentFees);
 router.get('/rent-invoices',             Payments.listRentInvoices);
 router.post('/rent-invoices/:id/mark-paid', Payments.markRentPaid);
+
+// Slug change requests (filed by institution admins)
+router.get('/slug-requests',              SlugRequests.list);
+router.post('/slug-requests/:id/approve', SlugRequests.approve);
+router.post('/slug-requests/:id/reject',  SlugRequests.reject);
 
 // Global audit timeline
 router.get('/changes', Changes.list);

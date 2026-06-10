@@ -1,523 +1,387 @@
 "use client";
-import { useEffect, useState } from "react";
-import {
-  CalendarDays, CalendarOff, Clock, Loader2, Palette, Plus,
-} from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Hourglass, ImagePlus, Link2, Loader2, Palette, Save } from "lucide-react";
 import { toast } from "sonner";
 import {
-  BlurFade, BorderBeam, Button, DatePicker, Input, Modal, Select, cn, useBranding,
+  BlurFade, BorderBeam, Button, Input, Modal, cn, useBranding,
 } from "@maxmusic/ui";
-import { formatDate } from "@maxmusic/utils";
-import { api, adminPath, mockable } from "@/lib/api";
-import {
-  MOCK_BATCHES, MOCK_DAY_PATTERNS, MOCK_HOLIDAYS, MOCK_TIME_SLOTS, ok,
-} from "@/lib/mocks";
-import type {
-  ApiResponse, DayPatternItem, HolidayItem, TimeSlotItem,
-} from "@/lib/types";
+import { api, adminPath, mockable, MOCKS_ENABLED } from "@/lib/api";
+import { MOCK_PROFILE, ok } from "@/lib/mocks";
+import type { ApiResponse, BrandingPublic, SchoolProfileData } from "@/lib/types";
 import { PageShell } from "@/components/page-shell";
 import { Skeleton } from "@/components/skeletons";
-import { Toggle } from "@/components/toggle";
 
-const ALL_DAYS = [
-  { value: "mon", label: "Mon" }, { value: "tue", label: "Tue" },
-  { value: "wed", label: "Wed" }, { value: "thu", label: "Thu" },
-  { value: "fri", label: "Fri" }, { value: "sat", label: "Sat" },
-  { value: "sun", label: "Sun" },
+// Settings = School Profile only. Suitable Days / Suitable Times moved to their
+// own tabs; holidays live in the Batches area. The admin can edit branding
+// (color, logo, name, tagline) directly — every change is audited and visible
+// in the operator console. The SLUG can only be changed via a request your
+// platform administrator approves.
+
+const COLOR_PRESETS = [
+  "#5B8DEF", "#0D9488", "#7C3AED", "#DC2626",
+  "#D97706", "#16A34A", "#0EA5E9", "#334155",
 ];
+const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
+const SLUG_RX = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const MAX_INLINE_LOGO_BYTES = 200 * 1024;
 
-const DAY_LABEL: Record<string, string> = {
-  mon: "Mon", tue: "Tue", wed: "Wed", thu: "Thu", fri: "Fri", sat: "Sat", sun: "Sun",
-};
-
-function to12h(hhmm: string): string {
-  const [h, m] = hhmm.split(":").map(Number);
-  if (Number.isNaN(h)) return hhmm;
-  const suffix = h >= 12 ? "PM" : "AM";
-  const hour = h % 12 === 0 ? 12 : h % 12;
-  return `${hour}:${`${m ?? 0}`.padStart(2, "0")} ${suffix}`.replace(":00 ", ":00 ");
-}
-
-function SectionCard({
-  title, subtitle, icon: Icon, children,
-}: {
-  title: string;
-  subtitle: string;
-  icon: React.ComponentType<{ className?: string }>;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="relative overflow-hidden rounded-xl border border-border bg-card p-5">
-      <BorderBeam size={50} duration={12} />
-      <div className="flex items-center gap-3">
-        <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand/10">
-          <Icon className="h-4 w-4 text-brand" />
-        </span>
-        <div>
-          <h2 className="text-sm font-semibold">{title}</h2>
-          <p className="text-xs text-muted-foreground">{subtitle}</p>
-        </div>
-      </div>
-      <div className="mt-4">{children}</div>
-    </div>
-  );
+function initials(name: string): string {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w.charAt(0).toUpperCase())
+    .join("");
 }
 
 export default function SettingsPage() {
   const branding = useBranding();
+  const [profile, setProfile] = useState<SchoolProfileData | null>(null);
 
-  const [dayPatterns, setDayPatterns] = useState<DayPatternItem[] | null>(null);
-  const [timeSlots, setTimeSlots] = useState<TimeSlotItem[] | null>(null);
-  const [holidays, setHolidays] = useState<HolidayItem[] | null>(null);
+  // Editable branding fields.
+  const [schoolName, setSchoolName] = useState("");
+  const [tagline, setTagline] = useState("");
+  const [color, setColor] = useState("#5B8DEF");
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
 
-  // add-forms state
-  const [newDays, setNewDays] = useState<string[]>([]);
-  const [addingPattern, setAddingPattern] = useState(false);
-  const [newStart, setNewStart] = useState("");
-  const [newEnd, setNewEnd] = useState("");
-  const [addingSlot, setAddingSlot] = useState(false);
-
-  const [holidayModal, setHolidayModal] = useState(false);
-  const [holidayBatchId, setHolidayBatchId] = useState<string | null>(null);
-  const [holidayDate, setHolidayDate] = useState<string | null>(null);
-  const [holidayCategory, setHolidayCategory] = useState<string | null>("regular");
-  const [holidayReason, setHolidayReason] = useState("");
-  const [savingHoliday, setSavingHoliday] = useState(false);
+  // Slug change request.
+  const [slugModal, setSlugModal] = useState(false);
+  const [newSlug, setNewSlug] = useState("");
+  const [slugReason, setSlugReason] = useState("");
+  const [requestingSlug, setRequestingSlug] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     mockable(
-      () => api.get<ApiResponse<DayPatternItem[]>>(adminPath("/day-patterns")),
-      ok(MOCK_DAY_PATTERNS)
-    ).then((r) => !cancelled && setDayPatterns(r.data ?? []));
-    mockable(
-      () => api.get<ApiResponse<TimeSlotItem[]>>(adminPath("/time-slots")),
-      ok(MOCK_TIME_SLOTS)
-    ).then((r) => !cancelled && setTimeSlots(r.data ?? []));
-    // NOTE: admin holiday endpoints are not in CONTRACTS.md yet (teacher panel
-    // owns POST/DELETE /holidays) — flagged to the orchestrator; mock-only here.
-    mockable(
-      () => api.get<ApiResponse<HolidayItem[]>>(adminPath("/holidays")),
-      ok(MOCK_HOLIDAYS)
-    ).then((r) => !cancelled && setHolidays(r.data ?? []));
+      () => api.get<ApiResponse<SchoolProfileData>>(adminPath("/settings/profile")),
+      ok(MOCK_PROFILE)
+    ).then((r) => {
+      if (cancelled || !r.data) return;
+      setProfile(r.data);
+      setSchoolName(r.data.branding.schoolName);
+      setTagline(r.data.branding.tagline ?? "");
+      setColor(r.data.branding.primaryColor);
+      setLogoUrl(r.data.branding.logoUrl);
+    });
     return () => {
       cancelled = true;
     };
   }, []);
 
-  const togglePattern = async (p: DayPatternItem) => {
-    setDayPatterns((prev) =>
-      (prev ?? []).map((x) => (x._id === p._id ? { ...x, isActive: !x.isActive } : x))
-    );
-    await mockable(
-      () => api.patch<ApiResponse>(adminPath(`/day-patterns/${p._id}`), { isActive: !p.isActive }),
-      ok(null),
-      250
-    );
-    toast.success(`${p.label} ${p.isActive ? "disabled" : "enabled"}`);
-  };
+  const pickLogo = () => fileRef.current?.click();
 
-  const addPattern = async () => {
-    if (newDays.length === 0) return toast.error("Pick at least one day");
-    setAddingPattern(true);
+  const onLogoFile = async (file: File) => {
+    if (!file.type.startsWith("image/")) {
+      toast.error("Pick an image file");
+      return;
+    }
+    setUploading(true);
     try {
-      await mockable(
-        () => api.post<ApiResponse>(adminPath("/day-patterns"), { days: newDays }),
-        ok(null),
-        400
-      );
-      const ordered = ALL_DAYS.map((d) => d.value).filter((d) => newDays.includes(d));
-      setDayPatterns((prev) => [
-        ...(prev ?? []),
-        {
-          _id: `dp_local_${Date.now()}`,
-          days: ordered,
-          label: ordered.map((d) => DAY_LABEL[d]).join(" · "),
-          isActive: true,
-        },
-      ]);
-      setNewDays([]);
-      toast.success("Day pattern added");
+      // Preferred: pre-signed S3 upload. Fallback (uploads not configured):
+      // inline the image as a data-URL — small files only.
+      const presign = await mockable(
+        () =>
+          api.post<ApiResponse<{ uploadUrl: string; publicUrl: string }>>(
+            adminPath("/settings/logo-upload-url"),
+            { filename: file.name, contentType: file.type }
+          ),
+        ok<{ uploadUrl: string; publicUrl: string } | null>(null),
+        300
+      ).catch(() => null);
+
+      if (presign?.data?.uploadUrl) {
+        const put = await fetch(presign.data.uploadUrl, {
+          method: "PUT",
+          headers: { "Content-Type": file.type },
+          body: file,
+        });
+        if (!put.ok) throw new Error("Upload failed");
+        setLogoUrl(presign.data.publicUrl);
+        toast.success("Logo uploaded — hit Save to apply it");
+        return;
+      }
+
+      if (file.size > MAX_INLINE_LOGO_BYTES) {
+        toast.error("Logo must be under 200KB (uploads are not configured on this server)");
+        return;
+      }
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(new Error("Could not read file"));
+        reader.readAsDataURL(file);
+      });
+      setLogoUrl(dataUrl);
+      toast.success("Logo ready — hit Save to apply it");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not upload the logo");
     } finally {
-      setAddingPattern(false);
+      setUploading(false);
     }
   };
 
-  const toggleSlot = async (t: TimeSlotItem) => {
-    setTimeSlots((prev) =>
-      (prev ?? []).map((x) => (x._id === t._id ? { ...x, isOnline: !x.isOnline } : x))
-    );
-    await mockable(
-      () => api.patch<ApiResponse>(adminPath(`/time-slots/${t._id}`), { isOnline: !t.isOnline }),
-      ok(null),
-      250
-    );
-    toast.success(`${t.label} set to ${t.isOnline ? "offline" : "online"}`);
-  };
-
-  const addSlot = async () => {
-    if (!newStart || !newEnd) return toast.error("Pick a start and end time");
-    if (newEnd <= newStart) return toast.error("End time must be after start time");
-    setAddingSlot(true);
+  const save = async () => {
+    if (!schoolName.trim()) return toast.error("School name is required");
+    if (!HEX_COLOR.test(color)) return toast.error("Brand color must be a hex value like #5B8DEF");
+    setSaving(true);
     try {
       await mockable(
         () =>
-          api.post<ApiResponse>(adminPath("/time-slots"), {
-            startTime: newStart, endTime: newEnd,
+          api.patch<ApiResponse<{ branding: BrandingPublic } | null>>(adminPath("/settings/branding"), {
+            schoolName: schoolName.trim(),
+            tagline: tagline.trim(),
+            primaryColor: color,
+            logoUrl: logoUrl ?? "",
           }),
         ok(null),
-        400
+        500
       );
-      setTimeSlots((prev) => [
-        ...(prev ?? []),
-        {
-          _id: `ts_local_${Date.now()}`,
-          startTime: newStart, endTime: newEnd,
-          label: `${to12h(newStart)}-${to12h(newEnd)}`,
-          isOnline: true,
-        },
-      ]);
-      setNewStart("");
-      setNewEnd("");
-      toast.success("Time slot added");
+      toast.success("School profile saved — applying your branding everywhere");
+      // The session (and BrandingProvider) re-pulls on load → new color/logo
+      // applies across the whole panel. The audit log records each change.
+      if (!MOCKS_ENABLED) {
+        setTimeout(() => window.location.reload(), 600);
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not save the profile");
     } finally {
-      setAddingSlot(false);
+      setSaving(false);
     }
   };
 
-  const addHoliday = async () => {
-    if (!holidayBatchId) return toast.error("Select a batch");
-    if (!holidayDate) return toast.error("Pick a date");
-    setSavingHoliday(true);
+  const requestSlug = async () => {
+    const candidate = newSlug.trim().toLowerCase();
+    if (!SLUG_RX.test(candidate) || candidate.length < 3) {
+      return toast.error("Use lowercase letters, numbers and hyphens (min 3 chars)");
+    }
+    if (candidate === profile?.branding.slug) {
+      return toast.error("That is already your current address");
+    }
+    setRequestingSlug(true);
     try {
       await mockable(
         () =>
-          api.post<ApiResponse>(adminPath("/holidays"), {
-            batchId: holidayBatchId,
-            date: holidayDate,
-            studentCategory: holidayCategory ?? "regular",
-            reason: holidayReason || undefined,
+          api.post<ApiResponse>(adminPath("/settings/slug-request"), {
+            requestedSlug: candidate,
+            reason: slugReason.trim() || undefined,
           }),
         ok(null),
-        400
+        500
       );
-      const batch = MOCK_BATCHES.find((b) => b._id === holidayBatchId)!;
-      setHolidays((prev) => [
-        {
-          _id: `hol_local_${Date.now()}`,
-          batch: { _id: batch._id, name: batch.name },
-          date: holidayDate,
-          studentCategory: (holidayCategory ?? "regular") as "regular" | "trial",
-          reason: holidayReason || null,
-        },
-        ...(prev ?? []),
-      ]);
-      toast.success("Holiday declared — affected students get a class credited");
-      setHolidayModal(false);
-      setHolidayBatchId(null);
-      setHolidayDate(null);
-      setHolidayReason("");
+      setProfile((prev) =>
+        prev
+          ? {
+              ...prev,
+              pendingSlugRequest: {
+                _id: `slugreq_local_${Date.now()}`,
+                requestedSlug: candidate,
+                createdAt: new Date().toISOString(),
+              },
+            }
+          : prev
+      );
+      toast.success("Request sent — your platform administrator will review it");
+      setSlugModal(false);
+      setNewSlug("");
+      setSlugReason("");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not submit the request");
     } finally {
-      setSavingHoliday(false);
+      setRequestingSlug(false);
     }
   };
+
+  const slug = profile?.branding.slug ?? branding?.slug ?? "";
 
   return (
-    <PageShell title="Settings" subtitle="Day patterns, time slots, holidays and your school profile">
-      <div className="grid gap-6 xl:grid-cols-2">
-        {/* Institution profile / branding preview */}
-        <BlurFade delay={0.1}>
-          <SectionCard
-            title="School Profile"
-            subtitle="How your brand appears across all panels"
-            icon={Palette}
-          >
-            {!branding ? (
+    <PageShell title="Settings" subtitle="Your school profile and public address">
+      <BlurFade delay={0.1}>
+        <div className="relative max-w-3xl overflow-hidden rounded-xl border border-border bg-card p-5">
+          <BorderBeam size={60} duration={12} />
+          <div className="flex items-center gap-3">
+            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand/10">
+              <Palette className="h-4 w-4 text-brand" />
+            </span>
+            <div>
+              <h2 className="text-sm font-semibold">School Profile</h2>
+              <p className="text-xs text-muted-foreground">
+                How your brand appears across the admin, teacher and student panels
+              </p>
+            </div>
+          </div>
+
+          {!profile ? (
+            <div className="mt-5 space-y-3">
+              <Skeleton className="h-16 w-full" />
               <Skeleton className="h-24 w-full" />
-            ) : (
-              <div className="flex items-start gap-4">
-                {branding.logoUrl ? (
+            </div>
+          ) : (
+            <div className="mt-5 space-y-6">
+              {/* Logo + add button */}
+              <div className="flex items-center gap-4">
+                {logoUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={branding.logoUrl}
-                    alt={branding.schoolName}
-                    className="h-16 w-16 rounded-2xl object-cover"
-                  />
+                  <img src={logoUrl} alt={schoolName} className="h-16 w-16 rounded-2xl object-cover" />
                 ) : (
                   <span
                     className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl text-2xl font-bold text-white"
-                    style={{ backgroundColor: "var(--brand-primary)" }}
+                    style={{ backgroundColor: color }}
                   >
-                    {branding.schoolName
-                      .split(/\s+/)
-                      .filter(Boolean)
-                      .slice(0, 2)
-                      .map((w) => w.charAt(0).toUpperCase())
-                      .join("")}
+                    {initials(schoolName || "S")}
                   </span>
                 )}
-                <div className="min-w-0 flex-1">
-                  <p className="text-base font-semibold">{branding.schoolName}</p>
-                  {branding.tagline && (
-                    <p className="text-sm text-muted-foreground">{branding.tagline}</p>
-                  )}
-                  <div className="mt-3 flex flex-wrap items-center gap-3 text-xs">
-                    <span className="inline-flex items-center gap-1.5 rounded-full border border-border px-2.5 py-1">
-                      <span
-                        className="h-3 w-3 rounded-full"
-                        style={{ backgroundColor: "var(--brand-primary)" }}
-                      />
-                      Brand color{" "}
-                      <span className="font-mono uppercase">{branding.primaryColor}</span>
-                    </span>
-                    <span className="rounded-full border border-border px-2.5 py-1 font-mono text-muted-foreground">
-                      /{branding.slug}
-                    </span>
-                  </div>
-                  <p className="mt-3 text-[11px] text-muted-foreground">
-                    Branding changes are managed by your platform administrator.
-                  </p>
-                </div>
-              </div>
-            )}
-          </SectionCard>
-        </BlurFade>
-
-        {/* Day patterns */}
-        <BlurFade delay={0.2}>
-          <SectionCard
-            title="Suitable Days"
-            subtitle="Reusable day patterns that compose into batches"
-            icon={CalendarDays}
-          >
-            {!dayPatterns ? (
-              <Skeleton className="h-24 w-full" />
-            ) : (
-              <div className="space-y-4">
-                <div className="flex flex-wrap gap-2">
-                  {dayPatterns.map((p) => (
-                    <span
-                      key={p._id}
-                      className={cn(
-                        "inline-flex items-center gap-2.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-all",
-                        p.isActive
-                          ? "border-brand/30 bg-brand/5 text-foreground"
-                          : "border-border bg-muted/40 text-muted-foreground"
-                      )}
+                <div>
+                  <Button variant="outline" size="sm" className="rounded-full" onClick={pickLogo} disabled={uploading}>
+                    {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ImagePlus className="h-3.5 w-3.5" />}
+                    {logoUrl ? "Replace logo" : "Add logo"}
+                  </Button>
+                  {logoUrl && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="ml-2 rounded-full text-muted-foreground"
+                      onClick={() => setLogoUrl(null)}
                     >
-                      {p.label}
-                      <Toggle
-                        checked={p.isActive}
-                        onChange={() => togglePattern(p)}
-                        label={`Toggle ${p.label}`}
-                      />
-                    </span>
-                  ))}
-                </div>
-                <div className="flex flex-wrap items-end gap-2 border-t border-border pt-4">
-                  <div className="w-56">
-                    <Select
-                      label="New pattern"
-                      multiple
-                      placeholder="Pick days"
-                      options={ALL_DAYS}
-                      value={newDays}
-                      onChange={setNewDays}
-                    />
-                  </div>
-                  <Button
-                    variant="brand"
-                    size="sm"
-                    className="group rounded-full"
-                    onClick={addPattern}
-                    disabled={addingPattern}
-                  >
-                    {addingPattern ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <Plus className="h-3.5 w-3.5 transition-transform duration-300 group-hover:rotate-90" />
-                    )}
-                    Add
-                  </Button>
-                </div>
-              </div>
-            )}
-          </SectionCard>
-        </BlurFade>
-
-        {/* Time slots */}
-        <BlurFade delay={0.3}>
-          <SectionCard
-            title="Suitable Times"
-            subtitle="Reusable time windows — toggle online availability"
-            icon={Clock}
-          >
-            {!timeSlots ? (
-              <Skeleton className="h-24 w-full" />
-            ) : (
-              <div className="space-y-4">
-                <ul className="divide-y divide-border/50">
-                  {timeSlots.map((t) => (
-                    <li key={t._id} className="flex items-center justify-between gap-3 py-2.5">
-                      <div>
-                        <p className="text-sm font-medium">{t.label}</p>
-                        <p className="font-mono text-[11px] text-muted-foreground">
-                          {t.startTime}–{t.endTime}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span
-                          className={cn(
-                            "text-[10px] font-bold uppercase tracking-wider",
-                            t.isOnline ? "text-brand" : "text-muted-foreground"
-                          )}
-                        >
-                          {t.isOnline ? "Online" : "Offline"}
-                        </span>
-                        <Toggle
-                          checked={t.isOnline}
-                          onChange={() => toggleSlot(t)}
-                          label={`Toggle ${t.label}`}
-                        />
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-                <div className="flex flex-wrap items-end gap-2 border-t border-border pt-4">
-                  <div className="w-32">
-                    <Input
-                      label="Start"
-                      type="time"
-                      value={newStart}
-                      onChange={(e) => setNewStart(e.target.value)}
-                    />
-                  </div>
-                  <div className="w-32">
-                    <Input
-                      label="End"
-                      type="time"
-                      value={newEnd}
-                      onChange={(e) => setNewEnd(e.target.value)}
-                    />
-                  </div>
-                  <Button
-                    variant="brand"
-                    size="sm"
-                    className="group rounded-full"
-                    onClick={addSlot}
-                    disabled={addingSlot}
-                  >
-                    {addingSlot ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <Plus className="h-3.5 w-3.5 transition-transform duration-300 group-hover:rotate-90" />
-                    )}
-                    Add
-                  </Button>
-                </div>
-              </div>
-            )}
-          </SectionCard>
-        </BlurFade>
-
-        {/* Holidays */}
-        <BlurFade delay={0.4}>
-          <SectionCard
-            title="Holidays"
-            subtitle="Declared holidays credit a class back to students"
-            icon={CalendarOff}
-          >
-            {!holidays ? (
-              <Skeleton className="h-24 w-full" />
-            ) : (
-              <div className="space-y-4">
-                {holidays.length === 0 ? (
-                  <p className="py-4 text-center text-sm text-muted-foreground">
-                    No holidays declared yet.
+                      Remove
+                    </Button>
+                  )}
+                  <p className="mt-1.5 text-[11px] text-muted-foreground">
+                    Square image works best. Shown on every panel and login page.
                   </p>
-                ) : (
-                  <ul className="divide-y divide-border/50">
-                    {holidays.map((h) => (
-                      <li key={h._id} className="flex items-center justify-between gap-3 py-2.5">
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-medium">
-                            {formatDate(h.date)}
-                            {h.reason && (
-                              <span className="text-muted-foreground"> · {h.reason}</span>
-                            )}
-                          </p>
-                          <p className="truncate font-mono text-[11px] text-muted-foreground">
-                            {h.batch.name}
-                          </p>
-                        </div>
-                        <span className="shrink-0 rounded-full bg-brand/10 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-brand">
-                          {h.studentCategory}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                <Button
-                  variant="brand"
-                  size="sm"
-                  className="group rounded-full"
-                  onClick={() => setHolidayModal(true)}
-                >
-                  Declare Holiday
-                  <Plus className="ml-1 h-3.5 w-3.5 transition-transform duration-300 group-hover:rotate-90" />
+                </div>
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) void onLogoFile(f);
+                    e.target.value = "";
+                  }}
+                />
+              </div>
+
+              {/* Name + tagline */}
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Input label="School name" required value={schoolName} onChange={(e) => setSchoolName(e.target.value)} />
+                <Input label="Tagline" placeholder="e.g. Where every note finds its home" value={tagline} onChange={(e) => setTagline(e.target.value)} />
+              </div>
+
+              {/* Brand color */}
+              <div>
+                <p className="mb-2 text-xs font-medium">Brand color</p>
+                <div className="flex flex-wrap items-center gap-2">
+                  {COLOR_PRESETS.map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      aria-label={`Use ${c}`}
+                      onClick={() => setColor(c)}
+                      className={cn(
+                        "h-8 w-8 rounded-full border-2 transition-transform hover:scale-110",
+                        color.toLowerCase() === c.toLowerCase() ? "border-foreground" : "border-transparent"
+                      )}
+                      style={{ backgroundColor: c }}
+                    />
+                  ))}
+                  <input
+                    type="color"
+                    aria-label="Custom color"
+                    value={HEX_COLOR.test(color) ? color : "#5B8DEF"}
+                    onChange={(e) => setColor(e.target.value)}
+                    className="h-8 w-8 cursor-pointer rounded-full border border-border bg-transparent p-0.5"
+                  />
+                  <div className="w-28">
+                    <Input value={color} onChange={(e) => setColor(e.target.value)} placeholder="#5B8DEF" />
+                  </div>
+                  <span
+                    className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-semibold text-white"
+                    style={{ backgroundColor: HEX_COLOR.test(color) ? color : "#5B8DEF" }}
+                  >
+                    Live preview
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex justify-end border-t border-border pt-4">
+                <Button variant="brand" onClick={save} disabled={saving}>
+                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                  Save profile
                 </Button>
               </div>
-            )}
-          </SectionCard>
-        </BlurFade>
-      </div>
 
-      {/* Add holiday modal */}
+              {/* Public address (slug) — change via operator-approved request */}
+              <div className="rounded-lg border border-border bg-muted/30 p-4">
+                <p className="flex items-center gap-2 text-xs font-semibold">
+                  <Link2 className="h-3.5 w-3.5 text-brand" />
+                  Public address
+                </p>
+                <div className="mt-2 flex flex-wrap items-center gap-3">
+                  <code className="rounded-md bg-muted px-2.5 py-1 font-mono text-xs">/{slug}</code>
+                  {profile.pendingSlugRequest ? (
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 px-2.5 py-1 text-[11px] font-semibold text-amber-600 dark:text-amber-500">
+                      <Hourglass className="h-3 w-3" />
+                      Pending approval: /{profile.pendingSlugRequest.requestedSlug}
+                    </span>
+                  ) : (
+                    <Button variant="outline" size="sm" className="rounded-full" onClick={() => setSlugModal(true)}>
+                      Request address change
+                    </Button>
+                  )}
+                </div>
+                <p className="mt-2 text-[11px] text-muted-foreground">
+                  Changing the address logs out everyone and breaks previously shared links, so it
+                  needs approval from your platform administrator.
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+      </BlurFade>
+
+      {/* Slug change request modal */}
       <Modal
-        open={holidayModal}
-        onClose={() => setHolidayModal(false)}
-        title="Declare Holiday"
-        subtitle="Students in the batch get the class credited back"
+        open={slugModal}
+        onClose={() => setSlugModal(false)}
+        title="Request address change"
+        subtitle="Reviewed and applied by your platform administrator"
         footer={
           <>
-            <Button variant="ghost" onClick={() => setHolidayModal(false)} disabled={savingHoliday}>
+            <Button variant="ghost" onClick={() => setSlugModal(false)} disabled={requestingSlug}>
               Cancel
             </Button>
-            <Button variant="brand" onClick={addHoliday} disabled={savingHoliday}>
-              {savingHoliday && <Loader2 className="h-4 w-4 animate-spin" />}
-              Declare Holiday
+            <Button variant="brand" onClick={requestSlug} disabled={requestingSlug || !newSlug.trim()}>
+              {requestingSlug && <Loader2 className="h-4 w-4 animate-spin" />}
+              Submit request
             </Button>
           </>
         }
       >
         <div className="flex flex-col gap-3">
-          <Select
-            label="Batch"
-            required
-            searchable
-            placeholder="Select batch"
-            options={MOCK_BATCHES.filter((b) => b.status === "active" || b.status === "setting").map(
-              (b) => ({ value: b._id, label: b.name })
-            )}
-            value={holidayBatchId}
-            onChange={setHolidayBatchId}
-          />
-          <DatePicker label="Date" required value={holidayDate} onChange={setHolidayDate} />
-          <Select
-            label="Student category"
-            options={[
-              { value: "regular", label: "Regular students" },
-              { value: "trial", label: "Trial students" },
-            ]}
-            value={holidayCategory}
-            onChange={setHolidayCategory}
-          />
           <Input
-            label="Reason"
-            placeholder="e.g. Guru Purnima"
-            value={holidayReason}
-            onChange={(e) => setHolidayReason(e.target.value)}
+            label="New address"
+            required
+            placeholder="e.g. sunrise-music"
+            value={newSlug}
+            onChange={(e) => setNewSlug(e.target.value.toLowerCase())}
           />
+          <p className="rounded-md bg-muted/60 px-2.5 py-1.5 font-mono text-[11px] text-muted-foreground">
+            /{newSlug.trim() || "your-new-address"}/admin
+          </p>
+          <Input
+            label="Reason (optional)"
+            placeholder="Why do you want this change?"
+            value={slugReason}
+            onChange={(e) => setSlugReason(e.target.value)}
+          />
+          <p className="text-[11px] text-muted-foreground">
+            On approval every signed-in user of your school is logged out and the old address
+            stops working immediately.
+          </p>
         </div>
       </Modal>
     </PageShell>

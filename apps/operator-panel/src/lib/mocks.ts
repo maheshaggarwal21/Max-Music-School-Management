@@ -22,6 +22,7 @@ import type {
   OperatorStudentRow,
   OperatorTeacherRow,
   RentInvoiceItem,
+  SlugChangeRequestRow,
 } from "./types";
 
 // ── Envelope helpers ──────────────────────────────────────────────────────────
@@ -1067,3 +1068,78 @@ export const INSTITUTION_OPTIONS = MOCK_INSTITUTIONS.map((i) => ({
   value: i._id,
   label: i.name,
 }));
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Slug change requests (filed by institution admins, decided here)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const MOCK_SLUG_REQUESTS: SlugChangeRequestRow[] = [
+  {
+    _id: "slugreq_01",
+    institution: { _id: MOCK_INSTITUTIONS[1]._id, name: MOCK_INSTITUTIONS[1].name, slug: MOCK_INSTITUTIONS[1].slug },
+    currentSlug: MOCK_INSTITUTIONS[1].slug,
+    requestedSlug: "taal-tarang-academy",
+    reason: "Shorter address for our flyers",
+    status: "pending",
+    requestedBy: { actorName: MOCK_INSTITUTIONS[1].ownerTeacher?.name ?? null },
+    handledAt: null,
+    rejectionReason: null,
+    createdAt: "2026-06-09T10:20:00.000Z",
+  },
+  {
+    _id: "slugreq_02",
+    institution: { _id: MOCK_INSTITUTIONS[0]._id, name: MOCK_INSTITUTIONS[0].name, slug: MOCK_INSTITUTIONS[0].slug },
+    currentSlug: MOCK_INSTITUTIONS[0].slug,
+    requestedSlug: "swar-sadhana",
+    reason: null,
+    status: "pending",
+    requestedBy: { actorName: MOCK_INSTITUTIONS[0].ownerTeacher?.name ?? null },
+    handledAt: null,
+    rejectionReason: null,
+    createdAt: "2026-06-08T15:05:00.000Z",
+  },
+  {
+    _id: "slugreq_03",
+    institution: { _id: MOCK_INSTITUTIONS[2]?._id ?? "inst_03", name: MOCK_INSTITUTIONS[2]?.name, slug: MOCK_INSTITUTIONS[2]?.slug },
+    currentSlug: "riyaz-piano-studio",
+    requestedSlug: "riyaaz-piano-studio",
+    reason: "Spelling fix",
+    status: "approved",
+    requestedBy: { actorName: MOCK_INSTITUTIONS[2]?.ownerTeacher?.name ?? null },
+    handledAt: "2026-05-22T09:00:00.000Z",
+    rejectionReason: null,
+    createdAt: "2026-05-21T13:45:00.000Z",
+  },
+];
+
+export function mockSlugRequestList(params: {
+  page?: number;
+  limit?: number;
+  status?: string;
+}): ApiResponse<Paginated<SlugChangeRequestRow>> {
+  const { page = 1, limit = 20, status = "pending" } = params;
+  const filtered =
+    status && status !== "all"
+      ? MOCK_SLUG_REQUESTS.filter((r) => r.status === status)
+      : MOCK_SLUG_REQUESTS;
+  return ok(paginate(filtered, page, limit));
+}
+
+/** Mutates the mock row (and mirrors an approved slug onto the institution). */
+export function mockSlugRequestHandled(
+  id: string,
+  status: "approved" | "rejected",
+  rejectionReason?: string
+): ApiResponse<null> {
+  const row = MOCK_SLUG_REQUESTS.find((r) => r._id === id);
+  if (row) {
+    row.status = status;
+    row.handledAt = new Date().toISOString();
+    if (status === "rejected") row.rejectionReason = rejectionReason ?? null;
+    if (status === "approved") {
+      const inst = MOCK_INSTITUTIONS.find((i) => i._id === row.institution._id);
+      if (inst) inst.slug = row.requestedSlug;
+    }
+  }
+  return ok(null, status === "approved" ? "Slug change approved" : "Slug change rejected");
+}
