@@ -58,14 +58,14 @@ async function seedOperator() {
   const existing = await Operator.findOne({ email: OPERATOR_EMAIL }).lean();
   if (existing) {
     console.log('[operator] already exists:', OPERATOR_EMAIL);
-    return;
+    return existing._id;
   }
 
   const tempPassword = randomTempPassword();
   const passwordHash = await hash(tempPassword);
   const totpSecret   = generateSecret();
 
-  await Operator.create({
+  const operator = await Operator.create({
     name:             OPERATOR_NAME,
     email:            OPERATOR_EMAIL,
     passwordHash,
@@ -88,18 +88,21 @@ async function seedOperator() {
   if (qrImg) console.log(' ', qrImg.slice(0, 80) + '…');
   console.log('  → After first login, enrol TOTP via operator Settings → 2FA.');
   hr();
+
+  return operator._id;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Step 2 — Instruments (idempotent)
+// Step 2 — Instruments (idempotent, scoped to an institution)
+// Instruments are operational records — they carry a required institutionId and
+// are unique per (institutionId, name). They are seeded INTO the demo institution.
 // ─────────────────────────────────────────────────────────────────────────────
-async function seedInstruments() {
+async function seedInstruments(institutionId) {
   let created = 0;
   for (const name of INSTRUMENTS) {
-    // Instruments are operator-level (no institutionId) — unique by name.
-    const exists = await Instrument.exists({ name });
+    const exists = await Instrument.exists({ institutionId, name });
     if (!exists) {
-      await Instrument.create({ name });
+      await Instrument.create({ institutionId, name });
       created++;
     }
   }
@@ -109,21 +112,22 @@ async function seedInstruments() {
 // ─────────────────────────────────────────────────────────────────────────────
 // Step 3 + 4 — Demo institution + owner teacher
 // ─────────────────────────────────────────────────────────────────────────────
-async function seedDemoInstitution() {
+async function seedDemoInstitution(operatorId) {
   const existing = await Institution.findOne({ name: DEMO_INST_NAME }).lean();
   if (existing) {
     console.log('[demo] institution already exists:', DEMO_INST_NAME, '/', existing.slug);
-    return;
+    return existing._id;
   }
 
   const slug = await ensureUniqueSlug(DEMO_INST_NAME);
 
   const institution = await Institution.create({
-    name:               DEMO_INST_NAME,
+    name:                DEMO_INST_NAME,
     slug,
-    mode:               'managed',
-    status:             'active',
-    contactEmail:       DEMO_OWNER.email,
+    mode:                'managed',
+    status:              'active',
+    createdByOperatorId: operatorId,
+    contactEmail:        DEMO_OWNER.email,
     branding: {
       schoolName:   DEMO_INST_NAME,
       primaryColor: '#5B8DEF',
@@ -157,6 +161,8 @@ async function seedDemoInstitution() {
   console.log('  Temp password:   ', tempPassword);
   console.log('  Panel URL:       ', `/<PLATFORM_DOMAIN>/${slug}/teacher`);
   hr();
+
+  return institution._id;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -166,9 +172,10 @@ async function main() {
   console.log('[seed] connecting…');
   await connect();
 
-  await seedOperator();
-  await seedInstruments();
-  await seedDemoInstitution();
+  const operatorId = await seedOperator();
+  // Institution first — instruments are operational records scoped to it.
+  const demoInstId = await seedDemoInstitution(operatorId);
+  await seedInstruments(demoInstId);
 
   console.log('[seed] done');
   await disconnect();

@@ -1,6 +1,12 @@
 'use strict';
 
+// The single source of truth for env is the repo-root .env. Load a local
+// apps/api/.env first (developer override, if any), then fill the rest from the
+// repo root by absolute path — so env is found whether the process starts from
+// apps/api (nodemon/turbo dev) or the repo root (PM2 prod). dotenv never
+// overrides an already-set var, so the local file wins where both define a key.
 require('dotenv').config();
+require('dotenv').config({ path: require('path').resolve(__dirname, '../../../.env') });
 const http = require('http');
 const express = require('express');
 const cors = require('cors');
@@ -13,10 +19,17 @@ const PORT = process.env.PORT || 4000;
 
 // ── Security & parsing middleware ────────────────────────────────────────────
 app.use(helmet());
+// In local dev the 4 panels run on separate Next ports (3000-3003), each a
+// distinct origin — add them so cookie'd fetches pass CORS. In production the
+// allow-list is ONLY the two configured domains (nginx serves all panels under
+// PLATFORM_DOMAIN by path, so they share its origin).
+const DEV_ORIGINS = process.env.NODE_ENV === 'production'
+  ? []
+  : ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002', 'http://localhost:3003'];
 app.use(cors({
   // Drop undefined entries so a missing env var can never collapse the
   // allow-list into "reflect any origin".
-  origin: [process.env.PLATFORM_DOMAIN_URL, process.env.OPERATOR_DOMAIN_URL].filter(Boolean),
+  origin: [process.env.PLATFORM_DOMAIN_URL, process.env.OPERATOR_DOMAIN_URL, ...DEV_ORIGINS].filter(Boolean),
   credentials: true,
 }));
 // Razorpay webhook needs the RAW body for HMAC signature verification, so it is
