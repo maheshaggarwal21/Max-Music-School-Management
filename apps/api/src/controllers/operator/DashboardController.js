@@ -18,6 +18,14 @@ function monthStart() {
   return new Date(d.getFullYear(), d.getMonth(), 1);
 }
 
+const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+// First day of the month 5 months back → a rolling 6-month window incl. current.
+function trendWindowStart() {
+  const d = new Date();
+  return new Date(d.getFullYear(), d.getMonth() - 5, 1);
+}
+
 exports.get = async (req, res, next) => {
   try {
     const ms = monthStart();
@@ -25,7 +33,7 @@ exports.get = async (req, res, next) => {
     const [
       instTotal, instActive, instSuspended,
       studentTotal, teacherTotal,
-      rentAgg, feeAgg,
+      rentAgg, feeAgg, feeTrendAgg,
       recentChangesDocs, overdueRentDocs,
     ] = await Promise.all([
       Institution.countDocuments({ status: { $ne: 'terminated' } }),
@@ -44,6 +52,13 @@ exports.get = async (req, res, next) => {
         { $match: { type: 'fee', status: 'paid', paidAt: { $gte: ms } } },
         { $group: { _id: null, collected: { $sum: '$amount' } } },
       ]),
+      Payment.aggregate([
+        { $match: { type: 'fee', status: 'paid', paidAt: { $gte: trendWindowStart() } } },
+        { $group: {
+          _id: { y: { $year: '$paidAt' }, m: { $month: '$paidAt' } },
+          collected: { $sum: '$amount' },
+        } },
+      ]),
       AuditLog.find({}).sort({ createdAt: -1 }).limit(15)
         .populate({ path: 'institutionId', select: 'name' }).lean(),
       RentInvoice.find({ status: 'overdue' }).sort({ dueDate: 1 }).limit(15)
@@ -52,6 +67,17 @@ exports.get = async (req, res, next) => {
 
     const rent = rentAgg[0] || { collectedThisMonth: 0, overdue: 0 };
     const fee  = feeAgg[0]  || { collected: 0 };
+
+    // Zero-filled rolling 6-month fee series, oldest → newest.
+    const byMonth = new Map(feeTrendAgg.map(b => [`${b._id.y}-${b._id.m}`, b.collected]));
+    const now = new Date();
+    const feeTrend = Array.from({ length: 6 }, (_, i) => {
+      const d = new Date(now.getFullYear(), now.getMonth() - 5 + i, 1);
+      return {
+        month: MONTH_LABELS[d.getMonth()],
+        collected: byMonth.get(`${d.getFullYear()}-${d.getMonth() + 1}`) || 0,
+      };
+    });
 
     const recentChanges = recentChangesDocs.map(a => ({
       _id: String(a._id),
@@ -82,6 +108,7 @@ exports.get = async (req, res, next) => {
         rentCollectedThisMonth: rent.collectedThisMonth,
         rentOverdue:            rent.overdue,
         feeCollectedThisMonth:  fee.collected,
+        feeTrend,
       },
       recentChanges,
       overdueRents,

@@ -283,6 +283,7 @@ export interface OperatorDashboardData {
     rentCollectedThisMonth: number;
     rentOverdue: number;
     feeCollectedThisMonth: number;
+    feeTrend: { month: string; collected: number }[];
   };
   recentChanges: AuditLogItem[]; // last N across all institutions
   overdueRents: RentInvoiceItem[];

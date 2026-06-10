@@ -20,7 +20,7 @@ import { PageHeader } from "@/components/page-header";
 import { StatsRowSkeleton, Skeleton } from "@/components/skeleton";
 import { Tag } from "@/components/tag";
 import { api, mockable } from "@/lib/api";
-import { MOCK_FEE_TREND, mockDashboard } from "@/lib/mocks";
+import { mockDashboard } from "@/lib/mocks";
 import type { ApiResponse, AuditLogItem, OperatorDashboardData } from "@/lib/types";
 
 function activityLine(item: AuditLogItem): string {
@@ -34,6 +34,7 @@ function activityLine(item: AuditLogItem): string {
 export default function DashboardPage() {
   const [data, setData] = useState<OperatorDashboardData | null>(null);
   const [loading, setLoading] = useState(true);
+  const feeTrend = data?.revenue.feeTrend ?? [];
 
   useEffect(() => {
     let alive = true;
@@ -119,13 +120,18 @@ export default function DashboardPage() {
                 <h2 className="text-sm font-semibold">Fee collections</h2>
                 <p className="text-xs text-muted-foreground">Last 6 months · all institutions</p>
               </div>
-              <Tag>Jan – Jun 2026</Tag>
+              {feeTrend.length > 0 && (
+                <Tag>
+                  {feeTrend[0].month} – {feeTrend[feeTrend.length - 1].month}{" "}
+                  {new Date().getFullYear()}
+                </Tag>
+              )}
             </div>
             {loading ? (
               <Skeleton className="h-[280px] w-full" />
             ) : (
               <AreaChart
-                data={MOCK_FEE_TREND}
+                data={feeTrend}
                 xKey="month"
                 yKey="collected"
                 valueFormatter={(v) => formatCurrency(v)}

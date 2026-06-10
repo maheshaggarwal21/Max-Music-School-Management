@@ -1010,6 +1010,7 @@ export const mockDashboard = (): ApiResponse<OperatorDashboardData> =>
       rentCollectedThisMonth: 2500000, // ₹ 25,000
       rentOverdue: 7600000, // ₹ 76,000 across 3 invoices
       feeCollectedThisMonth: 28600000, // ₹ 2,86,000
+      feeTrend: MOCK_FEE_TREND,
     },
     recentChanges: MOCK_AUDIT_LOG.slice(0, 6),
     overdueRents: MOCK_RENT_INVOICES.filter((r) => r.status === "overdue"),
