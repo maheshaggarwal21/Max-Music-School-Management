@@ -48,7 +48,7 @@
 | P0-06 | nginx.conf — path-regex routing + operator/api server blocks | **A** | ✅ | |
 | P0-07 | ecosystem.config.js (PM2: api + 4 panels) | **A** | ✅ | 5 processes: api:4000 + panels:3000-3003 |
 | P0-08 | .env.example (PLATFORM_DOMAIN, OPERATOR_DOMAIN, secrets, Mongo, S3, Razorpay, SMTP) | **A** | ✅ | |
-| P0-09 | scripts/seed.js skeleton | **A** | ✅ | implement in Phase 1 after models |
+| P0-09 | scripts/seed.js | **A** | ✅ | Operator + TOTP QR + 8 instruments + demo institution + owner teacher; idempotent |
 
 ## PHASE 1 — MODELS (core MVP set) + types
 | ID | Task | Status | Notes |
@@ -141,7 +141,7 @@
 | P7-01 | Razorpay webhook handler → RazorpayWebhookEvent | ✅ | `POST /api/webhooks/razorpay` mounted pre-json with `express.raw`; timing-safe HMAC verify (fails closed); idempotent by paymentId+eventType; tenant from payload `notes` (institutionId/slug), unattributed still stored; read-only feed, never touches Payment ledger |
 | P7-02 | Daily cron: joinStatus active_soon→active, validity expiry→inactive (audit as system) | ✅ | `config/cron.js` 00:05 `CRON_TZ` (def Asia/Kolkata); per-student audit `ADVANCE_STUDENT_STATUS`/`EXPIRE_VALIDITY` as system actor → shows in activity feed |
 | P7-03 | Rent-due flagging cron | ✅ | same daily job: pending RentInvoice past dueDate → overdue (updateMany) |
-| P7-04 | Branded emails (Nodemailer per-institution sender) | ✅ | `config/mailer.js` lazy transport; From name = institution `branding.schoolName` (never "Max Music"); fails soft (logs, never throws). Trigger wiring (grant-admin notice/reminders) left to callers |
+| P7-04 | Branded emails (Nodemailer per-institution sender) | ✅ | `config/mailer.js` + `config/emailTemplates.js`; From = institution schoolName; triggers wired: owner welcome (inst create), teacher welcome (teacher create), student welcome (request approve), grant-admin notice — all fail-soft |
 | P7-05 | Socket.io rooms by institutionId (live attendance) | ✅ | `config/socket.js` shares HTTP server; handshake-auth via short-lived socket token (`GET /:slug/{admin,teacher}/realtime-token`) — panel cookies are path-scoped so can't reach `/socket.io`; room = `inst:<id>` from VERIFIED token only; `emitToInstitution` already called by teacher markAttendance |
 
 ## PHASE 8 — QA + DEPLOY
@@ -150,8 +150,8 @@
 | P8-01 | gstack /cso — full isolation pass | ⬜ | |
 | P8-02 | White-label leak audit (bundles, emails, headers) | ⬜ | no operator brand on inst surfaces |
 | P8-03 | gstack /qa — full E2E (3 scenarios incl. salary→independent flip) | ⬜ | |
-| P8-04 | nginx + SSL (Let's Encrypt) final | ⬜ | platform + operator + api |
-| P8-05 | PM2 ecosystem final + seed | ⬜ | |
+| P8-04 | nginx + SSL (Let's Encrypt) final | ✅ | HTTP→HTTPS redirects; full HTTPS blocks; security headers (X-Frame/CSP/HSTS/nosniff); Socket.io WebSocket upgrade on api block; gzip; client_max_body_size |
+| P8-05 | PM2 ecosystem final + seed | ✅ | ecosystem.config.js complete (5 processes, log files, mem limits); seed.js implemented |
 | P8-06 | gstack /ship — pre-deploy checklist | ⬜ | |
 
 ---
@@ -169,7 +169,7 @@
 | FI-06 | Public `GET /api/inst/:slug/branding` (controller + route + CONTRACTS) | ✅ | resolveInstitution only; brandingPublic; wired into all 3 login pages |
 | FI-07 | win32 native binaries → root `optionalDependencies` (Linux CI/deploy safe) | ✅ | lockfile is Linux-generated, omitted win32 optionals |
 | FI-R | White-label leak grep on institution `src` (excl. `@maxmusic/*` import scope) | ✅ | zero rendered leaks |
-| — | Teacher live-attendance `TODO(H3)` | ⬜ | backend UN-blocked (Phase 7 ✅): wire client to `GET /:slug/teacher/realtime-token` → Socket.io handshake `auth.token` → listen `attendance:marked` |
+| — | Teacher live-attendance `TODO(H3)` | ✅ | `lib/socket.ts` useSocket hook; fetches realtime-token → socket.io-client auth handshake → listens `attendance:marked` for current batch+date → re-fetches marks |
 | — | H4/H5 — flip off mock mode (`NEXT_PUBLIC_API_URL`) + gstack `/qa` | ⬜ | needs running API + Mongo |
 
 ---
