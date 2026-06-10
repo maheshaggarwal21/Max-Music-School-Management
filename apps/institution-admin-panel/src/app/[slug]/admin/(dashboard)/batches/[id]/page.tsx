@@ -39,7 +39,8 @@ function isoToday(): string {
 
 export default function BatchDetailPage() {
   const router = useRouter();
-  const params = useParams<{ id: string }>();
+  const params = useParams<{ id: string; slug: string }>();
+  const base = `/${params?.slug}/admin`;
   const batchId = params?.id ?? "";
 
   const [tab, setTab] = useState<Tab>("Overview");
@@ -75,7 +76,7 @@ export default function BatchDetailPage() {
       if (cancelled) return;
       if (!r.data?.batch) {
         toast.error("Batch not found");
-        router.replace("/batches");
+        router.replace(`${base}/batches`);
         return;
       }
       setBatch(r.data.batch);
@@ -250,7 +251,7 @@ export default function BatchDetailPage() {
       title={batch?.name ?? "Batch"}
       subtitle={batch ? `${batch.instrument?.name ?? ""} batch console` : "Loading batch…"}
       actions={
-        <Button variant="outline" size="sm" className="rounded-full" onClick={() => router.push("/batches")}>
+        <Button variant="outline" size="sm" className="rounded-full" onClick={() => router.push(`${base}/batches`)}>
           <ArrowLeft className="mr-1 h-3.5 w-3.5" />
           All batches
         </Button>

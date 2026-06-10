@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { CalendarOff, Clock, Layers, Loader2, Music2, Plus, User } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -41,6 +41,8 @@ const EMPTY_FORM: BatchForm = {
 
 export default function BatchesPage() {
   const router = useRouter();
+  const { slug } = useParams<{ slug: string }>();
+  const base = `/${slug}/admin`;
   const [batches, setBatches] = useState<BatchRow[] | null>(null);
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState<BatchForm>(EMPTY_FORM);
@@ -184,8 +186,8 @@ export default function BatchesPage() {
                       key={b._id}
                       role="link"
                       tabIndex={0}
-                      onClick={() => router.push(`/batches/${b._id}`)}
-                      onKeyDown={(e) => e.key === "Enter" && router.push(`/batches/${b._id}`)}
+                      onClick={() => router.push(`${base}/batches/${b._id}`)}
+                      onKeyDown={(e) => e.key === "Enter" && router.push(`${base}/batches/${b._id}`)}
                       className="cursor-pointer outline-none"
                     >
                     <SpotlightCard
