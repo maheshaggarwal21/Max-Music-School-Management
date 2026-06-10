@@ -109,7 +109,10 @@ export default function InstitutionDetailPage() {
     try {
       const [detailRes, rentRes] = await Promise.all([
         mockable(
-          () => api.get<ApiResponse<InstitutionDetail>>(`/api/operator/institutions/${id}`),
+          () =>
+            api.get<ApiResponse<InstitutionDetail | { institution: InstitutionDetail }>>(
+              `/api/operator/institutions/${id}`
+            ),
           mockInstitutionDetail(id)
         ),
         mockable(
@@ -120,7 +123,12 @@ export default function InstitutionDetailPage() {
           mockRentInvoiceList({ institutionId: id, limit: 50 })
         ),
       ]);
-      if (detailRes.data) setInst(detailRes.data);
+      // Live API wraps as { institution }, mocks return the detail directly.
+      const detail =
+        detailRes.data && "institution" in detailRes.data
+          ? detailRes.data.institution
+          : detailRes.data;
+      if (detail) setInst(detail);
       if (rentRes.data) setRents(rentRes.data.items);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to load institution");
