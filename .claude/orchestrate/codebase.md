@@ -66,8 +66,9 @@ apps/api/
     │   │   ├── ChangesController.js       ← global audit timeline
     │   │   ├── DashboardController.js     ← aggregations
     │   │   └── SettingsController.js      ← profile, 2FA, default rent, instrument master
+    │   ├── WebhookController.js          ← platform-level Razorpay webhook (raw-body HMAC, idempotent)
     │   └── institution/
-    │       ├── AuthController.js          ← admin/teacher/student login, me, logout (+ branding)
+    │       ├── AuthController.js          ← admin/teacher/student login, me, logout (+ branding, + realtime-token)
     │       ├── admin/
     │       │   ├── RequestController.js   ← list/create/approve/reject
     │       │   ├── StudentController.js   ← list/detail/create/patch + /activity feed
@@ -84,34 +85,50 @@ apps/api/
     └── routes/
         ├── auth.js            ← /api/auth/operator/*
         ├── operator.js        ← /api/operator/*  (operatorAuth)
+        ├── webhook.js         ← /api/webhooks/razorpay  (PUBLIC, mounted pre-json with express.raw)
         └── institution.js     ← /api/inst/:slug/{auth,admin,teacher,student}/*  (full chains)
+                                  + GET /api/inst/:slug/branding  (PUBLIC, resolveInstitution only)
+                                  + GET /api/inst/:slug/{admin,teacher}/realtime-token  (Socket.io handshake)
 ```
 
 ---
 
 ## FRONTEND APPS (4)
 
-Each is a Next.js 14 App-Router app. Institution apps read `:slug` from the path and theme
-from `Institution.branding` (white-label).
+Each is a Next.js 14 App-Router app. **Institution apps MUST use a real `[slug]` route
+segment** — nginx preserves the `/<slug>/<panel>` prefix, so flat routes 404. The slug is
+read at runtime from the first path segment (`lib/api.ts getInstSlug()`), never a build-time
+env var. Theme comes from `Institution.branding` (white-label).
 
 ```
-apps/operator-panel/                 :3000  private <OPERATOR_DOMAIN>   (Steel Blue brand)
+apps/operator-panel/                 :3000  private <OPERATOR_DOMAIN>   (Steel Blue brand; flat routes)
 apps/institution-admin-panel/        :3001  <PLATFORM_DOMAIN>/<slug>/admin
 apps/institution-teacher-panel/      :3002  <PLATFORM_DOMAIN>/<slug>/teacher
 apps/institution-student-panel/      :3003  <PLATFORM_DOMAIN>/<slug>/student
 ```
 
-Shared per-app structure:
+Operator app structure (flat — its own domain, no slug):
 ```
-apps/[panel]/src/
-├── app/
-│   ├── layout.tsx                 ← (institution apps) BrandingProvider sets CSS vars + <title>
-│   ├── (auth)/login/page.tsx
-│   └── [slug]/(dashboard)/[feature]/page.tsx   ← institution apps capture slug here
+apps/operator-panel/src/app/
+├── layout.tsx
+├── (auth)/login/page.tsx
+└── (dashboard)/{dashboard,institutions,students,teachers,payments,changes,settings}/page.tsx
+```
+
+Institution app structure (admin shown; teacher/student identical with panel name swapped):
+```
+apps/institution-admin-panel/src/app/
+├── layout.tsx                                 ← root html/body, ThemeProvider, Toaster
+├── page.tsx                                   ← dev-only root (/), unreachable behind nginx
+└── [slug]/admin/
+    ├── page.tsx                               ← bare /<slug>/admin → redirect to dashboard
+    ├── (auth)/login/page.tsx                  ← BrandingProvider sets CSS vars + <title>
+    └── (dashboard)/
+        ├── layout.tsx                         ← session + slug-aware Sidebar nav (useParams)
+        └── {dashboard,requests,students,teachers,batches,attendance,schedule,payments}/page.tsx
+apps/institution-*/src/
 ├── components/
-├── lib/{ api.ts, auth.ts, branding.ts, utils.ts }
-├── hooks/
-└── types/
+├── lib/{ api.ts (getInstSlug + <panel>Path/authPath), mocks.ts, types.ts (re-exports @maxmusic/types) }
 ```
 
 API base URL (env, never hardcoded):
@@ -119,6 +136,7 @@ API base URL (env, never hardcoded):
 operator-panel:               NEXT_PUBLIC_API_URL = https://api.<PLATFORM_DOMAIN>/api/operator
 institution-* (all three):    NEXT_PUBLIC_API_URL = https://api.<PLATFORM_DOMAIN>/api/inst
                                (slug appended at call time → /api/inst/:slug/<panel>/...)
+# When NEXT_PUBLIC_API_URL is unset → MOCK MODE (lib/mocks.ts via mockable()); real calls never fire.
 ```
 
 ---
@@ -126,12 +144,18 @@ institution-* (all three):    NEXT_PUBLIC_API_URL = https://api.<PLATFORM_DOMAIN
 ## SHARED PACKAGES
 
 ```
-packages/ui/components/        ← DataTable, Modal, StatusBadge, StatsCard, Sidebar,
-                                 Form (Input/Select/DatePicker/FileUpload), SearchBar, Avatar, Charts
-packages/types/                ← models.ts (mirror data-model.md) + api.ts (mirror CONTRACTS.md)
+packages/ui/components/        ← DataTable, Modal, StatusBadge, StatsCard, Sidebar, BrandingProvider,
+                                 Form (Input/Select/DatePicker/FileUpload), SearchBar, Avatar, Charts,
+                                 BlurFade/BorderBeam/SpotlightCard/GradientText/ShinyText/CountUp (anim)
+packages/types/                ← models.ts (mirror data-model.md) + api.ts (mirror CONTRACTS.md).
+                                 CONSUMED by all 4 apps (H2): each app's lib/types.ts re-exports the
+                                 shared contract from here; frontend view/row types stay local.
+                                 package.json: type:module + exports map (matches @maxmusic/utils).
 packages/utils/                ← formatters (date/currency/phone), validators (phone/email/slug),
                                  constants (enums: joinStatus, mode, status, panelAccess, roles)
 ```
+> Apps consume these via `transpilePackages: ["@maxmusic/ui","@maxmusic/utils","@maxmusic/types"]`
+> in each `next.config.mjs` (TS source, no build step).
 
 ---
 
@@ -139,9 +163,14 @@ packages/utils/                ← formatters (date/currency/phone), validators 
 
 ```
 maxmusic/
-├── nginx.conf            ← path-regex routing on <PLATFORM_DOMAIN> (3 inst panels)
+├── nginx.conf            ← path-regex routing on <PLATFORM_DOMAIN>: ^/[^/]+/(admin|teacher|student)
+│                            → ports 3001-3003 (prefix PRESERVED — apps own the [slug] route);
 │                            + server blocks for <OPERATOR_DOMAIN> and api.<PLATFORM_DOMAIN>; SSL
 ├── ecosystem.config.js   ← PM2: api(:4000) + 4 panels(:3000-3003)
+├── package.json          ← root: workspaces + turbo; optionalDependencies = win32 native binaries
+│                            (@next/swc, lightningcss, @tailwindcss/oxide) — the committed
+│                            package-lock.json is Linux-generated and omits win32 optionals;
+│                            optional ⇒ skipped (not failed) on Linux/macOS CI + deploy
 ├── .env.example          ← PLATFORM_DOMAIN, OPERATOR_DOMAIN, JWT secrets, Mongo, S3, Razorpay, SMTP, TOTP
 └── scripts/
     ├── seed.js           ← superadmin (with 2FA) + instrument master + a demo institution
@@ -159,7 +188,7 @@ Phase 3  controllers/operator/* + routes/{auth,operator}.js
 Phase 4  controllers/institution/* + routes/institution.js          ← /cso (isolation)
 Phase 5  packages/ui + operator-panel pages                          ← /qa
 Phase 6  3 institution panels + white-label theming                 ← /qa (leak check)
-Phase 7  razorpay webhook, cron, mailer, socket
+Phase 7  razorpay webhook, cron, mailer, socket   ✅ (+ routes/webhook.js, WebhookController, realtime-token)
 Phase 8  /cso, leak audit, /qa, nginx+SSL, pm2+seed, /ship
 ```
 
@@ -181,7 +210,7 @@ Phase 8  /cso, leak audit, /qa, nginx+SSL, pm2+seed, /ship
 | scripts/seed.js | ✅ | P0-09 stub — implement after P1-01..P1-11 |
 | models/* (16 files) | ✅ | Phase 1 + P1-R review — all schemas, indexes, pre-hooks; +mobile/instrument/employmentType indexes; +findOneAndUpdate label hooks; +slug $setOnInsert guard |
 | packages/types/* | ✅ | P1-12 → H2 — models.ts + api.ts exported |
-| config/* (15 files) | ✅ | P2-01 base + Phase 3/4 added password.js, instAuthHelpers.js, refGuard.js; mailer/razorpay/socket/cron still Phase 7 stubs |
+| config/* (15 files) | ✅ | P2-01 base + Phase 3/4 added password.js, instAuthHelpers.js, refGuard.js; mailer/razorpay/socket/cron implemented in Phase 7 (jwt.js gained socket-token helpers) |
 | middleware/* (7 files) | ✅ | P2-02..P2-08 — operatorAuth, resolveInstitution, instAuth, scopeGuard, panelGuard, impersonation, rateLimit |
 | controllers/operator/* (9) | ✅ | Phase 3 — auth+institution lifecycle+cross-inst reads+payments+changes+dashboard+settings; P3-R /review ✅ |
 | controllers/institution/* (10) | ✅ | Phase 4 — auth + 7 admin + teacher + student; P4-R /cso ✅ (1 HIGH fixed: refGuard on student create/patch + request approve) |

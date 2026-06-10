@@ -9,10 +9,10 @@
 
 ## CURRENT SESSION GOAL
 **Role:** Dev A — backend · infra · security (see `team-division.md` for full split)
-**Phase:** Phase 4 ✅ + P4-R /cso ✅ (1 HIGH fixed). Backend (Phases 0-4) COMPLETE. Phase 5 (operator panel frontend, Dev B) next.
-**Next action:** Handoff to Dev B for Phase 5/6 frontend, OR Dev A starts Phase 7 (payments/cron/email/socket). All API contracts in CONTRACTS.md.
-**P2-R contracts — LIVE in code (verify in P4-R /cso):** (1) login JWTs embed instVersion+userVersion via config/instAuthHelpers.issuePanelCookie; (2) grant/revoke/suspend/terminate bump tokenVersion; (3) institution state changes call invalidateInstitution(slug).
-**Blocking dependency:** P4-R /cso must pass before Phase 5 (frontend) — confirms no cross-institution leak in any /api/inst/:slug/* controller.
+**Phase:** Backend (Phases 0-4) COMPLETE. **Frontend integration pass DONE this session** — Dev B's 4-panel frontend merged (PR #1); Dev A integration fixes: H2 type migration, `[slug]` routing fix, multi-tenant slug fixes, public branding endpoint — all `next build`-validated ×4. See "PHASE 5/6 — FRONTEND INTEGRATION (Dev A pass)" below.
+**Phase 7 backend DONE this session** — Socket.io (live attendance, rooms by institutionId), daily cron (joinStatus/validity/rent), Razorpay webhook (HMAC-verified, idempotent), branded mailer. All modules smoke-tested (load + sign/verify + emit + cron schedule under real libs).
+**Next action:** H4/H5 live wiring (set `NEXT_PUBLIC_API_URL`, smoke-test against running API + Mongo, run `/qa`); wire teacher live-attendance `TODO(H3)` to `GET /:slug/teacher/realtime-token` + Socket.io client (Dev B); optionally wire mailer triggers (grant-admin notice). Then Phase 8 (QA + deploy).
+**Blocking dependency:** H4/H5 needs a running API + Mongo. Teacher `TODO(H3)` frontend now UN-blocked (backend realtime endpoint live).
 
 ---
 
@@ -135,14 +135,14 @@
 | P6-04 | institution-student-panel — dashboard, classes, profile | ✅ | |
 | P6-R | gstack /qa — both managed (impersonation) + autonomous flows; LEAK CHECK | ⬜ | grep bundles for "maxmusic" |
 
-## PHASE 7 — PAYMENTS + CRONS + NOTIFICATIONS
+## PHASE 7 — PAYMENTS + CRONS + NOTIFICATIONS  ✅ (backend)
 | ID | Task | Status | Notes |
 |----|------|--------|-------|
-| P7-01 | Razorpay webhook handler → RazorpayWebhookEvent | ⬜ | |
-| P7-02 | Daily cron: joinStatus active_soon→active, validity expiry→inactive (audit as system) | ⬜ | |
-| P7-03 | Rent-due flagging cron | ⬜ | |
-| P7-04 | Branded emails (Nodemailer per-institution sender) | ⬜ | grant-admin notice, reminders |
-| P7-05 | Socket.io rooms by institutionId (live attendance) | ⬜ | |
+| P7-01 | Razorpay webhook handler → RazorpayWebhookEvent | ✅ | `POST /api/webhooks/razorpay` mounted pre-json with `express.raw`; timing-safe HMAC verify (fails closed); idempotent by paymentId+eventType; tenant from payload `notes` (institutionId/slug), unattributed still stored; read-only feed, never touches Payment ledger |
+| P7-02 | Daily cron: joinStatus active_soon→active, validity expiry→inactive (audit as system) | ✅ | `config/cron.js` 00:05 `CRON_TZ` (def Asia/Kolkata); per-student audit `ADVANCE_STUDENT_STATUS`/`EXPIRE_VALIDITY` as system actor → shows in activity feed |
+| P7-03 | Rent-due flagging cron | ✅ | same daily job: pending RentInvoice past dueDate → overdue (updateMany) |
+| P7-04 | Branded emails (Nodemailer per-institution sender) | ✅ | `config/mailer.js` lazy transport; From name = institution `branding.schoolName` (never "Max Music"); fails soft (logs, never throws). Trigger wiring (grant-admin notice/reminders) left to callers |
+| P7-05 | Socket.io rooms by institutionId (live attendance) | ✅ | `config/socket.js` shares HTTP server; handshake-auth via short-lived socket token (`GET /:slug/{admin,teacher}/realtime-token`) — panel cookies are path-scoped so can't reach `/socket.io`; room = `inst:<id>` from VERIFIED token only; `emitToInstitution` already called by teacher markAttendance |
 
 ## PHASE 8 — QA + DEPLOY
 | ID | Task | Status | Notes |
@@ -153,6 +153,24 @@
 | P8-04 | nginx + SSL (Let's Encrypt) final | ⬜ | platform + operator + api |
 | P8-05 | PM2 ecosystem final + seed | ⬜ | |
 | P8-06 | gstack /ship — pre-deploy checklist | ⬜ | |
+
+---
+
+## PHASE 5/6 — FRONTEND INTEGRATION (Dev A pass over Dev B's merged frontend)
+> Dev B built all 4 panels + packages/ui/utils (PR #1, mock-mode). Dev A integration pass this session:
+
+| ID | Task | Status | Notes |
+|----|------|--------|-------|
+| FI-01 | H2 type migration — 4 apps re-export shared contract from `@maxmusic/types` (was local mirrors) | ✅ | view/row types stay local; `tsc --noEmit` clean ×4 |
+| FI-02 | `[slug]` routing fix — 3 institution panels moved to `app/[slug]/<panel>/(auth\|dashboard)/*` | ✅ | flat route-groups 404'd behind nginx; `next build` ✅ ×4 |
+| FI-03 | Slug-aware nav/login/sign-out via `useParams`; bare-panel `[slug]/<panel>/page.tsx` index redirect | ✅ | |
+| FI-04 | 401-redirect → `/<slug>/<panel>/login` (was hardcoded `/login`) in 3 inst api clients | ✅ | real-API correctness |
+| FI-05 | Teacher slug from URL `getInstSlug()` (was build-time `NEXT_PUBLIC_INSTITUTION_SLUG`) | ✅ | env var = one-slug-per-build, broke multi-tenant |
+| FI-06 | Public `GET /api/inst/:slug/branding` (controller + route + CONTRACTS) | ✅ | resolveInstitution only; brandingPublic; wired into all 3 login pages |
+| FI-07 | win32 native binaries → root `optionalDependencies` (Linux CI/deploy safe) | ✅ | lockfile is Linux-generated, omitted win32 optionals |
+| FI-R | White-label leak grep on institution `src` (excl. `@maxmusic/*` import scope) | ✅ | zero rendered leaks |
+| — | Teacher live-attendance `TODO(H3)` | ⬜ | backend UN-blocked (Phase 7 ✅): wire client to `GET /:slug/teacher/realtime-token` → Socket.io handshake `auth.token` → listen `attendance:marked` |
+| — | H4/H5 — flip off mock mode (`NEXT_PUBLIC_API_URL`) + gstack `/qa` | ⬜ | needs running API + Mongo |
 
 ---
 
@@ -177,3 +195,7 @@
 | Slug immutable | Changing it breaks URLs + path-scoped cookies |
 | One MongoDB, filtered by institutionId | Simpler ops + free cross-institution analytics for operator |
 | 8-tab institution admin MVP (video/analytics/etc deferred) | Ship the core loop first |
+| Institution panels use a real Next `[slug]` route segment (not flat route-groups) | nginx preserves `/<slug>/<panel>`; flat routes 404 + client-nav drops the slug. Slug read via `getInstSlug()` (first path segment), never a build-time env var |
+| Public `GET /api/inst/:slug/branding` endpoint (pre-auth) | Login pages need white-label identity before sign-in; resolveInstitution gives 404/403; returns brandingPublic only |
+| Socket.io auth via short-lived socket token (not the panel cookie) | Panel cookies are httpOnly + path-scoped to `/api/inst/:slug`, so the browser never sends them to `/socket.io`. An authenticated REST call mints a 2-min `JWT_SECRET_SOCKET` token (dedicated secret, can't be replayed as a cookie); room = institutionId from the VERIFIED token, never client input |
+| Razorpay webhook is platform-level + read-only | Razorpay calls one URL; tenant recovered from payload `notes`. Mounted pre-json with `express.raw` so HMAC sees exact bytes; writes only the RazorpayWebhookEvent reconciliation feed, never the Payment ledger (app tracks money, doesn't route it) |

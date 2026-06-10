@@ -52,6 +52,14 @@ path-scoped to `/api/inst/:slug`. Cross-institution data appears ONLY under `/ap
 // sets cookie: operator_token
 ```
 
+### GET /api/inst/:slug/branding   (PUBLIC — pre-auth)
+```typescript
+// No session required. resolveInstitution only: 404 unknown slug, 403 suspended/terminated.
+// Used by every panel's login page to render the institution's white-label identity.
+// data
+BrandingPublic   // { slug, schoolName, logoUrl, primaryColor, tagline } — NO Max Music identifiers
+```
+
 ### POST /api/inst/:slug/auth/admin/login
 ```typescript
 // req — authenticates against Teacher; requires panelAccess includes 'admin'
@@ -81,6 +89,18 @@ path-scoped to `/api/inst/:slug`. Cross-institution data appears ONLY under `/ap
 ```
 ### POST .../logout   → clears the respective cookie; data: null
 ### GET  .../me        → current user + (for institution panels) BrandingPublic
+
+### GET /api/inst/:slug/{admin,teacher}/realtime-token   (Phase 7 — Socket.io)
+```typescript
+// Authenticated (full panel chain). Mints a short-lived (2-min) socket token.
+// Panel cookies are httpOnly + path-scoped to /api/inst/:slug, so they never reach
+// the /socket.io handshake — this REST call is the bridge.
+// data
+{ token: string }
+// Client: io(API_ORIGIN, { auth: { token } }) → server joins room inst:<institutionId>
+//         → listen 'attendance:marked' { batchId, date, count }.  institutionId is
+//         taken from the VERIFIED token, never client input (no cross-tenant rooms).
+```
 
 ```typescript
 // BrandingPublic — safe to expose on institution panels (NO Max Music identifiers)
@@ -375,7 +395,8 @@ interface TeacherSelf { _id: string; displayId: string; name: string; email: str
 interface HolidayItem { _id: string; batch: { _id: string; name: string }; date: string;
   studentCategory: 'regular'|'trial'; reason: string|null }
 ```
-Marking attendance emits a Socket.io event to the institution room (live student updates).
+Marking attendance emits a Socket.io `attendance:marked` event to the institution room
+(live updates). Client first GETs `/teacher/realtime-token` (see auth section) for the handshake.
 
 ---
 
@@ -394,6 +415,24 @@ interface ClassItem { date: string; batchName: string; time: string;
 interface StudentSelf { _id: string; displayId: string; name: string; mobile: string;
   instrument: string|null; joinStatus: string; validityEnd: string|null }
 // NEVER exposes Max Music School identifiers — only BrandingPublic (the institution).
+```
+
+---
+
+# PLATFORM WEBHOOKS  — /api/webhooks   (PUBLIC, no panel cookie)
+```
+POST /api/webhooks/razorpay
+```
+```typescript
+// Razorpay calls one URL. Mounted BEFORE the JSON parser with express.raw so the
+// HMAC signature is verified against exact bytes. NOT rate-limited.
+// Header: X-Razorpay-Signature: <hex>   verified (timing-safe) against RAZORPAY_WEBHOOK_SECRET.
+//   invalid/missing signature → 400.   secret unconfigured → fails closed (400).
+// Idempotent: duplicate (paymentId + event) → 200 "Already processed" (no re-store).
+// Tenant attribution: from payload notes.institutionId or notes.slug; unattributed
+//   events are still stored (institutionId omitted) for manual operator reconciliation.
+// Writes ONLY the read-only RazorpayWebhookEvent feed — NEVER the Payment ledger.
+// Responses: 200 OK (stored or duplicate) · 400 (bad sig/payload) · 500 (store failed → Razorpay retries)
 ```
 
 ---
