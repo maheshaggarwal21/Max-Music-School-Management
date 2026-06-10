@@ -1,5 +1,6 @@
 'use strict';
 
+const mongoose   = require('mongoose');
 const Batch      = require('../../../models/Batch');
 const Instrument = require('../../../models/Instrument');
 const DayPattern = require('../../../models/DayPattern');
@@ -124,6 +125,10 @@ exports.create = async (req, res, next) => {
     const inst = req.institution._id;
     const { name, instrumentId, dayPatternId, timeSlotId, teacherId, mode } = req.body || {};
     if (!instrumentId || !dayPatternId || !timeSlotId) return badRequest(res, S.VALIDATION_FAILED);
+
+    // Reject malformed ids up front so a stale/mock id is a clean 400, not a CastError 500.
+    const ids = [instrumentId, dayPatternId, timeSlotId, ...(teacherId ? [teacherId] : [])];
+    if (ids.some(id => !mongoose.isValidObjectId(id))) return badRequest(res, S.BATCH_BAD_REFS);
 
     // Verify every ref belongs to THIS institution.
     const [instr, day, slot] = await Promise.all([

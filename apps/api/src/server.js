@@ -13,10 +13,21 @@ const PORT = process.env.PORT || 4000;
 
 // ── Security & parsing middleware ────────────────────────────────────────────
 app.use(helmet());
+// Drop undefined entries so a missing env var can never collapse the
+// allow-list into "reflect any origin".
+const allowedOrigins = [process.env.PLATFORM_DOMAIN_URL, process.env.OPERATOR_DOMAIN_URL].filter(Boolean);
+const isDev = process.env.NODE_ENV !== 'production';
 app.use(cors({
-  // Drop undefined entries so a missing env var can never collapse the
-  // allow-list into "reflect any origin".
-  origin: [process.env.PLATFORM_DOMAIN_URL, process.env.OPERATOR_DOMAIN_URL].filter(Boolean),
+  // In production every institution panel shares ONE platform origin, so the
+  // env allow-list is exact. In local dev each panel runs on its own port
+  // (operator 3000, admin 3001, teacher 3002, student 3003) = distinct origins,
+  // so additionally allow any localhost/127.0.0.1 port.
+  origin(origin, cb) {
+    if (!origin) return cb(null, true); // same-origin / curl / server-to-server
+    if (allowedOrigins.includes(origin)) return cb(null, true);
+    if (isDev && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return cb(null, true);
+    return cb(new Error('Not allowed by CORS'));
+  },
   credentials: true,
 }));
 // Razorpay webhook needs the RAW body for HMAC signature verification, so it is

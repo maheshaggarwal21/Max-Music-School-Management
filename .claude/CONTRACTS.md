@@ -381,19 +381,30 @@ interface WebhookEventRow { _id: string; eventType: string; paymentId: string|nu
 # INSTITUTION TEACHER  — /api/inst/:slug/teacher
 ```
 GET    /me                       → { teacher: TeacherSelf, institution: BrandingPublic }
+PATCH  /me                       { email, mobile }                → null   // teacher self-edit
 GET    /batches                  → BatchRow[]   ?day=mon..sun
+GET    /batches/:id              → BatchRow
 GET    /batches/:id/students     → StudentRow[]
-GET    /attendance               ?batchId=&date=
+GET    /batches/:id/sessions     → Paginated<SessionRow>
+POST   /batches/:id/sessions     { meetingUrl, targetDate? }      → SessionRow   // "Launch Session"
+GET    /attendance               ?batchId=&date=  → { date, marks: Record<studentId, status> }
 POST   /attendance/mark          { batchId, date, marks: { studentId, status: 'present'|'absent' }[] }
 GET    /holidays                 → HolidayItem[]
-POST   /holidays                 { batchId, date, studentCategory: 'regular'|'trial', reason? }
+POST   /holidays                 { batchId, date, studentCategory: 'regular'|'trial', reason? } → HolidayItem
 DELETE /holidays/:id
+GET    /colleagues               → TeacherKpiRow[]    // every teacher may view the roster
+GET    /colleagues/:id/schedule  ?date=YYYY-MM-DD → { teacher, date, rows: (BatchRow & {launched})[] }
 ```
 ```typescript
 interface TeacherSelf { _id: string; displayId: string; name: string; email: string;
   mobile: string; status: 'active'|'inactive'; activeBatches: number }
 interface HolidayItem { _id: string; batch: { _id: string; name: string }; date: string;
   studentCategory: 'regular'|'trial'; reason: string|null }
+interface SessionRow { _id: string; meetingUrl: string; targetDate: string;
+  launchedAt: string; launchedBy: { actorRole: string } | null }
+interface TeacherKpiRow { _id: string; displayId: string; name: string; email: string;
+  mobile: string; status: 'active'|'inactive'; role: 'owner'|'staff'; since: string;
+  kpiPercent: number; performance: number }   // KPI: config/teacherKpi.js (50/30/20 composite)
 ```
 Marking attendance emits a Socket.io `attendance:marked` event to the institution room
 (live updates). Client first GETs `/teacher/realtime-token` (see auth section) for the handshake.

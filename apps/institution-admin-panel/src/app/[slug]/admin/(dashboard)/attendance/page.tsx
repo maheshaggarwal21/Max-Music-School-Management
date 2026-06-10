@@ -5,8 +5,10 @@ import {
   BlurFade, BorderBeam, Select, StatusBadge, cn,
 } from "@maxmusic/ui";
 import { api, adminPath, mockable } from "@/lib/api";
-import { MOCK_BATCHES, mockAttendanceGrid, ok } from "@/lib/mocks";
-import type { ApiResponse, AttendanceGrid } from "@/lib/types";
+import { MOCK_BATCHES, mockAttendanceGrid, ok, paginate } from "@/lib/mocks";
+import type { ApiResponse, AttendanceGrid, Paginated } from "@/lib/types";
+
+type AttBatch = { _id: string; name: string; status: string };
 
 // Cell mark union, derived from the contract's grid shape.
 type AttendanceStatusValue = AttendanceGrid["rows"][number]["marks"][string];
@@ -47,11 +49,28 @@ function lastDayOfMonth(year: number, month: number): number {
 }
 
 export default function AttendancePage() {
+  const [batches, setBatches] = useState<AttBatch[]>([]);
   const selectableBatches = useMemo(
-    () => MOCK_BATCHES.filter((b) => b.status === "active" || b.status === "inactive"),
-    []
+    () => batches.filter((b) => b.status === "active" || b.status === "inactive"),
+    [batches]
   );
-  const [batchId, setBatchId] = useState<string | null>(selectableBatches[0]?._id ?? null);
+  const [batchId, setBatchId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    mockable(
+      () => api.get<ApiResponse<Paginated<AttBatch>>>(adminPath("/batches?page=1&limit=100")),
+      ok(paginate(MOCK_BATCHES))
+    ).then((r) => {
+      if (cancelled) return;
+      const items = ((r.data as Paginated<AttBatch>)?.items ?? []);
+      setBatches(items);
+      setBatchId((cur) => cur ?? items.find((b) => b.status === "active" || b.status === "inactive")?._id ?? null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth()); // 0-based

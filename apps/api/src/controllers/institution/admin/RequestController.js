@@ -1,10 +1,24 @@
 'use strict';
 
+const mongoose = require('mongoose');
 const EnrollmentRequest = require('../../../models/EnrollmentRequest');
 const Student = require('../../../models/Student');
 const Batch   = require('../../../models/Batch');
+const DayPattern = require('../../../models/DayPattern');
+const TimeSlot   = require('../../../models/TimeSlot');
+const Instrument = require('../../../models/Instrument');
 const { nextDisplayId } = require('../../../config/specialFunctions');
 const { studentRefsValid } = require('../../../config/refGuard');
+
+// Resolve an optional client-supplied ref: keep it only if it is a valid
+// ObjectId that belongs to THIS institution (golden rule). A bad/foreign id is
+// dropped to undefined rather than thrown — these are informational preference
+// hints on a lead, so a stale value must never 500 or leak another tenant's row.
+async function resolveOwnedRef(model, inst, id) {
+  if (!id || !mongoose.isValidObjectId(id)) return undefined;
+  const found = await model.exists({ _id: id, institutionId: inst });
+  return found ? id : undefined;
+}
 const { hash, randomTempPassword } = require('../../../config/password');
 const { auditLog, actorFromReq } = require('../../../config/auditLog');
 const { ok, created, badRequest, notFound, paginated } = require('../../../config/helper');
@@ -69,14 +83,21 @@ exports.create = async (req, res, next) => {
     const { name, mobile, email, preferredDayPatternId, preferredTimeSlotId, instrumentId } = req.body || {};
     if (!name || !mobile) return badRequest(res, S.VALIDATION_FAILED);
 
+    // Validate optional preference refs belong to this institution (drop if not).
+    const [dayId, timeId, instrId] = await Promise.all([
+      resolveOwnedRef(DayPattern, inst, preferredDayPatternId),
+      resolveOwnedRef(TimeSlot,   inst, preferredTimeSlotId),
+      resolveOwnedRef(Instrument, inst, instrumentId),
+    ]);
+
     const reqDoc = await EnrollmentRequest.create({
       institutionId: inst,
       name: String(name).trim(),
       mobile: String(mobile).trim(),
       email: email ? String(email).toLowerCase().trim() : undefined,
-      preferredDayPatternId: preferredDayPatternId || undefined,
-      preferredTimeSlotId:   preferredTimeSlotId || undefined,
-      instrumentId:          instrumentId || undefined,
+      preferredDayPatternId: dayId,
+      preferredTimeSlotId:   timeId,
+      instrumentId:          instrId,
       status: 'pending',
       paymentStatus: 'unpaid',
     });

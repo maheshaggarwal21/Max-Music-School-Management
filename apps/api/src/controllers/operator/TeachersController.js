@@ -2,7 +2,8 @@
 
 const Teacher = require('../../models/Teacher');
 const Batch   = require('../../models/Batch');
-const { ok, notFound, paginated } = require('../../config/helper');
+const { ok, badRequest, notFound, paginated } = require('../../config/helper');
+const { auditLog, diff, actorFromReq } = require('../../config/auditLog');
 const S = require('../../config/strings');
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -57,9 +58,9 @@ exports.list = async (req, res, next) => {
     const { search, institutionId, employmentType, status } = req.query;
 
     const filter = {};
-    if (institutionId)   filter.institutionId = institutionId;
-    if (employmentType)  filter.employmentType = employmentType;
-    if (status)          filter.status = status;
+    if (institutionId && institutionId !== 'all')   filter.institutionId = institutionId;
+    if (employmentType && employmentType !== 'all') filter.employmentType = employmentType;
+    if (status && status !== 'all')                 filter.status = status;
     if (search) {
       const rx = new RegExp(escapeRegex(search), 'i');
       filter.$or = [{ name: rx }, { mobile: rx }, { email: rx }, { displayId: rx }];
@@ -83,6 +84,58 @@ exports.get = async (req, res, next) => {
     if (!t) return notFound(res, S.TEACHER_NOT_FOUND);
     const bMap = await activeBatchMap([t._id]);
     return ok(res, S.OK, { teacher: serialize(t, bMap.get(String(t._id)) || 0) });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ── GOD-MODE EDIT ──────────────────────────────────────────────────────────────
+// Operator can patch a teacher's profile, salary, and active/inactive status from
+// any institution. Audited per-diff under the teacher's own institutionId. PBAC
+// (panelAccess) and ownership are managed via grant/revoke, not this endpoint.
+exports.update = async (req, res, next) => {
+  try {
+    const t = await Teacher.findById(req.params.id);
+    if (!t) return notFound(res, S.TEACHER_NOT_FOUND);
+
+    const b = req.body || {};
+    const before = t.toObject();
+
+    if (typeof b.name === 'string' && b.name.trim())     t.name = b.name.trim();
+    if (typeof b.mobile === 'string' && b.mobile.trim()) t.mobile = b.mobile.trim();
+    if (b.salaryAmount !== undefined) {
+      if (b.salaryAmount === null || b.salaryAmount === '') {
+        t.salaryAmount = undefined;
+      } else {
+        const n = Number(b.salaryAmount);
+        if (!Number.isFinite(n) || n < 0) return badRequest(res, S.VALIDATION_FAILED);
+        t.salaryAmount = n;
+      }
+    }
+    if (b.status !== undefined) {
+      if (!['active', 'inactive'].includes(b.status)) return badRequest(res, S.VALIDATION_FAILED);
+      t.status = b.status;
+    }
+
+    await t.save();
+
+    const changes = diff(before, t.toObject(), ['name', 'mobile', 'salaryAmount', 'status']);
+    if (changes.length) {
+      await auditLog({
+        institutionId: t.institutionId,
+        ...actorFromReq(req),
+        action:      'UPDATE_TEACHER',
+        entityType:  'Teacher',
+        entityId:    t._id,
+        entityLabel: `Teacher: ${t.name}`,
+        changes,
+        ip:          req.ip,
+      });
+    }
+
+    const fresh = await Teacher.findById(t._id).populate(POPULATE).lean();
+    const bMap = await activeBatchMap([t._id]);
+    return ok(res, S.TEACHER_UPDATED, { teacher: serialize(fresh, bMap.get(String(t._id)) || 0) });
   } catch (err) {
     next(err);
   }

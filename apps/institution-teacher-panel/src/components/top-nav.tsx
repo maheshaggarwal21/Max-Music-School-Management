@@ -1,26 +1,26 @@
 "use client";
-// Topbar: theme toggle + avatar menu (profile → settings, sign out).
-// The avatar menu is PORTALED to document.body with fixed coords so it floats
-// above (and stays clickable over) the animated <BlurFade> content below — an
-// in-flow absolute menu gets its lower items intercepted by those stacking
-// contexts. Same pattern as the row-actions "⋯" menu.
-
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
-import { ChevronDown, LogOut, Moon, Settings, Sun } from "lucide-react";
-import { toast } from "sonner";
+import { ChevronDown, LogOut, Moon, Sun, UserRound, Users } from "lucide-react";
 import { Avatar, cn, GradientText, useThemeTransition } from "@maxmusic/ui";
-import { api, mockable } from "@/lib/api";
-import { mockLogout } from "@/lib/mocks";
-import { useOperatorSession } from "@/lib/auth";
-import type { ApiResponse } from "@/lib/types";
 
-export function Topbar() {
-  const router = useRouter();
-  const operator = useOperatorSession();
+// Top bar of the teacher panel. Sits in the content column (right of the
+// sidebar). WHITE-LABEL: the only identity is the institution's logo/name and
+// the signed-in teacher. Adds a Teachers button (roster + KPIs) next to the
+// account menu. The account menu is PORTALED to document.body so it floats
+// above the animated page content and stays clickable.
+
+export interface TopNavProps {
+  teacherName: string;
+  schoolName: string;
+  logoUrl: string | null;
+  base: string; // "/<slug>/teacher"
+  onSignOut: () => void;
+}
+
+export function TopNav({ teacherName, schoolName, logoUrl, base, onSignOut }: TopNavProps) {
   const { resolvedTheme, toggleTheme } = useThemeTransition();
   const [mounted, setMounted] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -34,9 +34,8 @@ export function Topbar() {
     if (!menuOpen) return;
     const close = () => setMenuOpen(false);
     const onDown = (e: MouseEvent) => {
-      const target = e.target as Node;
-      if (menuRef.current?.contains(target)) return;
-      if (btnRef.current?.contains(target)) return;
+      const t = e.target as Node;
+      if (menuRef.current?.contains(t) || btnRef.current?.contains(t)) return;
       close();
     };
     document.addEventListener("mousedown", onDown);
@@ -57,69 +56,62 @@ export function Topbar() {
     setMenuOpen((v) => !v);
   };
 
-  const signOut = async () => {
-    setMenuOpen(false);
-    try {
-      await mockable(
-        () => api.post<ApiResponse<null>>("/api/auth/operator/logout", {}),
-        mockLogout()
-      );
-      router.push("/login");
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Sign out failed");
-    }
-  };
-
-  const today = new Date().toLocaleDateString("en-IN", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  });
-
   return (
-    <header className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-background/80 px-6 backdrop-blur-md">
-      <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-        {today}
-      </p>
+    <header className="hidden shrink-0 items-center justify-between gap-4 border-b border-border bg-background/80 px-6 py-3 backdrop-blur-sm md:flex">
+      {/* Left: greeting / page identity */}
+      <div className="min-w-0">
+        <h1 className="text-lg font-bold leading-tight">Teacher Console</h1>
+        <p className="truncate text-xs text-muted-foreground">
+          Welcome back, <span className="font-medium text-brand">{teacherName}</span>
+        </p>
+      </div>
 
+      {/* Right: Teachers · theme · logo · account menu */}
       <div className="flex shrink-0 items-center gap-3">
-        {/* Theme toggle — bordered square (matches institution admin top-nav) */}
+        <Link
+          href={`${base}/teachers`}
+          className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground shadow-sm transition-colors hover:bg-foreground/[0.04] hover:text-foreground"
+        >
+          <Users className="h-4 w-4" />
+          <span className="hidden sm:inline">Teachers</span>
+        </Link>
+
         <button
           type="button"
           aria-label="Toggle theme"
           onClick={(e) => toggleTheme(e)}
           className="flex h-9 w-9 items-center justify-center rounded-lg border border-border text-muted-foreground transition-colors hover:bg-foreground/[0.05] hover:text-foreground"
         >
-          {mounted && resolvedTheme === "dark" ? (
-            <Sun className="h-4 w-4" />
-          ) : (
-            <Moon className="h-4 w-4" />
-          )}
+          {mounted && resolvedTheme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
         </button>
 
-        {/* Avatar menu — pill with animated gradient name (matches admin top-nav) */}
+        {logoUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={logoUrl} alt={schoolName} className="h-9 w-9 rounded-lg object-cover" />
+        ) : (
+          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand/10 text-sm font-bold text-brand">
+            {schoolName.trim().charAt(0).toUpperCase() || "•"}
+          </span>
+        )}
+
         <button
           ref={btnRef}
           type="button"
           onClick={toggleMenu}
-          className="flex items-center gap-2.5 rounded-xl border border-border bg-card px-3.5 py-1.5 shadow-sm transition-colors hover:bg-foreground/[0.04]"
           aria-haspopup="menu"
           aria-expanded={menuOpen}
+          className="flex items-center gap-2.5 rounded-xl border border-border bg-card px-3.5 py-1.5 shadow-sm transition-colors hover:bg-foreground/[0.04]"
         >
-          <Avatar name={operator?.name ?? "Operator"} size="sm" />
+          <Avatar name={teacherName} size="sm" />
           <GradientText
             className="hidden text-sm font-semibold sm:block"
-            colors={["#5B8DEF", "#8b5cf6", "#5B8DEF"]}
+            colors={["var(--brand-primary)", "#8b5cf6", "var(--brand-primary)"]}
             animationSpeed={6}
           >
-            {operator?.name ?? "…"}
+            {teacherName}
           </GradientText>
           <ChevronDown
-            className={cn(
-              "h-3.5 w-3.5 text-muted-foreground transition-transform",
-              menuOpen && "rotate-180"
-            )}
+            className={cn("h-3.5 w-3.5 text-muted-foreground transition-transform", menuOpen && "rotate-180")}
           />
         </button>
 
@@ -138,24 +130,25 @@ export function Topbar() {
                   className="fixed w-56 overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-lg"
                 >
                   <div className="border-b border-border px-4 py-3">
-                    <p className="truncate text-sm font-semibold">{operator?.name ?? "Operator"}</p>
-                    <p className="truncate text-xs text-muted-foreground">
-                      {operator?.email ?? ""}
-                    </p>
+                    <p className="truncate text-sm font-semibold">{teacherName}</p>
+                    <p className="truncate text-xs text-muted-foreground">Teacher</p>
                   </div>
                   <div className="p-1">
                     <Link
-                      href="/settings"
+                      href={`${base}/profile`}
                       onClick={() => setMenuOpen(false)}
                       className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors hover:bg-muted"
                       role="menuitem"
                     >
-                      <Settings className="h-4 w-4 text-muted-foreground" />
-                      Settings
+                      <UserRound className="h-4 w-4 text-muted-foreground" />
+                      Profile
                     </Link>
                     <button
                       type="button"
-                      onClick={signOut}
+                      onClick={() => {
+                        setMenuOpen(false);
+                        onSignOut();
+                      }}
                       className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-destructive/80 transition-colors hover:bg-destructive/10 hover:text-destructive"
                       role="menuitem"
                     >

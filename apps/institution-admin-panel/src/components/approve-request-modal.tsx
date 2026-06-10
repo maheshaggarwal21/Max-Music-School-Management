@@ -60,7 +60,7 @@ export function ApproveRequestModal({ request, onClose, onApproved }: ApproveReq
   const [batches, setBatches] = useState<BatchRow[]>([]);
   const [teachers, setTeachers] = useState<TeacherRow[]>([]);
   const [dayPatterns, setDayPatterns] = useState<DayPatternItem[]>([]);
-  const [instruments, setInstruments] = useState<{ _id: string; name: string }[]>(MOCK_INSTRUMENTS);
+  const [instruments, setInstruments] = useState<{ _id: string; name: string }[]>([]);
 
   // Form state.
   const [instrumentId, setInstrumentId] = useState<string | null>(null);
@@ -111,13 +111,17 @@ export function ApproveRequestModal({ request, onClose, onApproved }: ApproveReq
         ),
         ok(paginate(MOCK_DAY_PATTERNS))
       ),
-    ]).then(([b, t, d]) => {
+      mockable(
+        () => api.get<ApiResponse<{ instruments: { _id: string; name: string }[] }>>(adminPath("/instruments")),
+        ok({ instruments: MOCK_INSTRUMENTS })
+      ),
+    ]).then(([b, t, d, i]) => {
       if (cancelled) return;
       setBatches((b.data && "items" in b.data ? b.data.items : []) as BatchRow[]);
       setTeachers((t.data && "items" in t.data ? t.data.items : []) as TeacherRow[]);
       const dp = d.data && ("items" in d.data ? d.data.items : (d.data as { dayPatterns: DayPatternItem[] }).dayPatterns);
       setDayPatterns(dp ?? []);
-      setInstruments(MOCK_INSTRUMENTS);
+      setInstruments((i.data as { instruments: { _id: string; name: string }[] })?.instruments ?? []);
     });
     return () => {
       cancelled = true;
