@@ -52,12 +52,49 @@ export default function BatchesPage() {
   const [autoName, setAutoName] = useState(true);
   const [manualName, setManualName] = useState("");
 
+  // reference lists for the create-batch dropdowns — fetched live per institution
+  const [instruments, setInstruments] = useState<{ _id: string; name: string }[]>([]);
+  const [dayPatterns, setDayPatterns] = useState<{ _id: string; label: string; days: string[]; isActive: boolean }[]>([]);
+  const [timeSlots, setTimeSlots] = useState<{ _id: string; label: string }[]>([]);
+  const [teachers, setTeachers] = useState<{ _id: string; name: string; status: string }[]>([]);
+
   useEffect(() => {
     let cancelled = false;
     mockable(
       () => api.get<ApiResponse<Paginated<BatchRow>>>(adminPath("/batches?page=1&limit=100")),
       ok(paginate(MOCK_BATCHES))
     ).then((r) => !cancelled && setBatches(r.data?.items ?? []));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([
+      mockable(
+        () => api.get<ApiResponse<{ instruments: { _id: string; name: string }[] }>>(adminPath("/instruments")),
+        ok({ instruments: MOCK_INSTRUMENTS })
+      ),
+      mockable(
+        () => api.get<ApiResponse<{ dayPatterns: { _id: string; label: string; days: string[]; isActive: boolean }[] }>>(adminPath("/day-patterns")),
+        ok({ dayPatterns: MOCK_DAY_PATTERNS })
+      ),
+      mockable(
+        () => api.get<ApiResponse<{ timeSlots: { _id: string; label: string }[] }>>(adminPath("/time-slots")),
+        ok({ timeSlots: MOCK_TIME_SLOTS })
+      ),
+      mockable(
+        () => api.get<ApiResponse<Paginated<{ _id: string; name: string; status: string }>>>(adminPath("/teachers?page=1&limit=100")),
+        ok(paginate(MOCK_TEACHERS))
+      ),
+    ]).then(([i, d, t, te]) => {
+      if (cancelled) return;
+      setInstruments(i.data?.instruments ?? []);
+      setDayPatterns(d.data?.dayPatterns ?? []);
+      setTimeSlots(t.data?.timeSlots ?? []);
+      setTeachers((te.data as Paginated<{ _id: string; name: string; status: string }>)?.items ?? []);
+    });
     return () => {
       cancelled = true;
     };
@@ -72,9 +109,9 @@ export default function BatchesPage() {
 
   // Auto-generated batch name preview (mirrors backend encodeBatchName).
   const namePreview = useMemo(() => {
-    const instrument = MOCK_INSTRUMENTS.find((i) => i._id === form.instrumentId);
-    const dp = MOCK_DAY_PATTERNS.find((d) => d._id === form.dayPatternId);
-    const ts = MOCK_TIME_SLOTS.find((t) => t._id === form.timeSlotId);
+    const instrument = instruments.find((i) => i._id === form.instrumentId);
+    const dp = dayPatterns.find((d) => d._id === form.dayPatternId);
+    const ts = timeSlots.find((t) => t._id === form.timeSlotId);
     return encodeBatchNamePreview(
       instrument?.name ?? null,
       dp?.days ?? null,
@@ -105,10 +142,10 @@ export default function BatchesPage() {
         ok(null),
         500
       );
-      const instrument = MOCK_INSTRUMENTS.find((i) => i._id === form.instrumentId)!;
-      const dp = MOCK_DAY_PATTERNS.find((d) => d._id === form.dayPatternId)!;
-      const ts = MOCK_TIME_SLOTS.find((t) => t._id === form.timeSlotId)!;
-      const teacher = MOCK_TEACHERS.find((t) => t._id === form.teacherId) ?? null;
+      const instrument = instruments.find((i) => i._id === form.instrumentId)!;
+      const dp = dayPatterns.find((d) => d._id === form.dayPatternId)!;
+      const ts = timeSlots.find((t) => t._id === form.timeSlotId)!;
+      const teacher = teachers.find((t) => t._id === form.teacherId) ?? null;
       setBatches((prev) => [
         {
           _id: `bat_local_${Date.now()}`,
@@ -255,7 +292,7 @@ export default function BatchesPage() {
             label="Instrument"
             required
             placeholder="Select instrument"
-            options={MOCK_INSTRUMENTS.map((i) => ({ value: i._id, label: i.name }))}
+            options={instruments.map((i) => ({ value: i._id, label: i.name }))}
             value={form.instrumentId}
             onChange={(v) => setForm({ ...form, instrumentId: v })}
           />
@@ -264,7 +301,7 @@ export default function BatchesPage() {
               label="Day pattern"
               required
               placeholder="Suitable days"
-              options={MOCK_DAY_PATTERNS.filter((d) => d.isActive).map((d) => ({
+              options={dayPatterns.filter((d) => d.isActive).map((d) => ({
                 value: d._id, label: d.label,
               }))}
               value={form.dayPatternId}
@@ -274,7 +311,7 @@ export default function BatchesPage() {
               label="Time slot"
               required
               placeholder="Suitable time"
-              options={MOCK_TIME_SLOTS.map((t) => ({ value: t._id, label: t.label }))}
+              options={timeSlots.map((t) => ({ value: t._id, label: t.label }))}
               value={form.timeSlotId}
               onChange={(v) => setForm({ ...form, timeSlotId: v })}
             />
@@ -282,7 +319,7 @@ export default function BatchesPage() {
           <Select
             label="Teacher (optional — empty ⇒ Setting Phase)"
             placeholder="Assign later"
-            options={MOCK_TEACHERS.filter((t) => t.status === "active").map((t) => ({
+            options={teachers.filter((t) => t.status === "active").map((t) => ({
               value: t._id, label: t.name,
             }))}
             value={form.teacherId}

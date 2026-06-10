@@ -22,9 +22,12 @@ export function openInstitutionAdminPanel(inst: { slug: string; name: string }):
 
   const base =
     process.env.NEXT_PUBLIC_ADMIN_PANEL_URL ||
-    `${window.location.protocol}//${window.location.hostname}:3011`;
+    `${window.location.protocol}//${window.location.hostname}:3001`;
 
   toast.success(`Opening ${inst.name} admin panel — operator access`);
-  // Same-tab navigation: the operator returns via the browser back button.
-  window.location.assign(`${base}/dashboard`);
+  // Same-tab navigation to the REAL slug-aware admin route. The god cookie set by
+  // the impersonate POST (inst_admin_token, path /api/inst/<slug>) authenticates
+  // the panel's /me call, so it lands on the dashboard, not the login page.
+  // The operator returns via the browser back button.
+  window.location.assign(`${base}/${inst.slug}/admin/dashboard?imp=1`);
 }

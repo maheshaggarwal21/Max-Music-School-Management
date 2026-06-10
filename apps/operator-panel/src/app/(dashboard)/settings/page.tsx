@@ -10,7 +10,6 @@ import {
   Plus,
   QrCode,
   ShieldCheck,
-  ShieldOff,
   UserRound,
   X,
 } from "lucide-react";
@@ -30,7 +29,6 @@ import { Skeleton } from "@/components/skeleton";
 import { Tag } from "@/components/tag";
 import { api, mockable } from "@/lib/api";
 import {
-  mock2faDisabled,
   mock2faEnableStart,
   mock2faVerified,
   mockSettings,
@@ -190,24 +188,6 @@ export default function SettingsPage() {
     }
   };
 
-  const disable2fa = async () => {
-    if (!settings) return;
-    try {
-      await mockable(
-        () =>
-          api.post<ApiResponse<{ twoFactorEnabled: boolean }>>(
-            "/api/operator/settings/2fa/disable",
-            {}
-          ),
-        mock2faDisabled()
-      );
-      setSettings({ ...settings, twoFactorEnabled: false });
-      toast.success("Two-factor authentication disabled");
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to disable 2FA");
-    }
-  };
-
   const saveDefaults = async () => {
     if (!settings) return;
     const rupees = Number(rentRupees);
@@ -332,15 +312,22 @@ export default function SettingsPage() {
             </div>
 
             <div className="mt-5">
-              {settings.twoFactorEnabled ? (
-                <Button
-                  variant="outline"
-                  className="rounded-full text-destructive hover:bg-destructive/10"
-                  onClick={disable2fa}
-                >
-                  <ShieldOff className="h-4 w-4" />
-                  Disable 2FA
-                </Button>
+              {settings.twoFactorEnabled && !qrSecret ? (
+                <div className="space-y-3">
+                  <p className="text-xs text-muted-foreground">
+                    Your authenticator is configured. 2FA is mandatory for operators and
+                    cannot be turned off — you can re-enroll a new device below.
+                  </p>
+                  <Button
+                    variant="outline"
+                    className="rounded-full"
+                    onClick={startEnroll}
+                    disabled={enrolling}
+                  >
+                    {enrolling ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+                    Re-configure device
+                  </Button>
+                </div>
               ) : qrSecret ? (
                 <div className="space-y-4">
                   <div className="flex flex-wrap items-center gap-5">

@@ -24,11 +24,11 @@ import { TableSkeleton } from "@/components/skeleton";
 import { Tag } from "@/components/tag";
 import { api, mockable } from "@/lib/api";
 import {
-  INSTITUTION_OPTIONS,
   mockTeacherList,
   mockTeacherPatched,
   teacherPanelAccess,
 } from "@/lib/mocks";
+import { useInstitutionOptions } from "@/lib/use-institution-options";
 import type { ApiResponse, OperatorTeacherRow, Paginated } from "@/lib/types";
 
 const LIMIT = 10;
@@ -76,6 +76,7 @@ export default function TeachersPage() {
   const [institutionId, setInstitutionId] = useState<string | null>(null);
   const [employmentType, setEmploymentType] = useState<string | null>("all");
   const [page, setPage] = useState(1);
+  const institutionOptions = useInstitutionOptions();
   const [editing, setEditing] = useState<OperatorTeacherRow | null>(null);
 
   const fetchRows = useCallback(async () => {
@@ -247,7 +248,7 @@ export default function TeachersPage() {
             className="w-72"
           />
           <Select
-            options={[{ value: "", label: "All institutions" }, ...INSTITUTION_OPTIONS]}
+            options={[{ value: "", label: "All institutions" }, ...institutionOptions]}
             value={institutionId ?? ""}
             onChange={(v) => {
               setInstitutionId(v || null);

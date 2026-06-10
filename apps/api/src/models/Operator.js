@@ -9,6 +9,7 @@ const OperatorSchema = new mongoose.Schema(
     passwordHash:      { type: String, required: true, select: false },
     role:              { type: String, enum: ['superadmin'], default: 'superadmin', required: true },
     totpSecret:        { type: String, select: false },
+    pendingTotpSecret: { type: String, select: false }, // held during (re)enrollment until a code is verified
     twoFactorEnabled:  { type: Boolean, default: true },
     tokenVersion:      { type: Number, default: 0 },
     lastLoginAt:       { type: Date },

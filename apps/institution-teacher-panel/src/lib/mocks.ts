@@ -10,8 +10,11 @@ import type {
   AttendanceDay,
   BatchRow,
   BrandingPublic,
+  ColleagueSchedule,
   HolidayItem,
+  SessionRow,
   StudentRow,
+  TeacherKpiRow,
   TeacherLoginData,
   TeacherMeData,
   TeacherSelf,
@@ -135,6 +138,14 @@ export const MOCK_BATCHES_RESPONSE: ApiResponse<BatchRow[]> = {
   message: "OK",
   data: MOCK_BATCHES,
 };
+
+export function mockBatchInfoResponse(batchId: string): ApiResponse<BatchRow | null> {
+  return {
+    success: true,
+    message: "OK",
+    data: MOCK_BATCHES.find((b) => b._id === batchId) ?? null,
+  };
+}
 
 // ── Students per batch ────────────────────────────────────────────────────────
 
@@ -337,6 +348,72 @@ export function mockCreatedHoliday(
       date,
       studentCategory,
       reason: reason ?? null,
+    },
+  };
+}
+
+// ── Class sessions (batch Overview "Launch Session" + archive) ────────────────
+
+export function mockSessionsResponse(batchId: string): ApiResponse<{
+  items: SessionRow[];
+  pagination: { page: number; limit: number; total: number; pages: number };
+}> {
+  const seed = MOCK_BATCHES.findIndex((b) => b._id === batchId);
+  const base = seed >= 0 ? seed : 0;
+  const items: SessionRow[] = Array.from({ length: 3 }).map((_, i) => ({
+    _id: `ses-${batchId}-${i}`,
+    meetingUrl: `https://zoom.us/j/${93000000 + base * 1000 + i}`,
+    targetDate: `2026-06-0${Math.max(1, 6 - i)}`,
+    launchedAt: `2026-06-0${Math.max(1, 6 - i)}T13:30:00.000Z`,
+    launchedBy: { actorRole: "teacher" },
+  }));
+  return {
+    success: true,
+    message: "OK",
+    data: { items, pagination: { page: 1, limit: 30, total: items.length, pages: 1 } },
+  };
+}
+
+export function mockLaunchedSession(meetingUrl: string, targetDate?: string): ApiResponse<SessionRow> {
+  return {
+    success: true,
+    message: "Session launched",
+    data: {
+      _id: `ses-${Date.now()}`,
+      meetingUrl,
+      targetDate: targetDate ?? toIsoDate(new Date()),
+      launchedAt: new Date().toISOString(),
+      launchedBy: { actorRole: "teacher" },
+    },
+  };
+}
+
+// ── Teachers roster + KPIs ────────────────────────────────────────────────────
+
+export const MOCK_COLLEAGUES: TeacherKpiRow[] = [
+  { _id: "tch-014", displayId: "SSM-T-014", name: "Aarav Mehta", email: "aarav.mehta@example.com", mobile: "9876543210", status: "active", role: "owner", since: "2024-04-02T00:00:00.000Z", kpiPercent: 86, performance: 4.3 },
+  { _id: "tch-018", displayId: "SSM-T-018", name: "Nirmal Rana", email: "nirmal.rana@example.com", mobile: "9876543211", status: "active", role: "staff", since: "2024-06-11T00:00:00.000Z", kpiPercent: 72, performance: 3.6 },
+  { _id: "tch-019", displayId: "SSM-T-019", name: "Jyoti Gothwal", email: "jyoti.g@example.com", mobile: "9876543212", status: "active", role: "staff", since: "2024-08-21T00:00:00.000Z", kpiPercent: 64, performance: 3.2 },
+  { _id: "tch-020", displayId: "SSM-T-020", name: "Kalpesh Rawal", email: "kalpesh.r@example.com", mobile: "9876543213", status: "active", role: "staff", since: "2025-01-09T00:00:00.000Z", kpiPercent: 48, performance: 2.4 },
+  { _id: "tch-021", displayId: "SSM-T-021", name: "Vaibhav Shrivastav", email: "vaibhav.s@example.com", mobile: "9876543214", status: "active", role: "staff", since: "2025-03-14T00:00:00.000Z", kpiPercent: 31, performance: 1.6 },
+];
+
+export const MOCK_COLLEAGUES_RESPONSE: ApiResponse<TeacherKpiRow[]> = {
+  success: true,
+  message: "OK",
+  data: MOCK_COLLEAGUES,
+};
+
+export function mockColleagueSchedule(teacherId: string, date: string | null): ApiResponse<ColleagueSchedule> {
+  const t = MOCK_COLLEAGUES.find((c) => c._id === teacherId) ?? MOCK_COLLEAGUES[0];
+  const rows = MOCK_BATCHES.map((b, i) => ({ ...b, launched: i % 3 === 0 }));
+  return {
+    success: true,
+    message: "OK",
+    data: {
+      teacher: { _id: t._id, name: t.name, displayId: t.displayId, status: t.status },
+      date,
+      rows,
     },
   };
 }

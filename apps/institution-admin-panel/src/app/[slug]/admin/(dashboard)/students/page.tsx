@@ -1,6 +1,6 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
-import { Pencil, Users } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Pencil, Plus, Users } from "lucide-react";
 import {
   Avatar, BlurFade, Button, SearchBar, Select, StatusBadge,
 } from "@maxmusic/ui";
@@ -14,6 +14,7 @@ import { EmptyState } from "@/components/empty-state";
 import { TableSkeleton } from "@/components/skeletons";
 import { StudentDetailModal } from "@/components/student-detail-modal";
 import { StudentEditDialog } from "@/components/student-edit-dialog";
+import { AddStudentDialog } from "@/components/add-student-dialog";
 
 const JOIN_STATUS_OPTIONS = [
   { value: "trial", label: "Trial" },
@@ -29,15 +30,33 @@ export default function StudentsPage() {
   const [teacherFilter, setTeacherFilter] = useState<string | null>(null);
   const [selected, setSelected] = useState<StudentRow | null>(null);
   const [editing, setEditing] = useState<StudentRow | null>(null);
+  const [addOpen, setAddOpen] = useState(false);
+  const [teachers, setTeachers] = useState<{ _id: string; name: string }[]>([]);
 
-  useEffect(() => {
-    let cancelled = false;
-    // In live mode search/joinStatus/teacherId become query params (CONTRACTS);
-    // in mock mode we filter the full list client-side.
-    mockable(
+  // In live mode search/joinStatus/teacherId become query params (CONTRACTS);
+  // in mock mode we filter the full list client-side.
+  const load = useCallback(() => {
+    return mockable(
       () => api.get<ApiResponse<Paginated<StudentRow>>>(adminPath("/students?page=1&limit=100")),
       ok(paginate(MOCK_STUDENTS))
-    ).then((r) => !cancelled && setStudents(r.data?.items ?? []));
+    ).then((r) => setStudents(r.data?.items ?? []));
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  // Real teacher list for the filter dropdown (and shared shape with the add form).
+  useEffect(() => {
+    let cancelled = false;
+    mockable(
+      () => api.get<ApiResponse<Paginated<{ _id: string; name: string; status: string }>>>(adminPath("/teachers?page=1&limit=100")),
+      ok(paginate(MOCK_TEACHERS))
+    ).then((r) => {
+      if (cancelled) return;
+      const items = (r.data as Paginated<{ _id: string; name: string; status: string }>)?.items ?? [];
+      setTeachers(items.map((t) => ({ _id: t._id, name: t.name })));
+    });
     return () => {
       cancelled = true;
     };
@@ -120,6 +139,12 @@ export default function StudentsPage() {
           ? `${students.length} enrolled · ${students.filter((s) => s.joinStatus === "active").length} active`
           : "Manage enrolled students"
       }
+      actions={
+        <Button variant="brand" className="group rounded-full" onClick={() => setAddOpen(true)}>
+          Add Student
+          <Plus className="ml-2 h-4 w-4 transition-transform duration-300 group-hover:rotate-90" />
+        </Button>
+      }
     >
       {/* Search + filters */}
       <BlurFade delay={0.1}>
@@ -141,7 +166,7 @@ export default function StudentsPage() {
             <Select
               placeholder="All teachers"
               searchable
-              options={MOCK_TEACHERS.map((t) => ({ value: t._id, label: t.name }))}
+              options={teachers.map((t) => ({ value: t._id, label: t.name }))}
               value={teacherFilter}
               onChange={setTeacherFilter}
             />
@@ -177,6 +202,9 @@ export default function StudentsPage() {
         studentName={selected?.name}
         onClose={() => setSelected(null)}
       />
+
+      {/* Add Student → big form, direct enrollment (bypasses request flow) */}
+      <AddStudentDialog open={addOpen} onClose={() => setAddOpen(false)} onCreated={load} />
 
       {/* Pencil → THE big edit form with the live activity rail */}
       <StudentEditDialog

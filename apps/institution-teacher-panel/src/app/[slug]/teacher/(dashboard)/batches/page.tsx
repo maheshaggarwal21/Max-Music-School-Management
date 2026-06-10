@@ -3,6 +3,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useParams } from "next/navigation";
 import { CalendarDays, ChevronRight, Clock, Music2, Users } from "lucide-react";
 import {
   BlurFade,
@@ -19,6 +20,8 @@ import { CardListSkeleton } from "@/components/skeletons";
 import { EmptyState } from "@/components/empty-state";
 
 export default function BatchesPage() {
+  const { slug } = useParams<{ slug: string }>();
+  const base = `/${slug}/teacher`;
   const [batches, setBatches] = useState<BatchRow[] | null>(null);
 
   useEffect(() => {
@@ -75,7 +78,7 @@ export default function BatchesPage() {
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             {batches.map((b, i) => (
               <BlurFade key={b._id} delay={0.15 + i * 0.08} inView>
-                <Link href={`/batches/${b._id}`} className="block">
+                <Link href={`${base}/batches/${b._id}`} className="block">
                   <SpotlightCard className="relative overflow-hidden rounded-xl border border-border bg-card p-5 transition-all duration-300 hover:-translate-y-1">
                     <BorderBeam size={40} duration={12} delay={i * 1.5} />
                     <div className="flex items-start justify-between gap-3">

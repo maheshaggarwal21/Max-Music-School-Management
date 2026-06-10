@@ -1,5 +1,6 @@
 'use strict';
 
+const mongoose = require('mongoose');
 const Payment = require('../../../models/Payment');
 const Student = require('../../../models/Student');
 const RazorpayWebhookEvent = require('../../../models/RazorpayWebhookEvent');
@@ -56,7 +57,8 @@ exports.createPayment = async (req, res, next) => {
   try {
     const inst = req.institution._id;
     const { studentId, type, amount, period, method, status, paidAt } = req.body || {};
-    if (!studentId || !['fee', 'admission'].includes(type) || typeof amount !== 'number' || amount < 0) {
+    if (!studentId || !mongoose.isValidObjectId(studentId) ||
+        !['fee', 'admission'].includes(type) || typeof amount !== 'number' || amount < 0) {
       return badRequest(res, S.VALIDATION_FAILED);
     }
     if (!['paid', 'overdue', 'partial', 'free'].includes(status)) return badRequest(res, S.VALIDATION_FAILED);

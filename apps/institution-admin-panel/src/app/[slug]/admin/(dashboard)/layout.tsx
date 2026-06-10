@@ -125,6 +125,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               adminName={session.user.name}
               schoolName={session.institution.schoolName}
               logoUrl={session.institution.logoUrl}
+              settingsHref={`${base}/settings`}
+              onSignOut={handleSignOut}
             />
             <main className="min-h-0 flex-1 overflow-y-auto">{children}</main>
           </div>

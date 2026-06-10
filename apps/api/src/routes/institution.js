@@ -102,6 +102,7 @@ router.patch('/:slug/admin/day-patterns/:id', ...adminChain, Schedule.toggleDayP
 router.get('/:slug/admin/time-slots',         ...adminChain, Schedule.listTimeSlots);
 router.post('/:slug/admin/time-slots',        ...adminChain, Schedule.createTimeSlot);
 router.patch('/:slug/admin/time-slots/:id',   ...adminChain, Schedule.toggleTimeSlot);
+router.get('/:slug/admin/instruments',        ...adminChain, Schedule.listInstruments);
 
 router.get('/:slug/admin/payments/reconciliation', ...adminChain, Payment.reconciliationFeed);
 router.get('/:slug/admin/payments',                ...adminChain, Payment.list);
@@ -109,13 +110,21 @@ router.post('/:slug/admin/payments',               ...adminChain, Payment.create
 
 // ── TEACHER ──────────────────────────────────────────────────────────────────────
 router.get('/:slug/teacher/me',                 ...teacherChain, TeacherApp.me);
+router.patch('/:slug/teacher/me',               ...teacherChain, TeacherApp.updateMe);
 router.get('/:slug/teacher/batches',            ...teacherChain, TeacherApp.myBatches);
+router.get('/:slug/teacher/batches/:id',          ...teacherChain, TeacherApp.batchInfo);
 router.get('/:slug/teacher/batches/:id/students', ...teacherChain, TeacherApp.batchStudents);
+router.get('/:slug/teacher/batches/:id/sessions', ...teacherChain, TeacherApp.listSessions);
+router.post('/:slug/teacher/batches/:id/sessions',...teacherChain, TeacherApp.launchSession);
 router.get('/:slug/teacher/attendance',         ...teacherChain, TeacherApp.getAttendance);
 router.post('/:slug/teacher/attendance/mark',   ...teacherChain, TeacherApp.markAttendance);
 router.get('/:slug/teacher/holidays',           ...teacherChain, TeacherApp.listHolidays);
 router.post('/:slug/teacher/holidays',          ...teacherChain, TeacherApp.declareHoliday);
 router.delete('/:slug/teacher/holidays/:id',    ...teacherChain, TeacherApp.deleteHoliday);
+
+// Teachers roster + KPIs (every teacher) and a colleague's class schedule.
+router.get('/:slug/teacher/colleagues',             ...teacherChain, TeacherApp.listColleagues);
+router.get('/:slug/teacher/colleagues/:id/schedule',...teacherChain, TeacherApp.colleagueSchedule);
 
 // ── STUDENT ──────────────────────────────────────────────────────────────────────
 router.get('/:slug/student/dashboard', ...studentChain, StudentApp.dashboard);

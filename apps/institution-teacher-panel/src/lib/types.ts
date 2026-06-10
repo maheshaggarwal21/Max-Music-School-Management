@@ -128,3 +128,43 @@ export interface HolidayCreatePayload {
   studentCategory: "regular" | "trial";
   reason?: string;
 }
+
+// ── Class sessions (batch Overview "Launch Session" + archive) ────────────────
+
+export interface SessionRow {
+  _id: string;
+  meetingUrl: string;
+  targetDate: string;
+  launchedAt: string;
+  launchedBy: { actorRole: string } | null;
+}
+
+// POST /batches/:id/sessions body
+export interface LaunchSessionPayload {
+  meetingUrl: string;
+  targetDate?: string;
+}
+
+// ── Teachers roster + KPIs (every teacher may view) ───────────────────────────
+
+export interface TeacherKpiRow {
+  _id: string;
+  displayId: string;
+  name: string;
+  email: string;
+  mobile: string;
+  status: "active" | "inactive";
+  role: "owner" | "staff";
+  since: string;
+  kpiPercent: number;
+  performance: number; // 0.0 – 5.0
+}
+
+// GET /colleagues/:id/schedule → data
+export interface ColleagueSchedule {
+  teacher: { _id: string; name: string; displayId: string; status: "active" | "inactive" };
+  date: string | null;
+  rows: ScheduleRow[];
+}
+
+export type ScheduleRow = BatchRow & { launched: boolean };

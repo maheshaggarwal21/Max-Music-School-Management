@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { ArrowRight, Clock, Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
-import { BlurFade, BorderBeam, Button, Input, cn } from "@maxmusic/ui";
+import { BlurFade, BorderBeam, Button, TimePicker, cn } from "@maxmusic/ui";
 import { api, adminPath, mockable } from "@/lib/api";
 import { MOCK_TIME_SLOTS, ok } from "@/lib/mocks";
 import type { ApiResponse, TimeSlotItem } from "@/lib/types";
@@ -168,17 +168,15 @@ export default function SuitableTimesPage() {
               </p>
             </div>
             <div className="space-y-3 p-5">
-              <Input
+              <TimePicker
                 label="Start time"
-                type="time"
                 value={start}
-                onChange={(e) => setStart(e.target.value)}
+                onChange={setStart}
               />
-              <Input
+              <TimePicker
                 label="End time"
-                type="time"
                 value={end}
-                onChange={(e) => setEnd(e.target.value)}
+                onChange={setEnd}
               />
               <Button
                 variant="brand"

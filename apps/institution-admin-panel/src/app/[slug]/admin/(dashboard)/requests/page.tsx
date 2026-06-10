@@ -43,12 +43,43 @@ export default function RequestsPage() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
 
+  // reference lists for the form dropdowns — fetched live from this institution
+  const [instruments, setInstruments] = useState<{ _id: string; name: string }[]>([]);
+  const [dayPatterns, setDayPatterns] = useState<{ _id: string; label: string; isActive: boolean }[]>([]);
+  const [timeSlots, setTimeSlots] = useState<{ _id: string; label: string }[]>([]);
+
   useEffect(() => {
     let cancelled = false;
     mockable(
       () => api.get<ApiResponse<Paginated<RequestItem>>>(adminPath("/requests?status=all")),
       ok(paginate(MOCK_REQUESTS))
     ).then((r) => !cancelled && setRequests(r.data?.items ?? []));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([
+      mockable(
+        () => api.get<ApiResponse<{ instruments: { _id: string; name: string }[] }>>(adminPath("/instruments")),
+        ok({ instruments: MOCK_INSTRUMENTS })
+      ),
+      mockable(
+        () => api.get<ApiResponse<{ dayPatterns: { _id: string; label: string; isActive: boolean }[] }>>(adminPath("/day-patterns")),
+        ok({ dayPatterns: MOCK_DAY_PATTERNS })
+      ),
+      mockable(
+        () => api.get<ApiResponse<{ timeSlots: { _id: string; label: string }[] }>>(adminPath("/time-slots")),
+        ok({ timeSlots: MOCK_TIME_SLOTS })
+      ),
+    ]).then(([i, d, t]) => {
+      if (cancelled) return;
+      setInstruments(i.data?.instruments ?? []);
+      setDayPatterns(d.data?.dayPatterns ?? []);
+      setTimeSlots(t.data?.timeSlots ?? []);
+    });
     return () => {
       cancelled = true;
     };
@@ -106,9 +137,9 @@ export default function RequestsPage() {
         ok(null),
         500
       );
-      const instrument = MOCK_INSTRUMENTS.find((i) => i._id === form.instrumentId) ?? null;
-      const dp = MOCK_DAY_PATTERNS.find((d) => d._id === form.preferredDayPatternId) ?? null;
-      const ts = MOCK_TIME_SLOTS.find((t) => t._id === form.preferredTimeSlotId) ?? null;
+      const instrument = instruments.find((i) => i._id === form.instrumentId) ?? null;
+      const dp = dayPatterns.find((d) => d._id === form.preferredDayPatternId) ?? null;
+      const ts = timeSlots.find((t) => t._id === form.preferredTimeSlotId) ?? null;
       setRequests((prev) => [
         {
           _id: `req_local_${Date.now()}`,
@@ -320,7 +351,7 @@ export default function RequestsPage() {
           <Select
             label="Instrument"
             placeholder="Select instrument"
-            options={MOCK_INSTRUMENTS.map((i) => ({ value: i._id, label: i.name }))}
+            options={instruments.map((i) => ({ value: i._id, label: i.name }))}
             value={form.instrumentId}
             onChange={(v) => setForm({ ...form, instrumentId: v })}
           />
@@ -328,7 +359,7 @@ export default function RequestsPage() {
             <Select
               label="Preferred days"
               placeholder="Any"
-              options={MOCK_DAY_PATTERNS.filter((d) => d.isActive).map((d) => ({
+              options={dayPatterns.filter((d) => d.isActive).map((d) => ({
                 value: d._id,
                 label: d.label,
               }))}
@@ -338,7 +369,7 @@ export default function RequestsPage() {
             <Select
               label="Preferred time"
               placeholder="Any"
-              options={MOCK_TIME_SLOTS.map((t) => ({ value: t._id, label: t.label }))}
+              options={timeSlots.map((t) => ({ value: t._id, label: t.label }))}
               value={form.preferredTimeSlotId}
               onChange={(v) => setForm({ ...form, preferredTimeSlotId: v })}
             />

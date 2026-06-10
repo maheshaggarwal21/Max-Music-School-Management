@@ -3,14 +3,16 @@
 // badges, filters (institution, joinStatus) + search, server-style pagination.
 
 import { useCallback, useEffect, useState } from "react";
-import { GraduationCap, Pencil } from "lucide-react";
+import { GraduationCap, Pencil, Plus } from "lucide-react";
 import { toast } from "sonner";
 import {
   BlurFade,
+  Button,
   SearchBar,
   Select,
   StatusBadge,
 } from "@maxmusic/ui";
+import { AddStudentModal } from "@/components/add-student-modal";
 import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { formatCurrency, formatDate, formatPhone } from "@maxmusic/utils";
 import { EmptyState } from "@/components/empty-state";
@@ -25,11 +27,11 @@ import { Tag } from "@/components/tag";
 import { api, mockable } from "@/lib/api";
 import {
   getMockStudentPaidClasses,
-  INSTITUTION_OPTIONS,
   mockStudentList,
   mockStudentPatched,
   setMockStudentPaidClasses,
 } from "@/lib/mocks";
+import { useInstitutionOptions } from "@/lib/use-institution-options";
 import type { ApiResponse, OperatorStudentRow, Paginated } from "@/lib/types";
 
 const LIMIT = 10;
@@ -80,6 +82,13 @@ export default function StudentsPage() {
   const [joinStatus, setJoinStatus] = useState<string | null>("all");
   const [page, setPage] = useState(1);
   const [editing, setEditing] = useState<OperatorStudentRow | null>(null);
+  const [addOpen, setAddOpen] = useState(false);
+  const institutionOptions = useInstitutionOptions();
+
+  const handleCreated = (row: OperatorStudentRow) => {
+    setRows((prev) => [row, ...prev]);
+    setPagination((p) => ({ ...p, total: p.total + 1 }));
+  };
 
   const fetchRows = useCallback(async () => {
     setLoading(true);
@@ -234,6 +243,12 @@ export default function StudentsPage() {
       <PageHeader
         title="Students"
         subtitle={`${pagination.total} students across all institutions`}
+        actions={
+          <Button variant="brand" className="group rounded-full" onClick={() => setAddOpen(true)}>
+            Add Student
+            <Plus className="ml-2 h-4 w-4 transition-transform duration-300 group-hover:rotate-90" />
+          </Button>
+        }
       />
 
       <BlurFade delay={0.1}>
@@ -247,7 +262,7 @@ export default function StudentsPage() {
             className="w-72"
           />
           <Select
-            options={[{ value: "", label: "All institutions" }, ...INSTITUTION_OPTIONS]}
+            options={[{ value: "", label: "All institutions" }, ...institutionOptions]}
             value={institutionId ?? ""}
             onChange={(v) => {
               setInstitutionId(v || null);
@@ -320,6 +335,13 @@ export default function StudentsPage() {
           onSave={(patch) => saveStudent(editing, patch)}
         />
       )}
+
+      <AddStudentModal
+        open={addOpen}
+        onClose={() => setAddOpen(false)}
+        institutionOptions={institutionOptions}
+        onCreated={handleCreated}
+      />
     </div>
   );
 }

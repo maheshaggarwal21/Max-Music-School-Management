@@ -105,7 +105,7 @@ export interface AuditLogItem {
   entityType: string;
   entityId: string;
   entityLabel: string | null;
-  changes: { field: string; from: unknown; to: unknown }[];
+  changes?: { field: string; from: unknown; to: unknown }[];
   before: object | null;
   after: object | null;
   ip: string | null;
