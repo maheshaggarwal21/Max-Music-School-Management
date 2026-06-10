@@ -7,11 +7,21 @@ metadata:
 
 # Project Memory — Dev B (Frontend · Design System · White-Label)
 
-> Living memory of what has actually been BUILT and the conventions the code follows,
-> gathered across Claude Code sessions (last updated **10 Jun 2026**). Specs win over
-> this file: [[project-maxmusic]], CLAUDE.md, CONTRACTS.md, orchestrate/tasks.md.
-> The checked-in CLAUDE.md says "we are building as Dev A" — **this workspace is Dev B**;
-> ignore that role block here.
+> ⚠️ **SUPERSEDED / HISTORICAL (as of 11 Jun 2026).** This is Dev B's original frontend
+> working-memory from a separate workspace (different ports 3010/3011, "Sunrise School of Music"
+> mock, pre-merge state). The Dev A/B split is **DISSOLVED** and that work has all landed:
+> the 4-panel frontend merged (PR #1/#2), **H2 done** (types → `@maxmusic/types`), **H3 done**
+> (teacher Socket.io client `lib/socket.ts`), **H4/H5 done** (real APIs live, mock mode off,
+> god-token impersonation + `GET /:slug/branding` wired), and all 6 "contract gaps" below are
+> closed. The project is now **deployed locally vs Mongo Atlas, all 4 logins verified, and the
+> full gstack pipeline re-run passed (2026-06-11)** with 2 open P2 bugs.
+> **Current truth lives in CLAUDE.md, AUDIT.md (§6 = gstack findings), and orchestrate/tasks.md
+> (OPEN BUGS table).** The body below is kept only as a record of how the frontend was built and
+> the conventions the code still follows — treat its "Remaining Work" / "Contract Gaps" as DONE.
+>
+> Original header: living memory of what was BUILT and the conventions the code follows
+> (last updated 10 Jun 2026). Specs win over this file: [[project-maxmusic]], CLAUDE.md,
+> CONTRACTS.md, orchestrate/tasks.md.
 
 ## Build State (branch `frontend/phase-0-6`, uncommitted)
 

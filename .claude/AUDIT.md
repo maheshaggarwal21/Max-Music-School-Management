@@ -4,6 +4,9 @@
 > **Scope:** entire monorepo after Dev B's admin-panel renovation + supporting APIs (PR #2, `0150b90`).
 > **Team model:** the Dev A / Dev B split is **dissolved** — one team now finishing the project.
 > **Verdict:** ✅ **PASS.** No isolation, audit, white-label, or compile errors found. 1 hygiene fix applied.
+> **Re-run (2026-06-11):** full gstack pipeline (eng-review + cso×2 + review + qa×2) re-run on the final codebase
+> after live deploy — all 6 PASS; isolation/white-label confirmed at runtime in the browser. 2 open P2 bugs found
+> (DayPattern multikey index · Input `useId` hydration) — see **§6**. `/ship` held by user decision.
 
 This file is the single source of truth for *what is done* vs *what is left to finish the project*.
 Living board: `orchestrate/tasks.md` · Architecture: `ARCHITECTURE.md` · API: `CONTRACTS.md`.
@@ -65,20 +68,59 @@ Living board: `orchestrate/tasks.md` · Architecture: `ARCHITECTURE.md` · API: 
 - [ ] **L3 — Logo upload e2e.** `SettingsController.logoUploadUrl` presigns S3; needs real `AWS_S3_BUCKET` creds to verify the upload + data-URL fallback path.
 
 ### B. Feature completion / wiring gaps (transport exists, callers don't)
-- [ ] **L4 — Mailer triggers.** `config/mailer.js` is implemented but **no controller calls `sendMail`**. Temp passwords (teacher create, request approve) are only returned in the API response. Wire: welcome/temp-password email, grant-admin notice, rent reminder.
+- [x] **L4 — Mailer triggers.** ✅ DONE (P7-04). `config/mailer.js` + `config/emailTemplates.js` wired: owner welcome (inst create), teacher welcome (teacher create), student welcome (request approve), grant-admin notice — all fail-soft, From-name = institution `schoolName`. Rent-reminder still optional.
 - [ ] **L5 — Razorpay payment-link flow.** Webhook reconciliation feed is read-only and done; the per-teacher payment-link generation/tracking UX is minimal — confirm it matches the product intent (app *tracks*, never *routes*, money).
-- [ ] **L6 — Operator 2FA enforcement check.** TOTP code exists; confirm operator login actually blocks on `verify-2fa` end-to-end against a live operator account.
+- [x] **L6 — Operator 2FA enforcement check.** ✅ DONE (2026-06-11). Browser-verified: operator login is 2-step, blocks on `verify-2fa`; a live 6-digit TOTP code (secret `HQWBOILHHMGEO7TA`) → `/dashboard`. `scripts/verify-logins.js` reproduces it headlessly.
 
-### C. QA + security sign-off (Phase 8)
-- [ ] **L7 — `/qa` E2E** for the 3 onboarding scenarios (salary / autonomous / salaried-goes-independent) across all panels.
-- [ ] **L8 — `/qa` white-label leak pass** on built bundles (verify no "Max Music" in shipped JS, not just source).
-- [ ] **L9 — `/cso` full isolation + auth pass** over the *complete* surface (last `/cso` predates the admin-renovation APIs).
+### C. QA + security sign-off (Phase 8) — see §6 for the full re-run
+- [◑] **L7 — `/qa` E2E** — `/qa` ran in the browser (operator login+2FA, all 3 institution login/dashboard renders, console scan). The full 3-scenario onboarding walk (salary / autonomous / salaried-goes-independent) is still pending.
+- [x] **L8 — `/qa` white-label leak pass** ✅ DONE (2026-06-11). Source scan = zero brand strings (all hits are `@maxmusic/*` import specifiers); **runtime** browser check = all 3 institution panels render "Demo Music School" only, `hasMaxMusic=false`.
+- [x] **L9 — `/cso` full isolation + auth pass** ✅ DONE (2026-06-11). Re-ran `/cso` on middleware AND all 14 institution controllers post-renovation — 0 cross-tenant leaks; every `$match`/filter leads with `institutionId`; belongs-checks gate every client-supplied foreign id.
 - [ ] **L10 — Automated tests.** No test suite exists. At minimum: isolation invariant tests (a tenant-B token cannot read tenant-A data on every `/inst/:slug/*` route) + the slug-change/token-invalidation flow.
 
 ### D. Deploy (Phase 8)
+- [◑] **Local deploy** ✅ DONE (2026-06-11) — all 5 processes up on :4000 + :3000-3003 against live Mongo Atlas; all 4 logins verified. (VPS deploy below still pending.)
 - [ ] **L11 — nginx + TLS** finalized for `PLATFORM_DOMAIN` + private `OPERATOR_DOMAIN`.
 - [ ] **L12 — PM2 ecosystem** final (5 processes) + production `.env` filled.
-- [ ] **L13 — `/ship` / `/land-and-deploy`** to the VPS, then `/canary` post-deploy.
+- [ ] **L13 — `/ship` / `/land-and-deploy`** to the VPS, then `/canary` post-deploy. (`/ship` currently HELD by user decision.)
+
+---
+
+## 6. GSTACK PIPELINE RE-RUN (2026-06-11)
+
+> Full prescribed pipeline re-run on the now-final codebase, in plan order. Verdict: **all 6 PASS**;
+> isolation / audit / white-label / PBAC / 2FA clean. 2 real P2 bugs found (fixable, independent, not yet fixed).
+
+| # | Run | Scope | Verdict | Findings |
+|---|---|---|---|---|
+| 1 | `/plan-eng-review` | 18 models | ✅ PASS | P2 ×1, P3 ×1 |
+| 2 | `/cso` | middleware (tenant isolation) | ✅ CLEAN | 0 (1 info) |
+| 3 | `/review` | 9 operator controllers | ✅ CLEAN | 0 |
+| 4 | `/cso` | 14 institution controllers | ✅ CLEAN | 0 |
+| 5 | `/qa` | operator panel (browser) | ✅ PASS | login+2FA→dashboard works |
+| 6 | `/qa` | institution panels (browser) | ✅ PASS | P2 ×1, P3 ×1 |
+
+**Confirmed clean:** triple-layered tenant isolation (path-scoped cookies + `instAuth` institution match +
+`scopeGuard`); every institution query leads with `institutionId`; client-supplied foreign ids belongs-checked
+(`refGuard`/`ownBatch`/`loadSelf`) before use; operator controllers leak no secrets, audit every write incl.
+`IMPERSONATE_START`, paginate every list; white-label clean at source AND runtime.
+
+### Open findings (not yet fixed — `/ship` held)
+
+- **P2 (conf 8) — DayPattern unique multikey index.** `apps/api/src/models/DayPattern.js:38`
+  `index({ institutionId: 1, days: 1 }, { unique: true })` on the array field `days` is MULTIKEY-unique →
+  two patterns in one institution sharing any single day (Mon-Wed-Fri then Mon-Thu) throw `E11000` on the
+  second insert. Intent is unique day-SET. **Fix:** drop the unique multikey; add a derived sorted `daysKey`
+  string field with a unique `{institutionId, daysKey}` index (or enforce set-uniqueness in the controller).
+- **P2 (conf 9) — Input component hydration mismatch.** `packages/ui/src/components/form/input.tsx:15`
+  `autoId.current = \`mm-input-${++inputAutoId}\`` uses a module-level counter that diverges server
+  (process-singleton, keeps counting across requests) vs client (resets per load) → React `htmlFor did not
+  match` hydration warning on EVERY form across all 4 panels (caught live in browser `/qa`). Functionally the
+  forms still work. **Fix:** replace the counter with React 18 `useId()` (Next 14 supports it).
+- **P3 — ClassSession** `models/ClassSession.js:28` may lack a `{institutionId, targetDate}` index (verify vs queries).
+- **P3 — `ref is not a prop`** console warning from the same `@maxmusic/ui` package.
+- **P3 — `@maxmusic` npm scope** appears in client bundle module paths (not the brand, not rendered — rename only for maximal white-label paranoia).
+- **INFO — god-token path** (`middleware/instAuth.js:73`) doesn't re-check `operator.tokenVersion`; a deactivated operator's outstanding god token stays valid until its 15-min TTL.
 
 ---
 

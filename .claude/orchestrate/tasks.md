@@ -9,10 +9,12 @@
 
 ## CURRENT SESSION GOAL
 **Team:** Dev A / Dev B split **DISSOLVED** — one team finishing the whole project (backend + frontend + infra + QA + deploy all in scope). Old split: `team-division.md` (reference only).
-**State:** Backend (Phases 0–4 + 7) COMPLETE. All 4 panels built; **admin panel renovated + supporting APIs merged (PR #2, `0150b90`)**.
-**Full end-to-end audit DONE (2026-06-10) — ✅ PASS.** See `../AUDIT.md`. Audited isolation, refGuard, audit-logging, white-label, token storage, slug immutability, types/build across the entire codebase. **No errors found.** Only fix: untracked two stray `*.tsbuildinfo` artifacts. All 4 panels `tsc` clean; admin `next build` clean; API route tree + exports + strings verified.
-**Next action:** finish the project — `AUDIT.md §3` roadmap **L1–L13**. Start with **live integration (L1)**: set `NEXT_PUBLIC_API_URL`, stand up Mongo, run `scripts/seed.js`, exercise panels against the real API (nothing has hit the API in a browser yet — panels default to mock mode). Then teacher socket client (L2), mailer triggers (L4), `/qa` + `/cso` (L7–L9), deploy (L11–L13).
-**Blocking dependency:** live integration + QA need a running API + Mongo (and S3/SMTP/Razorpay creds for L3–L5).
+**State:** Backend (Phases 0–4 + 7) COMPLETE. All 4 panels built; admin panel renovated + supporting APIs merged (PR #2, `0150b90`).
+**Live deploy DONE (2026-06-11):** all 5 processes up locally vs Mongo Atlas; all 4 panel logins verified (API + browser, incl. operator TOTP 2FA). SWC binary fix (`@next/swc-win32-x64-msvc@14.2.33` + `NEXT_IGNORE_INCORRECT_LOCKFILE=1`); start panels independently, not via turbo. Creds via `scripts/dev-credentials.js`, verified by `scripts/verify-logins.js`.
+**gstack pipeline re-run DONE (2026-06-11) — ✅ all 6 PASS** (eng-review + cso×2 + review + qa×2). Isolation/audit/white-label/PBAC/2FA clean. See `../AUDIT.md §6`.
+**Full end-to-end audit (2026-06-10) — ✅ PASS** (`../AUDIT.md`): isolation, refGuard, audit-logging, white-label, token storage, slug immutability, types/build all clean.
+**Next action:** fix the **2 open P2 bugs** → (a) `models/DayPattern.js:38` multikey unique index (use derived sorted `daysKey`); (b) `packages/ui/src/components/form/input.tsx:15` counter → React 18 `useId()`. Then `/qa` full 3-scenario E2E (P8-03), then `/ship` (currently HELD) + VPS deploy (L11–L13 / P8-04–06 infra ready).
+**Blocking dependency:** VPS deploy needs production `.env` (S3/SMTP/Razorpay creds + real domains).
 
 ---
 
@@ -124,7 +126,7 @@
 | P5-07 | Payments (fees + rents) | ✅ | |
 | P5-08 | Changes History (timeline + before/after expand + filters) | ✅ | |
 | P5-09 | Settings (profile, 2FA, default rent, instruments) | ✅ | |
-| P5-R | gstack /qa on operator panel | ⬜ | |
+| P5-R | gstack /qa on operator panel | ✅ | 2026-06-11 browser: login + 6-digit TOTP 2FA → /dashboard works; no console errors on login. Full page-by-page click-through deferred to P8-03 |
 
 ## PHASE 6 — INSTITUTION PANELS FRONTEND
 | ID | Task | Status | Notes |
@@ -133,7 +135,7 @@
 | P6-02 | institution-admin-panel — 8 tabs + student detail popup w/ activity feed | ✅ | |
 | P6-03 | institution-teacher-panel — batches, attendance, holidays | ✅ | |
 | P6-04 | institution-student-panel — dashboard, classes, profile | ✅ | |
-| P6-R | gstack /qa — both managed (impersonation) + autonomous flows; LEAK CHECK | ⬜ | grep bundles for "maxmusic" |
+| P6-R | gstack /qa — both managed (impersonation) + autonomous flows; LEAK CHECK | ✅ | 2026-06-11: white-label PASS at source AND runtime — all 3 inst login pages + student post-login render "Demo Music School" only, hasMaxMusic=false. Found P2 Input hydration mismatch (mm-input ids, all forms). Impersonation flow click-through deferred to P8-03 |
 
 ## PHASE 7 — PAYMENTS + CRONS + NOTIFICATIONS  ✅ (backend)
 | ID | Task | Status | Notes |
@@ -147,12 +149,12 @@
 ## PHASE 8 — QA + DEPLOY
 | ID | Task | Status | Notes |
 |----|------|--------|-------|
-| P8-01 | gstack /cso — full isolation pass | ⬜ | |
-| P8-02 | White-label leak audit (bundles, emails, headers) | ⬜ | no operator brand on inst surfaces |
-| P8-03 | gstack /qa — full E2E (3 scenarios incl. salary→independent flip) | ⬜ | |
+| P8-01 | gstack /cso — full isolation pass | ✅ | 2026-06-11: re-ran /cso on middleware + all 14 institution controllers post-renovation. 0 cross-tenant leaks; every $match/filter leads with institutionId; belongs-checks gate foreign ids. 1 INFO (god-token doesn't re-check operator.tokenVersion) |
+| P8-02 | White-label leak audit (bundles, emails, headers) | ✅ | 2026-06-11: source scan = zero brand strings (all hits are @maxmusic/* import names); runtime browser check = inst panels render institution brand only. P3 note: @maxmusic npm scope in bundle module paths |
+| P8-03 | gstack /qa — full E2E (3 scenarios incl. salary→independent flip) | ◑ | /qa ran (login+2FA + white-label runtime verified). Full 3-scenario onboarding walk still pending |
 | P8-04 | nginx + SSL (Let's Encrypt) final | ✅ | HTTP→HTTPS redirects; full HTTPS blocks; security headers (X-Frame/CSP/HSTS/nosniff); Socket.io WebSocket upgrade on api block; gzip; client_max_body_size |
 | P8-05 | PM2 ecosystem final + seed | ✅ | ecosystem.config.js complete (5 processes, log files, mem limits); seed.js implemented |
-| P8-06 | gstack /ship — pre-deploy checklist | ⬜ | |
+| P8-06 | gstack /ship — pre-deploy checklist | ⏸ | HELD by user decision (not pushed). Run after the 2 open P2s are fixed |
 
 ---
 
@@ -170,7 +172,7 @@
 | FI-07 | win32 native binaries → root `optionalDependencies` (Linux CI/deploy safe) | ✅ | lockfile is Linux-generated, omitted win32 optionals |
 | FI-R | White-label leak grep on institution `src` (excl. `@maxmusic/*` import scope) | ✅ | zero rendered leaks |
 | — | Teacher live-attendance `TODO(H3)` | ✅ | `lib/socket.ts` useSocket hook; fetches realtime-token → socket.io-client auth handshake → listens `attendance:marked` for current batch+date → re-fetches marks |
-| — | H4/H5 — flip off mock mode (`NEXT_PUBLIC_API_URL`) + gstack `/qa` | ⬜ | needs running API + Mongo |
+| — | H4/H5 — flip off mock mode (`NEXT_PUBLIC_API_URL`) + gstack `/qa` | ✅ | 2026-06-11: all 4 panels live vs Mongo Atlas; 4 logins verified (API+browser); /qa ran. `.env.local` × 4 set NEXT_PUBLIC_API_URL=http://localhost:4000 |
 
 ---
 
@@ -178,6 +180,15 @@
 | Task ID | Blocked By | Description |
 |---------|-----------|-------------|
 | — | — | none yet |
+
+## OPEN BUGS (from gstack re-run 2026-06-11 — not yet fixed, /ship held)
+| ID | Sev | File | Bug | Fix |
+|----|-----|------|-----|-----|
+| BUG-01 | P2 | `apps/api/src/models/DayPattern.js:38` | `index({institutionId,days},{unique})` is multikey-unique (days is an array) → 2 patterns sharing any one day collide on E11000; intent is unique day-SET | drop unique multikey; derived sorted `daysKey` string + unique `{institutionId,daysKey}` (or controller set-uniqueness) |
+| BUG-02 | P2 | `packages/ui/src/components/form/input.tsx:15` | module-level counter `mm-input-${++inputAutoId}` diverges server vs client → hydration mismatch on every form, all 4 panels | replace with React 18 `useId()` |
+| BUG-03 | P3 | `apps/api/src/models/ClassSession.js:28` | possibly missing `{institutionId,targetDate}` index | verify vs queries; add only if "today's classes for institution" is queried |
+| BUG-04 | P3 | `packages/ui` | `ref is not a prop` React warning | pass ref via forwardRef / different prop |
+| BUG-05 | INFO | `apps/api/src/middleware/instAuth.js:73` | god-token path doesn't re-check `operator.tokenVersion` (15-min window) | re-check tokenVersion on god path if operator revocation must be instant |
 
 ---
 
@@ -199,3 +210,6 @@
 | Public `GET /api/inst/:slug/branding` endpoint (pre-auth) | Login pages need white-label identity before sign-in; resolveInstitution gives 404/403; returns brandingPublic only |
 | Socket.io auth via short-lived socket token (not the panel cookie) | Panel cookies are httpOnly + path-scoped to `/api/inst/:slug`, so the browser never sends them to `/socket.io`. An authenticated REST call mints a 2-min `JWT_SECRET_SOCKET` token (dedicated secret, can't be replayed as a cookie); room = institutionId from the VERIFIED token, never client input |
 | Razorpay webhook is platform-level + read-only | Razorpay calls one URL; tenant recovered from payload `notes`. Mounted pre-json with `express.raw` so HMAC sees exact bytes; writes only the RazorpayWebhookEvent reconciliation feed, never the Payment ledger (app tracks money, doesn't route it) |
+| Pin `@next/swc-win32-x64-msvc@14.2.33` + run panels with `NEXT_IGNORE_INCORRECT_LOCKFILE=1` | 14.2.35 doesn't exist on npm (next@14.2.35 pins swc to 14.2.33); Next's lockfile auto-patch crashed on the missing version. Env var skips the patch entirely. (Windows local-dev fix; Linux deploy uses FI-07 omitted-optionals lockfile) |
+| Start the 5 dev processes independently on Windows, not via `turbo run dev` | turbo aborts ALL tasks if one fails and doesn't reliably pass the env var through; independent `next dev -p <port>` per panel keeps the others alive and gets the lockfile-patch bypass |
+| Dev login creds set via `scripts/dev-credentials.js`, not from seed output | seed's temp passwords are random + printed once to console, lost across sessions; the dev script resets them to known values (Operator@123 / Teacher@123 / Student@123) for QA and grants the owner teacher admin access |

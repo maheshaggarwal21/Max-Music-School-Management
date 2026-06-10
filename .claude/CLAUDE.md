@@ -85,8 +85,40 @@ History of the old split is in `team-division.md` (reference only).
 > `NEXT_PUBLIC_API_URL=http://localhost:4000`; smoke-tested: `/health` ✅, branding (white-label)
 > ✅, unknown-slug 404 ✅, teacher login → cookie + JWT ✅. Seeded: Operator `admin@maxmusic.internal`
 > / TOTP secret `HQWBOILHHMGEO7TA`; demo inst slug `demo-music-school`; owner teacher mobile
-> `9999999999`. Run stack: `npm run dev` from repo root. **Next: open panels in browser (L4
-> browser QA), wire Socket.io client TODO(H3), mailer triggers (L4), then /qa + /ship (L5–L13)**.
+> `9999999999`. Run stack: `npm run dev` from repo root.
+
+> **Deploy + login verification (2026-06-11): ✅ L4 + L7 DONE.** All 5 processes brought up locally
+> and every panel login verified working end-to-end. Specifics: (1) **SWC binary fix** — root
+> `package.json` optionalDependency `@next/swc-win32-x64-msvc` must be `14.2.33` (NOT 14.2.35 — that
+> version does not exist on npm; `next@14.2.35` itself pins the swc binary to 14.2.33). Next's
+> lockfile auto-patch (`patch-incorrect-lockfile.js`) crashed looking up `versions["14.2.35"]` on the
+> swc pkg. Fix = pin 14.2.33 + run every `next dev` with env `NEXT_IGNORE_INCORRECT_LOCKFILE=1`.
+> (2) **Local run procedure (Windows):** do NOT use `npm run dev` (turbo) — turbo aborts ALL panels
+> if one fails and doesn't reliably pass the env var. Start the 5 processes independently: API =
+> `cd apps/api && npm run dev` (port 4000); each panel = `cd apps/<panel> && NEXT_IGNORE_INCORRECT_LOCKFILE=1 npx next dev -p <port>` (3000/3001/3002/3003). PowerShell is unavailable on this box — use Bash.
+> (3) **Dev credentials set + verified** via `scripts/dev-credentials.js` (resets known passwords on
+> the seeded accounts, grants the owner-teacher `panelAccess:['teacher','admin']`, creates one active
+> demo student) and `scripts/verify-logins.js` (hits the live API; all 4 logins PASS incl. a live TOTP
+> code for operator 2FA). Working creds: OPERATOR `admin@maxmusic.internal` / `Operator@123` + TOTP
+> `HQWBOILHHMGEO7TA`; ADMIN (email) `teacher@demo.internal` / `Teacher@123`; TEACHER (mobile)
+> `9999999999` / `Teacher@123`; STUDENT (mobile) `8888888888` / `Student@123`. (4) **Browser-verified**
+> via gstack `/browse`: operator login + 6-digit TOTP 2FA → `/dashboard` works; all 3 institution login
+> pages render the institution brand "Demo Music School" only (zero "Max Music"/"maxmusic" at runtime).
+
+> **Full gstack pipeline re-run (2026-06-11): ✅ all 6 prescribed runs PASS.** Ran in plan order:
+> `/plan-eng-review` (18 models), `/cso` (middleware), `/review` (9 operator controllers), `/cso`
+> (14 institution controllers), `/qa` ×2 (operator + institution panels, browser). **Isolation, audit,
+> white-label, secret-leakage, PBAC, 2FA all CLEAN.** `/ship` intentionally HELD (user decision — nothing
+> pushed, no code changed). **Two real P2 findings remain open** (see `AUDIT.md §6` + memory
+> `project_gstack_review_findings`): (a) **DayPattern** `models/DayPattern.js:38` `index({institutionId,days},{unique})`
+> is a MULTIKEY unique index (days is an array) → two patterns sharing any one day collide on E11000;
+> intent is unique day-SET, fix with a derived sorted `daysKey` + unique `{institutionId,daysKey}`.
+> (b) **Input hydration** `packages/ui/src/components/form/input.tsx:15` uses a module-level counter
+> (`mm-input-${++inputAutoId}`) that diverges server (process-singleton) vs client → React hydration
+> mismatch on EVERY form across all 4 panels; fix with React 18 `useId()`. Lower: P3 ClassSession may
+> lack `{institutionId,targetDate}` index; INFO god-token path doesn't re-check `operator.tokenVersion`
+> (15-min window); P3 `@maxmusic` npm scope appears in client bundle module paths (not the brand, not
+> rendered). **Next: fix the 2 P2s, then /qa full 3-scenario E2E (L8), then /ship + VPS deploy (L9–L13).**
 
 **H1 + H2 complete** — scaffold + 16 models + `packages/types` ready. **P1-R /plan-eng-review ✅** (5 model fixes). **P2-R /cso ✅** — 5 checkpoint Qs clean; .gitignore + lockfile + nodemailer@8 + node-cron@4 fixed. **Phase 3 (Operator APIs) ✅** — 9 controllers + 29 routes behind `operatorAuth`. **P3-R /review ✅** — 5 fixes (existingTeacher isolation guard, grant/revoke idempotency = no mass-logout, impersonate targetUserId required, audit accuracy). **Phase 4 (Institution APIs) ✅** — 10 controllers + 46 routes under `/api/inst/:slug/*`; every login JWT embeds `instVersion`+`userVersion`; brandingPublic-only (white-label). **P4-R /cso ✅** — 1 HIGH fixed (`config/refGuard.studentRefsValid` rejects cross-institution teacher/batch/instrument refs in student create/patch + request approve — they leaked foreign labels via populate); other 4 checkpoint Qs clean. **BACKEND COMPLETE (Phases 0-4).** **Frontend integration (current session) ✅** — Dev B's 4-panel frontend merged (PR #1). Dev A pass over it: (1) **H2 type migration** — all 4 apps now import the shared contract (`ApiResponse`/`Paginated`/`BrandingPublic` + enums) from `@maxmusic/types` instead of local mirrors (drift eliminated); (2) **`[slug]` routing fix** — the 3 institution panels were flat route-groups (`/dashboard`) that 404 behind nginx; restructured to real `app/[slug]/<panel>/(auth|dashboard)/*` with slug-aware nav, validated by `next build` ×4; (3) **multi-tenant slug fixes** — 401-redirect now `/<slug>/<panel>/login` (was hardcoded `/login`), teacher panel now derives slug from the URL (was a build-time `NEXT_PUBLIC_INSTITUTION_SLUG` env var = one-slug-per-build); (4) **new public `GET /api/inst/:slug/branding`** endpoint (controller + route + CONTRACTS) wired into all 3 login pages — clears the teacher TODO(H5) + student BLOCKED notes. **Phase 7 backend (current session) ✅** — (1) **Socket.io** (`config/socket.js`) shares the HTTP server, rooms keyed by institutionId; auth via a short-lived `JWT_SECRET_SOCKET` token minted by `GET /:slug/{admin,teacher}/realtime-token` (panel cookies are path-scoped so they can't reach `/socket.io`); room derives from the VERIFIED token only; `emitToInstitution` (already called by teacher `markAttendance`) now live → unblocks teacher `TODO(H3)` backend-side. (2) **Daily cron** (`config/cron.js`, 00:05 `CRON_TZ`) advances `active_soon→active`, expires validity→inactive (both audited per-student as the `system` actor), and flags overdue rent. (3) **Razorpay webhook** (`POST /api/webhooks/razorpay`, `WebhookController`) mounted pre-json with `express.raw`; timing-safe HMAC verify (fails closed), idempotent by paymentId+eventType, tenant from payload `notes`; read-only RazorpayWebhookEvent feed only. (4) **Branded mailer** (`config/mailer.js`) lazy transport, From-name = institution `branding.schoolName` (never "Max Music"), fails soft. All smoke-tested. Next: H4/H5 live wiring (`NEXT_PUBLIC_API_URL` + `/qa`); Dev B wires `TODO(H3)` client to realtime-token + Socket.io; then Phase 8 (QA + deploy).
 
@@ -272,19 +304,21 @@ Phase 3 — Operator APIs            ✅ DONE  [A only]  (P3-R /review ✅)
 Phase 4 — Institution APIs         ✅ DONE  [A only]  (P4-R /cso ✅) — BACKEND COMPLETE
 Phase 5 — Operator panel frontend       ✅ built (+ Slug Requests queue)
 Phase 6 — Institution panels frontend   ✅ built ([slug] routing) + admin panel RENOVATED (PR #2)
-Phase 7 — Payments · cron · emails · Socket.io   ✅ backend DONE  ← mailer triggers unwired (L4)
+Phase 7 — Payments · cron · emails · Socket.io   ✅ backend DONE (mailer triggers wired — P7-04)
 Full audit (2026-06-10)                  ✅ PASS — see AUDIT.md (no errors; tsbuildinfo untracked)
+gstack pipeline re-run (2026-06-11)      ✅ all 6 PASS — eng-review, cso×2, review, qa×2; 2 open P2s (AUDIT.md §6)
 Phase 8 — Finish: live wiring + QA + deploy
   L1 env (.env, 4×.env.local)            ✅ DONE (2026-06-10)
   L2 CORS + dotenv root-path fix         ✅ DONE (2026-06-10) — server.js
   L3 seed fixes + smoke tests            ✅ DONE (2026-06-10) — seed.js
-  L4 browser QA all 4 panels             ← NEXT
-  L5 Socket.io client TODO(H3)           ← pending (realtime-token → socket rooms)
-  L6 mailer trigger wiring               ← pending (enrollment approve, fee reminder)
-  L7 operator 2FA live check             ← pending (TOTP enrol flow in browser)
-  L8 /qa E2E (3 onboarding scenarios)    ← pending
-  L9 /ship                               ← pending
-  L10–L13 nginx/TLS/PM2/VPS deploy       ← pending
+  L4 browser QA all 4 panels             ✅ DONE (2026-06-11) — SWC fix; all 4 logins verified (API+browser)
+  L5 Socket.io client TODO(H3)           ✅ DONE — teacher lib/socket.ts (realtime-token → socket rooms)
+  L6 mailer trigger wiring               ✅ DONE — P7-04 (owner/teacher/student welcome + grant-admin)
+  L7 operator 2FA live check             ✅ DONE (2026-06-11) — TOTP 2FA login → dashboard in browser
+  L8 /qa E2E (3 onboarding scenarios)    ◑ PARTIAL — /qa ran (login+white-label verified); full 3-scenario E2E pending
+  L9 /ship                               ⏸ HELD (user decision — not pushed)
+  L10–L13 nginx/TLS/PM2/VPS deploy       ← pending (local deploy done; VPS not)
+  OPEN BUGS                              2 × P2 — DayPattern multikey index · Input useId hydration (AUDIT.md §6)
 ```
 
 Handoffs: H1 ✅ · H2 ✅ (packages/types exported — Dev B can wire typed responses) · H3 ✅ (Phase 2 done) · H4 ✅ (Phase 3 operator API contracts in CONTRACTS.md) · H5 ✅ (Phase 4 institution API contracts in CONTRACTS.md — Dev B can build all 4 panels) · H6 after Phase 7.

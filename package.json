@@ -16,10 +16,11 @@
     "turbo": "^2.0.0"
   },
   "optionalDependencies": {
-    "@next/swc-win32-x64-msvc": "^14.2.33",
+    "@next/swc-win32-x64-msvc": "14.2.33",
     "@tailwindcss/oxide-win32-x64-msvc": "^4.3.0",
     "lightningcss-win32-x64-msvc": "^1.32.0"
   },
+  "packageManager": "npm@11.1.0",
   "engines": {
     "node": ">=20.0.0"
   }
