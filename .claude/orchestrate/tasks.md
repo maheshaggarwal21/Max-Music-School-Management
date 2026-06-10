@@ -8,11 +8,11 @@
 ---
 
 ## CURRENT SESSION GOAL
-**Role:** Dev A — backend · infra · security (see `team-division.md` for full split)
-**Phase:** Backend (Phases 0-4) COMPLETE. **Frontend integration pass DONE this session** — Dev B's 4-panel frontend merged (PR #1); Dev A integration fixes: H2 type migration, `[slug]` routing fix, multi-tenant slug fixes, public branding endpoint — all `next build`-validated ×4. See "PHASE 5/6 — FRONTEND INTEGRATION (Dev A pass)" below.
-**Phase 7 backend DONE this session** — Socket.io (live attendance, rooms by institutionId), daily cron (joinStatus/validity/rent), Razorpay webhook (HMAC-verified, idempotent), branded mailer. All modules smoke-tested (load + sign/verify + emit + cron schedule under real libs).
-**Next action:** H4/H5 live wiring (set `NEXT_PUBLIC_API_URL`, smoke-test against running API + Mongo, run `/qa`); wire teacher live-attendance `TODO(H3)` to `GET /:slug/teacher/realtime-token` + Socket.io client (Dev B); optionally wire mailer triggers (grant-admin notice). Then Phase 8 (QA + deploy).
-**Blocking dependency:** H4/H5 needs a running API + Mongo. Teacher `TODO(H3)` frontend now UN-blocked (backend realtime endpoint live).
+**Team:** Dev A / Dev B split **DISSOLVED** — one team finishing the whole project (backend + frontend + infra + QA + deploy all in scope). Old split: `team-division.md` (reference only).
+**State:** Backend (Phases 0–4 + 7) COMPLETE. All 4 panels built; **admin panel renovated + supporting APIs merged (PR #2, `0150b90`)**.
+**Full end-to-end audit DONE (2026-06-10) — ✅ PASS.** See `../AUDIT.md`. Audited isolation, refGuard, audit-logging, white-label, token storage, slug immutability, types/build across the entire codebase. **No errors found.** Only fix: untracked two stray `*.tsbuildinfo` artifacts. All 4 panels `tsc` clean; admin `next build` clean; API route tree + exports + strings verified.
+**Next action:** finish the project — `AUDIT.md §3` roadmap **L1–L13**. Start with **live integration (L1)**: set `NEXT_PUBLIC_API_URL`, stand up Mongo, run `scripts/seed.js`, exercise panels against the real API (nothing has hit the API in a browser yet — panels default to mock mode). Then teacher socket client (L2), mailer triggers (L4), `/qa` + `/cso` (L7–L9), deploy (L11–L13).
+**Blocking dependency:** live integration + QA need a running API + Mongo (and S3/SMTP/Razorpay creds for L3–L5).
 
 ---
 

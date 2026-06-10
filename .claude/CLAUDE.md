@@ -66,16 +66,17 @@ School        Delhi                          Punjab
 
 ## ACTIVE DEVELOPER ROLE
 
-**We are building as Dev A (backend · infra · security).** Full ownership split: `team-division.md`.
+**The Dev A / Dev B split is DISSOLVED.** Dev B has delivered everything in his lane (all 4
+panels + the admin-renovation supporting APIs, merged via PR #2). We are now **one team
+finishing the whole project** — backend, frontend, infra, QA, and deploy are all in scope.
+History of the old split is in `team-division.md` (reference only).
 
-Dev A owns:
-- `apps/api/**` (Express backend, all models, all controllers, all middleware, all routes)
-- `packages/types/**` (shared interfaces — Dev B reads, never writes)
-- `nginx.conf`, `ecosystem.config.js`, `.env.example`, `scripts/seed.js`
-
-Dev A does NOT touch:
-- `apps/operator-panel/**`, `apps/institution-*-panel/**` (Dev B)
-- `packages/ui/**`, `packages/utils/**` (Dev B)
+> **Full end-to-end audit (2026-06-10): ✅ PASS** — see `AUDIT.md` for the dimension-by-
+> dimension verdict and the **roadmap of what's left (L1–L13)** to finish the project. No
+> isolation/audit/white-label/compile errors were found across the whole codebase; the only
+> fix was untracking two stray `*.tsbuildinfo` build artifacts. The next real work is **live
+> integration (L1–L3)** — nothing has hit the API in a browser yet (panels default to mock
+> mode) — then mailer/QA/deploy.
 
 **H1 + H2 complete** — scaffold + 16 models + `packages/types` ready. **P1-R /plan-eng-review ✅** (5 model fixes). **P2-R /cso ✅** — 5 checkpoint Qs clean; .gitignore + lockfile + nodemailer@8 + node-cron@4 fixed. **Phase 3 (Operator APIs) ✅** — 9 controllers + 29 routes behind `operatorAuth`. **P3-R /review ✅** — 5 fixes (existingTeacher isolation guard, grant/revoke idempotency = no mass-logout, impersonate targetUserId required, audit accuracy). **Phase 4 (Institution APIs) ✅** — 10 controllers + 46 routes under `/api/inst/:slug/*`; every login JWT embeds `instVersion`+`userVersion`; brandingPublic-only (white-label). **P4-R /cso ✅** — 1 HIGH fixed (`config/refGuard.studentRefsValid` rejects cross-institution teacher/batch/instrument refs in student create/patch + request approve — they leaked foreign labels via populate); other 4 checkpoint Qs clean. **BACKEND COMPLETE (Phases 0-4).** **Frontend integration (current session) ✅** — Dev B's 4-panel frontend merged (PR #1). Dev A pass over it: (1) **H2 type migration** — all 4 apps now import the shared contract (`ApiResponse`/`Paginated`/`BrandingPublic` + enums) from `@maxmusic/types` instead of local mirrors (drift eliminated); (2) **`[slug]` routing fix** — the 3 institution panels were flat route-groups (`/dashboard`) that 404 behind nginx; restructured to real `app/[slug]/<panel>/(auth|dashboard)/*` with slug-aware nav, validated by `next build` ×4; (3) **multi-tenant slug fixes** — 401-redirect now `/<slug>/<panel>/login` (was hardcoded `/login`), teacher panel now derives slug from the URL (was a build-time `NEXT_PUBLIC_INSTITUTION_SLUG` env var = one-slug-per-build); (4) **new public `GET /api/inst/:slug/branding`** endpoint (controller + route + CONTRACTS) wired into all 3 login pages — clears the teacher TODO(H5) + student BLOCKED notes. **Phase 7 backend (current session) ✅** — (1) **Socket.io** (`config/socket.js`) shares the HTTP server, rooms keyed by institutionId; auth via a short-lived `JWT_SECRET_SOCKET` token minted by `GET /:slug/{admin,teacher}/realtime-token` (panel cookies are path-scoped so they can't reach `/socket.io`); room derives from the VERIFIED token only; `emitToInstitution` (already called by teacher `markAttendance`) now live → unblocks teacher `TODO(H3)` backend-side. (2) **Daily cron** (`config/cron.js`, 00:05 `CRON_TZ`) advances `active_soon→active`, expires validity→inactive (both audited per-student as the `system` actor), and flags overdue rent. (3) **Razorpay webhook** (`POST /api/webhooks/razorpay`, `WebhookController`) mounted pre-json with `express.raw`; timing-safe HMAC verify (fails closed), idempotent by paymentId+eventType, tenant from payload `notes`; read-only RazorpayWebhookEvent feed only. (4) **Branded mailer** (`config/mailer.js`) lazy transport, From-name = institution `branding.schoolName` (never "Max Music"), fails soft. All smoke-tested. Next: H4/H5 live wiring (`NEXT_PUBLIC_API_URL` + `/qa`); Dev B wires `TODO(H3)` client to realtime-token + Socket.io; then Phase 8 (QA + deploy).
 
@@ -259,10 +260,11 @@ Phase 1 — Mongoose models + types  ✅ DONE  [A only]  (P1-R /plan-eng-review 
 Phase 2 — Auth + PBAC middleware   ✅ DONE  [A only]  (P2-R /cso ✅)
 Phase 3 — Operator APIs            ✅ DONE  [A only]  (P3-R /review ✅)
 Phase 4 — Institution APIs         ✅ DONE  [A only]  (P4-R /cso ✅) — BACKEND COMPLETE
-Phase 5 — Operator panel frontend       ✅ built (Dev B)  ← /qa pending
-Phase 6 — Institution panels frontend   ✅ built (Dev B, [slug] routing fixed)  ← /qa + leak check pending
-Phase 7 — Payments · cron · emails · Socket.io   ✅ backend DONE [A]  ← [B: wire TODO(H3) client]
-Phase 8 — QA + security audit + deploy  ← NEXT  [A: isolation + /cso + deploy]  [B: bundle leak check + /qa]
+Phase 5 — Operator panel frontend       ✅ built (+ Slug Requests queue)
+Phase 6 — Institution panels frontend   ✅ built ([slug] routing) + admin panel RENOVATED (PR #2)
+Phase 7 — Payments · cron · emails · Socket.io   ✅ backend DONE  ← mailer triggers unwired (L4)
+Full audit (2026-06-10)                  ✅ PASS — see AUDIT.md (no errors; tsbuildinfo untracked)
+Phase 8 — Finish: live wiring + QA + deploy  ← NEXT — see AUDIT.md §3 roadmap L1–L13
 ```
 
 Handoffs: H1 ✅ · H2 ✅ (packages/types exported — Dev B can wire typed responses) · H3 ✅ (Phase 2 done) · H4 ✅ (Phase 3 operator API contracts in CONTRACTS.md) · H5 ✅ (Phase 4 institution API contracts in CONTRACTS.md — Dev B can build all 4 panels) · H6 after Phase 7.
