@@ -28,7 +28,8 @@ import {
   ShinyText,
   cn,
 } from "@maxmusic/ui";
-import { api, mockable, teacherPath } from "@/lib/api";
+import { api, mockable, teacherPath, MOCKS_ENABLED } from "@/lib/api";
+import { useSocket } from "@/lib/socket";
 import {
   MOCK_BATCHES_RESPONSE,
   MOCK_MARK_OK,
@@ -73,6 +74,11 @@ function AttendanceContent() {
   const [marks, setMarks] = useState<Record<string, AttendanceCellStatus>>({});
   const [saving, setSaving] = useState(false);
 
+  // Live attendance sync — subscribes to the institution's Socket.io room.
+  // When another teacher or the admin marks attendance for the same batch+date,
+  // reload marks from the server so the sheet stays current.
+  const { on: socketOn } = useSocket({ enabled: !MOCKS_ENABLED });
+
   // Load my batches; default selection = first batch meeting today, else first.
   useEffect(() => {
     let cancelled = false;
@@ -93,6 +99,24 @@ function AttendanceContent() {
       cancelled = true;
     };
   }, []);
+
+  // Listen for live attendance updates from the server (admin corrections or
+  // other teacher marks on the same batch). Re-fetch marks from the server
+  // when the event targets the currently-viewed batch+date.
+  useEffect(() => {
+    return socketOn<{ batchId: string; date: string }>(
+      "attendance:marked",
+      ({ batchId: evtBatch, date: evtDate }) => {
+        if (!batchId || evtBatch !== batchId || evtDate !== date) return;
+        api
+          .get<ApiResponse<AttendanceDay>>(
+            teacherPath(`/attendance?batchId=${batchId}&date=${date}`)
+          )
+          .then((res) => setMarks(res.data?.marks ?? {}))
+          .catch(() => {});
+      }
+    );
+  }, [batchId, date, socketOn]);
 
   // Load roster + existing marks whenever batch/date changes.
   useEffect(() => {
@@ -202,8 +226,8 @@ function AttendanceContent() {
         MOCK_MARK_OK,
         500
       );
-      // TODO(H3): socket emit — live attendance sync to room inst:{institutionId}
-      // arrives at Handoff H3 (Socket.io). No socket dependency before then.
+      // The server emits `attendance:marked` to the institution room after saving.
+      // Our useSocket hook listens and refreshes the grid for all connected clients.
       toast.success(`Attendance saved · ${payloadMarks.length} students`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not save attendance");

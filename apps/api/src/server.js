@@ -1,6 +1,12 @@
 'use strict';
 
+// The single source of truth for env is the repo-root .env. Load a local
+// apps/api/.env first (developer override, if any), then fill the rest from the
+// repo root by absolute path — so env is found whether the process starts from
+// apps/api (nodemon/turbo dev) or the repo root (PM2 prod). dotenv never
+// overrides an already-set var, so the local file wins where both define a key.
 require('dotenv').config();
+require('dotenv').config({ path: require('path').resolve(__dirname, '../../../.env') });
 const http = require('http');
 const express = require('express');
 const cors = require('cors');

@@ -13,6 +13,8 @@ const { issueGodCookie } = require('../../middleware/impersonation');
 const { invalidateInstitution } = require('../../middleware/resolveInstitution');
 const { PANEL_EXPIRY } = require('../../config/jwt');
 const { ok, created, badRequest, notFound, paginated } = require('../../config/helper');
+const { sendMail } = require('../../config/mailer');
+const { teacherWelcome, grantAdminNotice } = require('../../config/emailTemplates');
 const S = require('../../config/strings');
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -182,7 +184,21 @@ exports.create = async (req, res, next) => {
     });
 
     const item = await oneListItem(institution);
-    // ownerTempPassword surfaced ONCE for the operator to relay (Phase 7 will email it instead).
+
+    // Email the owner their temp password (fail-soft — never block the response).
+    if (ownerTempPassword && ownerTeacher.email) {
+      const slug = institution.slug;
+      const panelUrl = `${process.env.PLATFORM_DOMAIN_URL || ''}/${slug}/teacher`;
+      const tpl = teacherWelcome({
+        schoolName:   institution.branding.schoolName,
+        primaryColor: institution.branding.primaryColor,
+        teacherName:  ownerTeacher.name,
+        panelUrl,
+        tempPassword: ownerTempPassword,
+      });
+      sendMail({ to: ownerTeacher.email, ...tpl, institution }).catch(() => {});
+    }
+
     return created(res, S.INST_CREATED, { institution: item, ownerTempPassword });
   } catch (err) {
     // Roll back the orphan institution if owner provisioning failed mid-way.
@@ -331,6 +347,18 @@ exports.grantAdmin = async (req, res, next) => {
       changes:     [{ field: 'mode', from: prevMode, to: 'autonomous' }],
       ip:          req.ip,
     });
+
+    // Notify the owner that admin access has been granted (fail-soft).
+    if (owner.email) {
+      const adminPanelUrl = `${process.env.PLATFORM_DOMAIN_URL || ''}/${inst.slug}/admin`;
+      const tpl = grantAdminNotice({
+        schoolName:   inst.branding.schoolName,
+        primaryColor: inst.branding.primaryColor,
+        teacherName:  owner.name,
+        adminPanelUrl,
+      });
+      sendMail({ to: owner.email, ...tpl, institution: inst }).catch(() => {});
+    }
 
     return ok(res, S.INST_GRANT_ADMIN, { institution: await oneListItem(inst) });
   } catch (err) {
