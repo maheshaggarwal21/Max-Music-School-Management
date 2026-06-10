@@ -12,6 +12,11 @@ const OperatorSchema = new mongoose.Schema(
     twoFactorEnabled:  { type: Boolean, default: true },
     tokenVersion:      { type: Number, default: 0 },
     lastLoginAt:       { type: Date },
+    // Platform default rent (paise) — prefilled when creating an autonomous institution.
+    defaultRent: {
+      amount:       { type: Number, default: 2500000 },
+      billingCycle: { type: String, enum: ['monthly'], default: 'monthly' },
+    },
   },
   { timestamps: true }
 );

@@ -303,7 +303,8 @@ export interface OperatorSettingsData {
   profile: { name: string; email: string };
   twoFactorEnabled: boolean;
   defaultRent: { amount: number; billingCycle: "monthly" };
-  instruments: InstrumentMasterItem[];
+  /** Mock-mode only — live instruments are per-institution, not a platform master list. */
+  instruments?: InstrumentMasterItem[];
 }
 
 // ── Slug change requests (GET /api/operator/slug-requests) ───────────────────

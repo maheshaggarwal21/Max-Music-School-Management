@@ -12,20 +12,30 @@ const S = require('../../config/strings');
 // (auditLog requires an institutionId; it is for institution-scoped writes only).
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Single settings payload shape consumed by the operator Settings page.
+function settingsPayload(op) {
+  return {
+    profile: {
+      _id:   String(op._id),
+      name:  op.name,
+      email: op.email,
+      role:  'superadmin',
+      lastLoginAt: op.lastLoginAt || null,
+    },
+    twoFactorEnabled: op.twoFactorEnabled,
+    defaultRent: {
+      amount:       (op.defaultRent && op.defaultRent.amount) || 2500000,
+      billingCycle: (op.defaultRent && op.defaultRent.billingCycle) || 'monthly',
+    },
+    // No platform-level instrument master — instruments are per-institution.
+  };
+}
+
 exports.getProfile = async (req, res, next) => {
   try {
     const op = await Operator.findById(req.operator._id).lean();
     if (!op) return notFound(res, S.NOT_FOUND);
-    return ok(res, S.OK, {
-      profile: {
-        _id:   String(op._id),
-        name:  op.name,
-        email: op.email,
-        role:  'superadmin',
-        twoFactorEnabled: op.twoFactorEnabled,
-        lastLoginAt:      op.lastLoginAt || null,
-      },
-    });
+    return ok(res, S.OK, settingsPayload(op));
   } catch (err) {
     next(err);
   }
@@ -33,10 +43,19 @@ exports.getProfile = async (req, res, next) => {
 
 exports.updateProfile = async (req, res, next) => {
   try {
-    const { name, email } = req.body || {};
+    const body = req.body || {};
+    // The settings page PATCHes { profile: { name, email }, defaultRent, … };
+    // also accept the flat { name, email } shape.
+    const { name, email } = body.profile || body;
+    const { defaultRent } = body;
+
     const update = {};
     if (typeof name === 'string' && name.trim()) update.name = name.trim();
     if (typeof email === 'string' && email.trim()) update.email = email.toLowerCase().trim();
+    if (defaultRent && Number.isFinite(defaultRent.amount) && defaultRent.amount > 0) {
+      update['defaultRent.amount'] = Math.round(defaultRent.amount);
+      update['defaultRent.billingCycle'] = 'monthly';
+    }
     if (!Object.keys(update).length) return badRequest(res, S.VALIDATION_FAILED);
 
     try {
@@ -47,9 +66,7 @@ exports.updateProfile = async (req, res, next) => {
     }
 
     const op = await Operator.findById(req.operator._id).lean();
-    return ok(res, S.UPDATED, {
-      profile: { _id: String(op._id), name: op.name, email: op.email, role: 'superadmin', twoFactorEnabled: op.twoFactorEnabled },
-    });
+    return ok(res, S.UPDATED, settingsPayload(op));
   } catch (err) {
     next(err);
   }

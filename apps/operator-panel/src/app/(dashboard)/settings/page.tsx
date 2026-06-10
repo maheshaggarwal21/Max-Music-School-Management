@@ -10,7 +10,6 @@ import {
   Plus,
   QrCode,
   ShieldCheck,
-  ShieldOff,
   UserRound,
   X,
 } from "lucide-react";
@@ -24,18 +23,11 @@ import {
   Select,
 } from "@maxmusic/ui";
 import { formatCurrency } from "@maxmusic/utils";
-import { OtpInput } from "@/components/otp-input";
 import { PageHeader } from "@/components/page-header";
 import { Skeleton } from "@/components/skeleton";
 import { Tag } from "@/components/tag";
 import { api, mockable } from "@/lib/api";
-import {
-  mock2faDisabled,
-  mock2faEnableStart,
-  mock2faVerified,
-  mockSettings,
-  mockSettingsSaved,
-} from "@/lib/mocks";
+import { mock2faEnableStart, mockSettings, mockSettingsSaved } from "@/lib/mocks";
 import type { ApiResponse, OperatorSettingsData } from "@/lib/types";
 
 /** Deterministic mock QR placeholder — a pseudo-random 21×21 module grid. */
@@ -85,11 +77,11 @@ export default function SettingsPage() {
   const [email, setEmail] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
 
-  // 2fa
+  // 2fa — backend enrolls in one step (POST /settings/2fa {action:"enable"})
+  // and refuses disable: TOTP is mandatory for operators.
   const [enrolling, setEnrolling] = useState(false);
+  const [qrImage, setQrImage] = useState<string | null>(null);
   const [qrSecret, setQrSecret] = useState<string | null>(null);
-  const [verifyCode, setVerifyCode] = useState("");
-  const [verifying, setVerifying] = useState(false);
 
   // defaults
   const [rentRupees, setRentRupees] = useState("");
@@ -110,7 +102,7 @@ export default function SettingsPage() {
         setSettings(res.data);
         setName(res.data.profile.name);
         setEmail(res.data.profile.email);
-        setRentRupees(String(Math.round(res.data.defaultRent.amount / 100)));
+        setRentRupees(String(Math.round((res.data.defaultRent?.amount ?? 2500000) / 100)));
       })
       .catch((err) => toast.error(err instanceof Error ? err.message : "Failed to load settings"))
       .finally(() => alive && setLoading(false));
@@ -152,13 +144,16 @@ export default function SettingsPage() {
     try {
       const res = await mockable(
         () =>
-          api.post<ApiResponse<{ otpauthUrl: string; secret: string }>>(
-            "/api/operator/settings/2fa/enable",
-            {}
-          ),
+          api.post<
+            ApiResponse<{ twoFactor?: { qrDataUrl: string; secret: string }; secret?: string }>
+          >("/api/operator/settings/2fa", { action: "enable" }),
         mock2faEnableStart()
       );
-      if (res.data) setQrSecret(res.data.secret);
+      const d = res.data;
+      const secret = d?.twoFactor?.secret ?? d?.secret ?? null;
+      if (!secret) throw new Error("No secret returned");
+      setQrImage(d?.twoFactor?.qrDataUrl ?? null);
+      setQrSecret(secret);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not start 2FA setup");
     } finally {
@@ -166,46 +161,12 @@ export default function SettingsPage() {
     }
   };
 
-  const verifyEnroll = async (code: string) => {
-    if (!settings || verifying) return;
-    setVerifying(true);
-    try {
-      await mockable(
-        () =>
-          api.post<ApiResponse<{ twoFactorEnabled: boolean }>>(
-            "/api/operator/settings/2fa/verify",
-            { code }
-          ),
-        mock2faVerified()
-      );
-      setSettings({ ...settings, twoFactorEnabled: true });
-      setQrSecret(null);
-      setVerifyCode("");
-      toast.success("Two-factor authentication enabled");
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Invalid code");
-      setVerifyCode("");
-    } finally {
-      setVerifying(false);
-    }
-  };
-
-  const disable2fa = async () => {
+  const finishEnroll = () => {
     if (!settings) return;
-    try {
-      await mockable(
-        () =>
-          api.post<ApiResponse<{ twoFactorEnabled: boolean }>>(
-            "/api/operator/settings/2fa/disable",
-            {}
-          ),
-        mock2faDisabled()
-      );
-      setSettings({ ...settings, twoFactorEnabled: false });
-      toast.success("Two-factor authentication disabled");
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to disable 2FA");
-    }
+    setSettings({ ...settings, twoFactorEnabled: true });
+    setQrImage(null);
+    setQrSecret(null);
+    toast.success("Two-factor authentication enrolled — use the new secret from now on");
   };
 
   const saveDefaults = async () => {
@@ -232,7 +193,7 @@ export default function SettingsPage() {
   };
 
   const addInstrument = async () => {
-    if (!settings) return;
+    if (!settings?.instruments) return;
     const label = newInstrument.trim();
     if (!label) return;
     if (settings.instruments.some((i) => i.name.toLowerCase() === label.toLowerCase())) {
@@ -255,7 +216,7 @@ export default function SettingsPage() {
   };
 
   const removeInstrument = async (id: string) => {
-    if (!settings) return;
+    if (!settings?.instruments) return;
     const target = settings.instruments.find((i) => i._id === id);
     const next: OperatorSettingsData = {
       ...settings,
@@ -332,19 +293,19 @@ export default function SettingsPage() {
             </div>
 
             <div className="mt-5">
-              {settings.twoFactorEnabled ? (
-                <Button
-                  variant="outline"
-                  className="rounded-full text-destructive hover:bg-destructive/10"
-                  onClick={disable2fa}
-                >
-                  <ShieldOff className="h-4 w-4" />
-                  Disable 2FA
-                </Button>
-              ) : qrSecret ? (
+              {qrSecret ? (
                 <div className="space-y-4">
                   <div className="flex flex-wrap items-center gap-5">
-                    <MockQr seed={qrSecret} />
+                    {qrImage ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={qrImage}
+                        alt="TOTP enrolment QR code"
+                        className="w-40 rounded-lg border border-border bg-white p-2"
+                      />
+                    ) : (
+                      <MockQr seed={qrSecret} />
+                    )}
                     <div className="space-y-2 text-xs text-muted-foreground">
                       <p className="flex items-center gap-1.5 font-medium text-foreground">
                         <QrCode className="h-3.5 w-3.5 text-brand" /> Scan with your authenticator
@@ -353,24 +314,31 @@ export default function SettingsPage() {
                       <p className="rounded-md bg-muted px-2.5 py-1.5 font-mono text-foreground">
                         {qrSecret}
                       </p>
+                      <p className="text-amber-600 dark:text-amber-400">
+                        The previous secret stops working immediately.
+                      </p>
                     </div>
                   </div>
-                  <div>
-                    <p className="mb-2 text-xs font-medium">Enter the 6-digit code to confirm</p>
-                    <OtpInput
-                      value={verifyCode}
-                      onChange={setVerifyCode}
-                      onComplete={verifyEnroll}
-                      disabled={verifying}
-                      className="justify-start"
-                    />
-                  </div>
+                  <Button variant="brand" className="rounded-full" onClick={finishEnroll}>
+                    <ShieldCheck className="h-4 w-4" />
+                    I&apos;ve scanned it — done
+                  </Button>
                 </div>
               ) : (
-                <Button variant="brand" className="rounded-full" onClick={startEnroll} disabled={enrolling}>
-                  {enrolling ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
-                  Enable 2FA
-                </Button>
+                <div className="space-y-3">
+                  <Button
+                    variant={settings.twoFactorEnabled ? "outline" : "brand"}
+                    className="rounded-full"
+                    onClick={startEnroll}
+                    disabled={enrolling}
+                  >
+                    {enrolling ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+                    {settings.twoFactorEnabled ? "Re-enroll 2FA (new secret)" : "Enable 2FA"}
+                  </Button>
+                  <p className="text-xs text-muted-foreground">
+                    2FA is mandatory for operator accounts and cannot be disabled.
+                  </p>
+                </div>
               )}
             </div>
           </div>
@@ -414,7 +382,8 @@ export default function SettingsPage() {
           </div>
         </BlurFade>
 
-        {/* Instruments */}
+        {/* Instruments — mock-mode only; live instruments are per-institution */}
+        {settings.instruments && (
         <BlurFade delay={0.25}>
           <div className="relative overflow-hidden rounded-xl border border-border bg-card p-6 shadow-sm">
             <BorderBeam size={50} duration={10} delay={6} />
@@ -470,6 +439,7 @@ export default function SettingsPage() {
             </div>
           </div>
         </BlurFade>
+        )}
       </div>
     </div>
   );
