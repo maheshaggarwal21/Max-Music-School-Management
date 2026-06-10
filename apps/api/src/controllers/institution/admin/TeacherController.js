@@ -1,7 +1,8 @@
 'use strict';
 
-const Teacher = require('../../../models/Teacher');
-const Batch   = require('../../../models/Batch');
+const Teacher  = require('../../../models/Teacher');
+const Batch    = require('../../../models/Batch');
+const AuditLog = require('../../../models/AuditLog');
 const { nextDisplayId } = require('../../../config/specialFunctions');
 const { hash, randomTempPassword } = require('../../../config/password');
 const { auditLog, actorFromReq, diff } = require('../../../config/auditLog');
@@ -145,6 +146,39 @@ exports.patch = async (req, res, next) => {
     });
 
     return ok(res, S.TEACHER_UPDATED, { teacher: { _id: String(teacher._id) } });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.activityFeed = async (req, res, next) => {
+  try {
+    const inst = req.institution._id;
+    // Confirm the teacher belongs to this institution before exposing its feed.
+    const exists = await Teacher.exists({ _id: req.params.id, institutionId: inst });
+    if (!exists) return notFound(res, S.TEACHER_NOT_FOUND);
+
+    const page  = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 50));
+
+    const result = await AuditLog.paginate(
+      { institutionId: inst, entityType: 'Teacher', entityId: String(req.params.id) },
+      { page, limit, sort: { createdAt: -1 }, lean: true }
+    );
+
+    const items = result.docs.map(a => ({
+      _id: String(a._id),
+      actorRole: a.actorRole,
+      actorName: a.actorName,
+      impersonatedBy: a.impersonatedBy ? String(a.impersonatedBy) : null,
+      action: a.action,
+      entityType: a.entityType,
+      entityId: a.entityId,
+      entityLabel: a.entityLabel || null,
+      changes: a.changes || [],
+      createdAt: a.createdAt,
+    }));
+    return ok(res, S.OK, paginated(items, result));
   } catch (err) {
     next(err);
   }

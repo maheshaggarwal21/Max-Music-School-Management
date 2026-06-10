@@ -7,11 +7,14 @@ export function Toggle({
   onChange,
   label,
   disabled = false,
+  tone = "brand",
 }: {
   checked: boolean;
   onChange: (next: boolean) => void;
   label?: string;
   disabled?: boolean;
+  /** "success" renders a green ON state (attendance present/absent). */
+  tone?: "brand" | "success";
 }) {
   return (
     <button
@@ -23,7 +26,7 @@ export function Toggle({
       onClick={() => onChange(!checked)}
       className={cn(
         "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-50",
-        checked ? "bg-brand" : "bg-muted-foreground/30"
+        checked ? (tone === "success" ? "bg-emerald-500" : "bg-brand") : "bg-muted-foreground/30"
       )}
     >
       <span

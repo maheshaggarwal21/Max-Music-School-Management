@@ -4,6 +4,7 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import {
+  ArrowLeftRight,
   Building2,
   GraduationCap,
   History,
@@ -28,6 +29,7 @@ const SECTIONS: SidebarSection[] = [
     label: "Platform",
     items: [
       { label: "Institutions", href: "/institutions", icon: Building2 },
+      { label: "Slug Requests", href: "/slug-requests", icon: ArrowLeftRight },
       { label: "Students", href: "/students", icon: GraduationCap },
       { label: "Teachers", href: "/teachers", icon: Users },
     ],

@@ -9,9 +9,10 @@ import {
 import { Table, type DataTableColumn } from "@/components/table";
 import { formatCurrency, formatPhone, isValidEmail, isValidPhone } from "@maxmusic/utils";
 import { api, adminPath, mockable } from "@/lib/api";
-import { MOCK_TEACHERS, ok, paginate } from "@/lib/mocks";
-import type { ApiResponse, Paginated, TeacherRow } from "@/lib/types";
+import { MOCK_TEACHERS, localAuditEntry, mockTeacherActivity, ok, paginate } from "@/lib/mocks";
+import type { ApiResponse, AuditLogItem, Paginated, TeacherRow } from "@/lib/types";
 import { PageShell } from "@/components/page-shell";
+import { ActivityRail } from "@/components/activity-rail";
 import { EmptyState } from "@/components/empty-state";
 import { TableSkeleton } from "@/components/skeletons";
 
@@ -40,6 +41,26 @@ export default function TeachersPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState<TeacherForm>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
+  const [activity, setActivity] = useState<AuditLogItem[] | null>(null);
+
+  // Per-teacher audit feed — same one-immutable-log pattern as students.
+  useEffect(() => {
+    if (!editing) {
+      setActivity(null);
+      return;
+    }
+    let cancelled = false;
+    mockable(
+      () =>
+        api.get<ApiResponse<Paginated<AuditLogItem>>>(
+          adminPath(`/teachers/${editing._id}/activity`)
+        ),
+      ok(paginate(mockTeacherActivity(editing._id)))
+    ).then((r) => !cancelled && setActivity(r.data?.items ?? []));
+    return () => {
+      cancelled = true;
+    };
+  }, [editing]);
 
   useEffect(() => {
     let cancelled = false;
@@ -100,6 +121,25 @@ export default function TeachersPage() {
           ok(null),
           500
         );
+        // Per-field diffs → instant node in the Recent Activity timeline.
+        const changes: { field: string; from: unknown; to: unknown }[] = [];
+        if (editing.name !== form.name.trim()) changes.push({ field: "name", from: editing.name, to: form.name.trim() });
+        if (editing.mobile !== form.mobile) changes.push({ field: "mobile", from: editing.mobile, to: form.mobile });
+        if (editing.email !== form.email) changes.push({ field: "email", from: editing.email, to: form.email });
+        if (editing.status !== form.status) changes.push({ field: "status", from: editing.status, to: form.status });
+        if (salaryAmount !== undefined) changes.push({ field: "salaryAmount", from: null, to: salaryAmount });
+        if (changes.length) {
+          setActivity((prev) => [
+            localAuditEntry({
+              action: "UPDATE_TEACHER",
+              entityType: "Teacher",
+              entityId: editing._id,
+              entityLabel: `Teacher: ${form.name.trim()}`,
+              changes,
+            }),
+            ...(prev ?? []),
+          ]);
+        }
         setTeachers((prev) =>
           (prev ?? []).map((t) =>
             t._id === editing._id
@@ -107,7 +147,12 @@ export default function TeachersPage() {
               : t
           )
         );
-        toast.success(`${form.name.trim()} updated`);
+        setEditing((prev) =>
+          prev ? { ...prev, name: form.name.trim(), mobile: form.mobile, email: form.email, status: form.status } : prev
+        );
+        toast.success(`${form.name.trim()} updated — change recorded in the activity log`);
+        // Keep the dialog open — the change is instantly visible in the rail.
+        if (changes.length) return;
       } else {
         await mockable(
           () =>
@@ -248,24 +293,26 @@ export default function TeachersPage() {
             hint={search ? "Try a different search." : "Add your first faculty member to start creating batches."}
           />
         ) : (
-          <Table columns={columns} data={visible} />
+          <Table columns={columns} data={visible} onRowClick={openEdit} />
         )}
       </BlurFade>
 
-      {/* Create / edit modal — NO 'admin' panel-access option (operator-only) */}
+      {/* Create / edit modal — NO 'admin' panel-access option (operator-only).
+          Editing = ONE big form with the live activity rail beside it. */}
       <Modal
         open={modalOpen}
         onClose={() => setModalOpen(false)}
+        maxWidthClassName={editing ? "max-w-4xl" : "max-w-lg"}
         title={editing ? `Edit ${editing.name}` : "Add Teacher"}
         subtitle={
           editing
-            ? "Update contact details, salary or status"
+            ? `${editing.displayId} · every change lands in the activity log`
             : "New staff teachers get teacher-panel access only"
         }
         footer={
           <>
             <Button variant="ghost" onClick={() => setModalOpen(false)} disabled={saving}>
-              Cancel
+              {editing ? "Close" : "Cancel"}
             </Button>
             <Button variant="brand" onClick={save} disabled={saving}>
               {saving && <Loader2 className="h-4 w-4 animate-spin" />}
@@ -274,7 +321,8 @@ export default function TeachersPage() {
           </>
         }
       >
-        <div className="flex flex-col gap-3">
+        <div className={cn(editing && "grid gap-6 lg:grid-cols-[1fr_minmax(260px,340px)]")}>
+        <div className={cn("flex flex-col gap-3", editing && "max-h-[58vh] overflow-y-auto pr-1")}>
           <Input
             label="Full name"
             required
@@ -342,6 +390,14 @@ export default function TeachersPage() {
             Panel access: <span className="font-semibold text-brand">teacher</span>. Admin-panel
             access can only be granted by the platform — not from here.
           </p>
+        </div>
+
+        {/* Live activity rail — node per field change */}
+        {editing && (
+          <div className="max-h-[58vh] border-border lg:border-l lg:pl-5">
+            <ActivityRail items={activity ?? []} className="h-full" />
+          </div>
+        )}
         </div>
       </Modal>
     </PageShell>

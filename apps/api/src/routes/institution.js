@@ -15,6 +15,7 @@ const panelGuard = require('../middleware/panelGuard');
 const { loginLimiter } = require('../middleware/rateLimit');
 
 const Auth       = require('../controllers/institution/AuthController');
+const Dashboard  = require('../controllers/institution/admin/DashboardController');
 const Request    = require('../controllers/institution/admin/RequestController');
 const Student    = require('../controllers/institution/admin/StudentController');
 const Teacher    = require('../controllers/institution/admin/TeacherController');
@@ -22,6 +23,9 @@ const Batch      = require('../controllers/institution/admin/BatchController');
 const Attendance = require('../controllers/institution/admin/AttendanceController');
 const Schedule   = require('../controllers/institution/admin/ScheduleController');
 const Payment    = require('../controllers/institution/admin/PaymentController');
+const HolidayAdm = require('../controllers/institution/admin/HolidayController');
+const Session    = require('../controllers/institution/admin/SessionController');
+const Settings   = require('../controllers/institution/admin/SettingsController');
 const TeacherApp = require('../controllers/institution/teacher/TeacherAppController');
 const StudentApp = require('../controllers/institution/student/StudentAppController');
 
@@ -53,6 +57,8 @@ router.get('/:slug/admin/realtime-token',   ...adminChain,   Auth.realtimeToken)
 router.get('/:slug/teacher/realtime-token', ...teacherChain, Auth.realtimeToken);
 
 // ── ADMIN ───────────────────────────────────────────────────────────────────────
+router.get('/:slug/admin/dashboard', ...adminChain, Dashboard.get);
+
 router.get('/:slug/admin/requests',            ...adminChain, Request.list);
 router.post('/:slug/admin/requests',           ...adminChain, Request.create);
 router.post('/:slug/admin/requests/:id/approve', ...adminChain, Request.approve);
@@ -64,15 +70,31 @@ router.get('/:slug/admin/students/:id',        ...adminChain, Student.get);
 router.post('/:slug/admin/students',           ...adminChain, Student.create);
 router.patch('/:slug/admin/students/:id',      ...adminChain, Student.patch);
 
-router.get('/:slug/admin/teachers',       ...adminChain, Teacher.list);
-router.post('/:slug/admin/teachers',      ...adminChain, Teacher.create);
-router.patch('/:slug/admin/teachers/:id', ...adminChain, Teacher.patch);
+router.get('/:slug/admin/teachers',              ...adminChain, Teacher.list);
+router.get('/:slug/admin/teachers/:id/activity', ...adminChain, Teacher.activityFeed);
+router.post('/:slug/admin/teachers',             ...adminChain, Teacher.create);
+router.patch('/:slug/admin/teachers/:id',        ...adminChain, Teacher.patch);
 
-router.get('/:slug/admin/batches',       ...adminChain, Batch.list);
-router.post('/:slug/admin/batches',      ...adminChain, Batch.create);
-router.patch('/:slug/admin/batches/:id', ...adminChain, Batch.patch);
+router.get('/:slug/admin/batches',                        ...adminChain, Batch.list);
+router.post('/:slug/admin/batches',                       ...adminChain, Batch.create);
+router.get('/:slug/admin/batches/:id/students',           ...adminChain, Batch.students);
+router.get('/:slug/admin/batches/:id/attendance-summary', ...adminChain, Attendance.batchSummary);
+router.get('/:slug/admin/batches/:id/sessions',           ...adminChain, Session.list);
+router.post('/:slug/admin/batches/:id/sessions',          ...adminChain, Session.launch);
+router.get('/:slug/admin/batches/:id',                    ...adminChain, Batch.get);
+router.patch('/:slug/admin/batches/:id',                  ...adminChain, Batch.patch);
 
-router.get('/:slug/admin/attendance', ...adminChain, Attendance.grid);
+router.get('/:slug/admin/attendance',       ...adminChain, Attendance.grid);
+router.post('/:slug/admin/attendance/mark', ...adminChain, Attendance.mark);
+
+router.get('/:slug/admin/holidays',        ...adminChain, HolidayAdm.list);
+router.post('/:slug/admin/holidays',       ...adminChain, HolidayAdm.declare);
+router.delete('/:slug/admin/holidays/:id', ...adminChain, HolidayAdm.remove);
+
+router.get('/:slug/admin/settings/profile',          ...adminChain, Settings.getProfile);
+router.patch('/:slug/admin/settings/branding',       ...adminChain, Settings.updateBranding);
+router.post('/:slug/admin/settings/logo-upload-url', ...adminChain, Settings.logoUploadUrl);
+router.post('/:slug/admin/settings/slug-request',    ...adminChain, Settings.requestSlugChange);
 
 router.get('/:slug/admin/day-patterns',       ...adminChain, Schedule.listDayPatterns);
 router.post('/:slug/admin/day-patterns',      ...adminChain, Schedule.createDayPattern);

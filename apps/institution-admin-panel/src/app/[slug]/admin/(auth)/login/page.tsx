@@ -94,7 +94,7 @@ export default function LoginPage() {
                     .split(/\s+/)
                     .filter(Boolean)
                     .slice(0, 2)
-                    .map((w) => w.charAt(0).toUpperCase())
+                    .map((w: string) => w.charAt(0).toUpperCase())
                     .join("") || "·"}
                 </span>
               )}

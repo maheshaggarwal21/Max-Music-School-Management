@@ -22,13 +22,17 @@ export function timeAgo(iso: string): string {
 
 const ACTION_ICONS: Record<string, LucideIcon> = {
   CREATE_STUDENT: Plus,
+  UPDATE_STUDENT: Pencil,
   UPDATE_PAID_AMOUNT: Wallet,
   UPDATE_JOIN_STATUS: CircleDot,
   ASSIGN_BATCH: UserCog,
   MARK_ATTENDANCE: CalendarCheck,
+  CREATE_TEACHER: Plus,
+  UPDATE_TEACHER: Pencil,
+  APPROVE_REQUEST: CircleDot,
 };
 
-const MONEY_FIELDS = new Set(["paidAmount", "upcomingAmount"]);
+const MONEY_FIELDS = new Set(["paidAmount", "upcomingAmount", "salaryAmount"]);
 
 function renderValue(field: string, value: unknown): string {
   if (value === null || value === undefined || value === "") return "—";

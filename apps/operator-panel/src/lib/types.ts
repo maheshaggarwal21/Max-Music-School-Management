@@ -304,3 +304,20 @@ export interface OperatorSettingsData {
   defaultRent: { amount: number; billingCycle: "monthly" };
   instruments: InstrumentMasterItem[];
 }
+
+// ── Slug change requests (GET /api/operator/slug-requests) ───────────────────
+
+export type SlugRequestStatus = "pending" | "approved" | "rejected";
+
+export interface SlugChangeRequestRow {
+  _id: string;
+  institution: { _id: string; name?: string; slug?: string };
+  currentSlug: string;
+  requestedSlug: string;
+  reason: string | null;
+  status: SlugRequestStatus;
+  requestedBy: { actorName: string | null } | null;
+  handledAt: string | null;
+  rejectionReason: string | null;
+  createdAt: string;
+}

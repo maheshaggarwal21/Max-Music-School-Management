@@ -1,8 +1,8 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
-import { Users } from "lucide-react";
+import { Pencil, Users } from "lucide-react";
 import {
-  Avatar, BlurFade, SearchBar, Select, StatusBadge,
+  Avatar, BlurFade, Button, SearchBar, Select, StatusBadge,
 } from "@maxmusic/ui";
 import { Table, type DataTableColumn } from "@/components/table";
 import { formatDate, formatPhone } from "@maxmusic/utils";
@@ -13,6 +13,7 @@ import { PageShell } from "@/components/page-shell";
 import { EmptyState } from "@/components/empty-state";
 import { TableSkeleton } from "@/components/skeletons";
 import { StudentDetailModal } from "@/components/student-detail-modal";
+import { StudentEditDialog } from "@/components/student-edit-dialog";
 
 const JOIN_STATUS_OPTIONS = [
   { value: "trial", label: "Trial" },
@@ -27,6 +28,7 @@ export default function StudentsPage() {
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [teacherFilter, setTeacherFilter] = useState<string | null>(null);
   const [selected, setSelected] = useState<StudentRow | null>(null);
+  const [editing, setEditing] = useState<StudentRow | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -92,6 +94,22 @@ export default function StudentsPage() {
       render: (s) => <span className="text-xs">{s.validityEnd ? formatDate(s.validityEnd) : "—"}</span>,
     },
     { key: "teacher", label: "Teacher", render: (s) => s.teacher?.name ?? <span className="text-xs text-muted-foreground">—</span> },
+    {
+      key: "actions",
+      label: "Actions",
+      render: (s) => (
+        <div onClick={(e) => e.stopPropagation()}>
+          <Button
+            size="icon-sm"
+            variant="ghost"
+            aria-label={`Edit ${s.name}`}
+            onClick={() => setEditing(s)}
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      ),
+    },
   ];
 
   return (
@@ -153,11 +171,35 @@ export default function StudentsPage() {
         )}
       </BlurFade>
 
-      {/* THE student detail popup */}
+      {/* Row click → read-only detail popup */}
       <StudentDetailModal
         studentId={selected?._id ?? null}
         studentName={selected?.name}
         onClose={() => setSelected(null)}
+      />
+
+      {/* Pencil → THE big edit form with the live activity rail */}
+      <StudentEditDialog
+        studentId={editing?._id ?? null}
+        studentName={editing?.name}
+        onClose={() => setEditing(null)}
+        onUpdated={(u) =>
+          setStudents((prev) =>
+            (prev ?? []).map((s) =>
+              s._id === u._id
+                ? {
+                    ...s,
+                    instrument: u.instrument,
+                    classType: u.classType,
+                    schedule: u.schedule,
+                    joinStatus: u.joinStatus,
+                    validityEnd: u.validityEnd,
+                    teacher: u.teacher,
+                  }
+                : s
+            )
+          )
+        }
       />
     </PageShell>
   );

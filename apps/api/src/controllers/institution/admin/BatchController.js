@@ -72,6 +72,53 @@ exports.list = async (req, res, next) => {
   }
 };
 
+exports.get = async (req, res, next) => {
+  try {
+    const inst = req.institution._id;
+    const b = await Batch.findOne({ _id: req.params.id, institutionId: inst })
+      .populate(POPULATE).lean();
+    if (!b) return notFound(res, S.BATCH_NOT_FOUND);
+    return ok(res, S.OK, {
+      batch: {
+        ...rowOf(b),
+        mode: b.mode,
+        dayPatternDays: (b.dayPatternId && b.dayPatternId.days) || [],
+        timeRange: b.timeSlotId
+          ? { startTime: b.timeSlotId.startTime, endTime: b.timeSlotId.endTime }
+          : null,
+        createdAt: b.createdAt,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.students = async (req, res, next) => {
+  try {
+    const inst = req.institution._id;
+    const batch = await Batch.findOne({ _id: req.params.id, institutionId: inst }).select('name').lean();
+    if (!batch) return notFound(res, S.BATCH_NOT_FOUND);
+
+    const Student = require('../../../models/Student');
+    const students = await Student
+      .find({ institutionId: inst, batchId: batch._id })
+      .select('displayId name mobile joinStatus category validityEnd paidClasses')
+      .sort({ name: 1 }).lean();
+
+    return ok(res, S.OK, {
+      batch: { _id: String(batch._id), name: batch.name },
+      students: students.map(s => ({
+        _id: String(s._id), displayId: s.displayId, name: s.name, mobile: s.mobile,
+        joinStatus: s.joinStatus, category: s.category,
+        validityEnd: s.validityEnd || null, paidClasses: s.paidClasses || 0,
+      })),
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 exports.create = async (req, res, next) => {
   try {
     const inst = req.institution._id;
