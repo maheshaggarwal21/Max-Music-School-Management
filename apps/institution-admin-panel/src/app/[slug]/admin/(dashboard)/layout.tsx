@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { useParams, usePathname, useRouter } from "next/navigation";
 import {
   CalendarCheck, Inbox, Layers, LayoutDashboard, Loader2,
   Settings, Users, Wallet, GraduationCap,
@@ -47,6 +47,12 @@ const NAV_SECTIONS: SidebarSection[] = [
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
+  const { slug } = useParams<{ slug: string }>();
+  const base = `/${slug}/admin`;
+  const navSections = NAV_SECTIONS.map((s) => ({
+    ...s,
+    items: s.items.map((i) => ({ ...i, href: `${base}${i.href}` })),
+  }));
   const [session, setSession] = useState<AdminSession | null>(null);
 
   useEffect(() => {
@@ -59,9 +65,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       .then((r) => {
         if (cancelled) return;
         if (r.data) setSession(r.data);
-        else router.replace("/login");
+        else router.replace(`${base}/login`);
       })
-      .catch(() => !cancelled && router.replace("/login"));
+      .catch(() => !cancelled && router.replace(`${base}/login`));
     return () => {
       cancelled = true;
     };
@@ -71,7 +77,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     try {
       await mockable(() => api.post<ApiResponse>(authPath("/logout"), {}), ok(null), 200);
     } finally {
-      router.replace("/login");
+      router.replace(`${base}/login`);
     }
   };
 
@@ -93,7 +99,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <Sidebar
             brandName={session.institution.schoolName}
             logoUrl={session.institution.logoUrl}
-            sections={NAV_SECTIONS}
+            sections={navSections}
             activeHref={pathname ?? undefined}
             onSignOut={handleSignOut}
             footer={

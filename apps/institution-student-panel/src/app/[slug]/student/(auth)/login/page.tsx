@@ -1,7 +1,7 @@
 "use client";
 import * as React from "react";
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { ArrowRight, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -15,7 +15,7 @@ import {
   SpotlightCard,
 } from "@maxmusic/ui";
 
-import { api, mockable, studentAuthPath } from "@/lib/api";
+import { api, getInstSlug, mockable, studentAuthPath } from "@/lib/api";
 import { MOCK_BRANDING, MOCK_LOGIN_RESPONSE, type StudentLoginResponse } from "@/lib/mocks";
 import type { ApiResponse, BrandingPublic } from "@/lib/types";
 
@@ -29,6 +29,7 @@ import type { ApiResponse, BrandingPublic } from "@/lib/types";
 
 export default function LoginPage() {
   const router = useRouter();
+  const { slug } = useParams<{ slug: string }>();
   const [branding, setBranding] = useState<BrandingPublic | null>(null);
   const [mobile, setMobile] = useState("");
   const [password, setPassword] = useState("");
@@ -37,8 +38,10 @@ export default function LoginPage() {
   useEffect(() => {
     let cancelled = false;
     mockable<BrandingPublic | null>(
-      // Real call pending the public branding contract (see BLOCKED note above).
-      () => Promise.resolve(null),
+      () =>
+        api
+          .get<ApiResponse<BrandingPublic>>(`/api/inst/${getInstSlug()}/branding`)
+          .then((r) => r.data),
       MOCK_BRANDING
     ).then((b) => {
       if (cancelled) return;
@@ -75,7 +78,7 @@ export default function LoginPage() {
         600
       );
       toast.success(`Welcome back! Loading your classes…`);
-      router.push("/dashboard");
+      router.push(`/${slug}/student/dashboard`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Sign in failed");
       setSubmitting(false);

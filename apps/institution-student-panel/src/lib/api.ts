@@ -37,7 +37,7 @@ class ApiClient {
     });
     if (!res.ok) {
       if (res.status === 401 && typeof window !== "undefined") {
-        window.location.href = "/login";
+        window.location.href = `/${getInstSlug()}/student/login`;
       }
       let message = "API error";
       try {

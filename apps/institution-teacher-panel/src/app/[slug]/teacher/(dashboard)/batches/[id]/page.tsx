@@ -65,7 +65,7 @@ const columns: DataTableColumn<RosterRow>[] = [
 ];
 
 export default function BatchDetailPage() {
-  const params = useParams<{ id: string }>();
+  const params = useParams<{ slug: string; id: string }>();
   const batchId = params.id;
 
   const [batches, setBatches] = useState<BatchRow[] | null>(null);
@@ -105,7 +105,7 @@ export default function BatchDetailPage() {
 
       <BlurFade delay={0}>
         <Link
-          href="/batches"
+          href={`/${params.slug}/teacher/batches`}
           className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
         >
           <ArrowLeft className="h-4 w-4" /> My Batches

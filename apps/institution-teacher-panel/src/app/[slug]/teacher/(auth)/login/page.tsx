@@ -4,17 +4,18 @@
 // name/domain never appears here.
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { Eye, EyeOff, LogIn } from "lucide-react";
 import { toast } from "sonner";
 import { BlurFade, BrandingProvider, Button, Input } from "@maxmusic/ui";
 import { isValidPhone } from "@maxmusic/utils";
-import { api, mockable, teacherAuthPath } from "@/lib/api";
+import { api, getInstSlug, mockable, teacherAuthPath } from "@/lib/api";
 import { MOCK_BRANDING, MOCK_LOGIN } from "@/lib/mocks";
 import type { ApiResponse, BrandingPublic, TeacherLoginData } from "@/lib/types";
 
 export default function LoginPage() {
   const router = useRouter();
+  const { slug } = useParams<{ slug: string }>();
   const [branding, setBranding] = useState<BrandingPublic | null>(null);
   const [mobile, setMobile] = useState("");
   const [password, setPassword] = useState("");
@@ -22,13 +23,12 @@ export default function LoginPage() {
   const [errors, setErrors] = useState<{ mobile?: string; password?: string }>({});
   const [submitting, setSubmitting] = useState(false);
 
-  // Pre-auth branding. TODO(H5): a public GET branding endpoint is not yet in
-  // CONTRACTS.md (frontend-agent.md anticipates one) — flagged to Dev A. Until
-  // then the login POST response is the canonical branding source.
+  // Pre-auth branding from the public GET /api/inst/:slug/branding endpoint
+  // (white-label safe; mock mode uses MOCK_BRANDING).
   useEffect(() => {
     let cancelled = false;
     mockable(
-      () => api.get<ApiResponse<BrandingPublic>>(teacherAuthPath("/branding")),
+      () => api.get<ApiResponse<BrandingPublic>>(`/api/inst/${getInstSlug()}/branding`),
       { success: true, message: "OK", data: MOCK_BRANDING }
     )
       .then((res) => {
@@ -63,7 +63,7 @@ export default function LoginPage() {
       );
       if (res.data) {
         setBranding(res.data.institution);
-        router.replace("/dashboard");
+        router.replace(`/${slug}/teacher/dashboard`);
       } else {
         toast.error(res.message || "Sign in failed");
       }

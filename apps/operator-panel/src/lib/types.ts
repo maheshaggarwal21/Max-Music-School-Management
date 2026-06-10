@@ -1,39 +1,20 @@
-// TEMPORARY local mirror of CONTRACTS.md — replace with imports from
-// @maxmusic/types at Handoff H2 (Dev A owns packages/types).
-// Do NOT extend these shapes here; missing fields are requested from Dev A.
-
-// ── Universal envelope ────────────────────────────────────────────────────────
-
-export interface ApiResponse<T = null> {
-  success: boolean; // true for 2xx, false otherwise
-  message: string;
-  data: T | null;
-}
-
-export interface Paginated<T> {
-  items: T[];
-  pagination: { page: number; limit: number; total: number; pages: number };
-}
-
-// ── Shared unions ─────────────────────────────────────────────────────────────
-
-export type JoinStatus = "trial" | "active_soon" | "active" | "inactive";
-export type InstitutionMode = "managed" | "autonomous";
-export type InstitutionStatus = "pending" | "active" | "suspended" | "terminated";
-export type PanelAccess = "teacher" | "admin";
-export type ActorRole = "superadmin" | "institution_admin" | "teacher" | "student" | "system";
-export type PaymentStatusValue = "paid" | "overdue" | "partial" | "free";
-export type BatchStatus = "setting" | "active" | "inactive" | "archived";
-
-// ── Branding (white-label safe) ───────────────────────────────────────────────
-
-export interface BrandingPublic {
-  slug: string;
-  schoolName: string;
-  logoUrl: string | null;
-  primaryColor: string;
-  tagline: string | null;
-}
+// H2 migration done — shared contract types come from @maxmusic/types
+// (Dev A owns; Dev B reads). Per-panel view/row shapes remain local below.
+import type {
+  ApiResponse, Paginated, BrandingPublic,
+  StudentJoinStatus as JoinStatus,
+  InstitutionMode,
+  InstitutionStatus,
+  Panel as PanelAccess,
+  ActorRole,
+  PaymentRecordStatus as PaymentStatusValue,
+  BatchStatus,
+} from "@maxmusic/types";
+export type {
+  ApiResponse, Paginated, BrandingPublic,
+  JoinStatus, InstitutionMode, InstitutionStatus,
+  PanelAccess, ActorRole, PaymentStatusValue, BatchStatus,
+};
 
 // ── Operator: institutions ────────────────────────────────────────────────────
 

@@ -2,7 +2,7 @@
 import * as React from "react";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { useParams, usePathname } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
 import { LogOut, Menu, Moon, Sun, X } from "lucide-react";
 import { cn, useThemeTransition } from "@maxmusic/ui";
@@ -22,6 +22,7 @@ export function MobileNav({
 }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
+  const { slug } = useParams<{ slug: string }>();
   const { resolvedTheme, toggleTheme } = useThemeTransition();
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
@@ -99,11 +100,12 @@ export function MobileNav({
               <nav className="flex-1 space-y-0.5 overflow-y-auto px-2 py-2">
                 {NAV_SECTIONS.flatMap((s) => s.items).map((item) => {
                   const Icon = item.icon;
-                  const isActive = pathname === item.href;
+                  const href = `/${slug}/student${item.href}`;
+                  const isActive = pathname === href;
                   return (
                     <Link
                       key={item.href}
-                      href={item.href}
+                      href={href}
                       className={cn(
                         "relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200",
                         isActive

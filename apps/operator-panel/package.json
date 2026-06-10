@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@maxmusic/types": "*",
     "@maxmusic/ui": "*",
     "@maxmusic/utils": "*",
     "class-variance-authority": "^0.7.1",

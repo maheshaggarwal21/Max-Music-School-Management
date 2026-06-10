@@ -3,6 +3,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useParams } from "next/navigation";
 import {
   ArrowRight,
   CalendarClock,
@@ -34,6 +35,7 @@ import { CardListSkeleton, StatsSkeleton } from "@/components/skeletons";
 import { EmptyState } from "@/components/empty-state";
 
 export default function DashboardPage() {
+  const { slug } = useParams<{ slug: string }>();
   const [batches, setBatches] = useState<BatchRow[] | null>(null);
   const [firstName, setFirstName] = useState("");
   const [now] = useState(() => new Date());
@@ -134,7 +136,7 @@ export default function DashboardPage() {
                 </div>
               </div>
               <Button asChild variant="brand" className="group rounded-full">
-                <Link href="/attendance">
+                <Link href={`/${slug}/teacher/attendance`}>
                   Mark attendance
                   <ArrowRight className="ml-2 h-4 w-4 transition-transform duration-300 group-hover:translate-x-1" />
                 </Link>

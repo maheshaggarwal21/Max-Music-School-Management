@@ -4,7 +4,7 @@
 // BrandingProvider, mobile header) comes ONLY from BrandingPublic.
 
 import { useEffect, useState } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { useParams, usePathname, useRouter } from "next/navigation";
 import {
   CalendarOff,
   ClipboardCheck,
@@ -70,6 +70,9 @@ function MobileHeader({ branding }: { branding: BrandingPublic }) {
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
+  const { slug } = useParams<{ slug: string }>();
+  const base = `/${slug}/teacher`;
+  const navItems = NAV_ITEMS.map((i) => ({ ...i, href: `${base}${i.href}` }));
   const [me, setMe] = useState<TeacherMeData | null>(null);
 
   useEffect(() => {
@@ -86,7 +89,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }, []);
 
   const activeHref =
-    NAV_ITEMS.find(
+    navItems.find(
       (i) => pathname === i.href || pathname.startsWith(`${i.href}/`)
     )?.href ?? pathname;
 
@@ -95,7 +98,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       () => api.post<ApiResponse<null>>(teacherAuthPath("/logout"), {}),
       MOCK_OK
     );
-    router.replace("/login");
+    router.replace(`${base}/login`);
   };
 
   if (!me) {
@@ -113,7 +116,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           className="hidden md:flex"
           brandName={me.institution.schoolName}
           logoUrl={me.institution.logoUrl}
-          sections={[{ label: "Teach", items: NAV_ITEMS }]}
+          sections={[{ label: "Teach", items: navItems }]}
           activeHref={activeHref}
           onSignOut={signOut}
         />
@@ -124,7 +127,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </main>
         </div>
       </div>
-      <MobileNav items={NAV_ITEMS} activeHref={activeHref} />
+      <MobileNav items={navItems} activeHref={activeHref} />
     </BrandingProvider>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 import * as React from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { useParams, usePathname, useRouter } from "next/navigation";
 import { Loader2, Music } from "lucide-react";
 import { Avatar, BrandingProvider, Sidebar } from "@maxmusic/ui";
 
@@ -18,13 +18,19 @@ function Shell({ children }: { children: React.ReactNode }) {
   const { student, branding, loading } = useStudent();
   const pathname = usePathname();
   const router = useRouter();
+  const { slug } = useParams<{ slug: string }>();
+  const base = `/${slug}/student`;
+  const navSections = NAV_SECTIONS.map((s) => ({
+    ...s,
+    items: s.items.map((i) => ({ ...i, href: `${base}${i.href}` })),
+  }));
 
   const handleSignOut = React.useCallback(() => {
     mockable(
       () => api.post<ApiResponse>(studentAuthPath("/logout"), {}),
       { success: true, message: "Signed out", data: null } as ApiResponse
-    ).finally(() => router.push("/login"));
-  }, [router]);
+    ).finally(() => router.push(`${base}/login`));
+  }, [router, base]);
 
   if (loading || !branding || !student) {
     return (
@@ -45,7 +51,7 @@ function Shell({ children }: { children: React.ReactNode }) {
           <Sidebar
             brandName={branding.schoolName}
             logoUrl={branding.logoUrl}
-            sections={NAV_SECTIONS}
+            sections={navSections}
             activeHref={pathname ?? undefined}
             onSignOut={handleSignOut}
             footer={

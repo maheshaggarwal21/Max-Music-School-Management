@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { ArrowRight, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -15,6 +15,7 @@ import type { AdminSession, ApiResponse, BrandingPublic } from "@/lib/types";
 // fetched before auth so the school name/logo/color greet the admin.
 export default function LoginPage() {
   const router = useRouter();
+  const { slug } = useParams<{ slug: string }>();
   const [branding, setBranding] = useState<BrandingPublic | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -53,7 +54,7 @@ export default function LoginPage() {
         ok(MOCK_SESSION),
         600
       );
-      router.push("/dashboard");
+      router.push(`/${slug}/admin/dashboard`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Unable to sign in");
       setSubmitting(false);

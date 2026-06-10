@@ -37,7 +37,7 @@ class ApiClient {
     });
     if (!res.ok) {
       if (res.status === 401 && typeof window !== "undefined") {
-        window.location.href = "/login";
+        window.location.href = `/${getInstSlug()}/teacher/login`;
       }
       let message = "API error";
       try {
@@ -59,13 +59,20 @@ class ApiClient {
 export const api = new ApiClient();
 
 // ── Institution path helpers ─────────────────────────────────────────────────
-// The slug comes from the environment (one deployment serves one institution
-// path) — never hardcoded. In MOCK MODE it is irrelevant: real calls never fire.
-export const instSlug = process.env.NEXT_PUBLIC_INSTITUTION_SLUG ?? "";
+// Slug is the first path segment (/<slug>/teacher/...) — multi-tenant safe, one
+// deployment serves every institution. Never hardcoded. In MOCK MODE it is
+// irrelevant: real calls never fire.
+export function getInstSlug(): string {
+  if (typeof window !== "undefined") {
+    const seg = window.location.pathname.split("/").filter(Boolean)[0];
+    if (seg) return seg;
+  }
+  return "_slug_"; // mock mode only — never used for a real request
+}
 
 /** /api/inst/:slug/teacher/<ep> */
-export const teacherPath = (ep: string) => `/api/inst/${instSlug}/teacher${ep}`;
+export const teacherPath = (ep: string) => `/api/inst/${getInstSlug()}/teacher${ep}`;
 
 /** /api/inst/:slug/auth/teacher/<ep> */
 export const teacherAuthPath = (ep: string) =>
-  `/api/inst/${instSlug}/auth/teacher${ep}`;
+  `/api/inst/${getInstSlug()}/auth/teacher${ep}`;

@@ -1,5 +1,4 @@
-import { redirect } from "next/navigation";
-
+// Dev-only root (/). In production nginx routes only /<slug>/teacher/* here.
 export default function Home() {
-  redirect("/login");
+  return null;
 }
