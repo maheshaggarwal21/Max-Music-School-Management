@@ -1,6 +1,7 @@
 'use strict';
 
 require('dotenv').config();
+const http = require('http');
 const express = require('express');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
@@ -18,6 +19,12 @@ app.use(cors({
   origin: [process.env.PLATFORM_DOMAIN_URL, process.env.OPERATOR_DOMAIN_URL].filter(Boolean),
   credentials: true,
 }));
+// Razorpay webhook needs the RAW body for HMAC signature verification, so it is
+// mounted BEFORE the JSON parser (and before apiLimiter — Razorpay must not be
+// rate-limited). It fully handles + responds, so the request never falls through.
+const webhookRoutes = require('./routes/webhook');
+app.use('/api/webhooks', express.raw({ type: '*/*' }), webhookRoutes);
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
@@ -50,10 +57,13 @@ app.use((err, req, res, next) => {
 // ── Bootstrap ────────────────────────────────────────────────────────────────
 async function start() {
   await require('./config/db').connect();
-  // Phase 7: require('./config/socket').init(server);
-  // Phase 7: require('./config/cron').init();
 
-  app.listen(PORT, () => {
+  // Wrap Express in an HTTP server so Socket.io can share the port.
+  const server = http.createServer(app);
+  require('./config/socket').init(server);   // live attendance — rooms by institutionId
+  require('./config/cron').init();            // daily joinStatus / validity / rent maintenance
+
+  server.listen(PORT, () => {
     console.log(`[api] running on port ${PORT} (${process.env.NODE_ENV})`);
   });
 }

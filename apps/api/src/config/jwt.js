@@ -75,6 +75,31 @@ function verifyGodToken(token) {
   return d;
 }
 
+// Socket token: short-lived, minted by an AUTHENTICATED panel endpoint, handed to
+// the client to present in the Socket.io handshake. We use a dedicated secret so a
+// leaked socket token can never be replayed as a panel cookie, and vice-versa.
+// httpOnly panel cookies are path-scoped to /api/inst/:slug and so are NEVER sent
+// to the /socket.io handshake — this token is the bridge.
+function socketSecret() {
+  const s = process.env.JWT_SECRET_SOCKET;
+  if (!s) throw new Error('Missing JWT secret for socket');
+  return s;
+}
+
+function signSocketToken({ userId, institutionId, role }) {
+  return jwt.sign(
+    { typ: 'socket', sub: String(userId), institutionId: String(institutionId), role },
+    socketSecret(),
+    { expiresIn: process.env.JWT_EXPIRES_SOCKET || '2m' }
+  );
+}
+
+function verifySocketToken(token) {
+  const d = jwt.verify(token, socketSecret());
+  if (d.typ !== 'socket') throw new Error('Not a socket token');
+  return d;
+}
+
 // 2FA challenge token (between password step and TOTP step). Stateless.
 function signChallengeToken({ operatorId }) {
   return jwt.sign(
@@ -111,6 +136,8 @@ module.exports = {
   verify,
   signGodToken,
   verifyGodToken,
+  signSocketToken,
+  verifySocketToken,
   signChallengeToken,
   verifyChallengeToken,
   cookieOptions,

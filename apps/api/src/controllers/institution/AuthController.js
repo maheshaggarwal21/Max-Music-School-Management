@@ -4,7 +4,7 @@ const Teacher = require('../../models/Teacher');
 const Student = require('../../models/Student');
 const { compare } = require('../../config/password');
 const { brandingPublic, issuePanelCookie } = require('../../config/instAuthHelpers');
-const { COOKIE_NAME, cookieOptions } = require('../../config/jwt');
+const { COOKIE_NAME, cookieOptions, signSocketToken } = require('../../config/jwt');
 const { ok, badRequest, unauthorized, forbidden } = require('../../config/helper');
 const S = require('../../config/strings');
 
@@ -106,6 +106,28 @@ exports.me = (req, res) => {
     },
     institution: brandingPublic(req.institution),
   });
+};
+
+// Public pre-auth branding — every panel's login page renders the institution's
+// white-label identity (schoolName / logoUrl / primaryColor / tagline) BEFORE
+// sign-in. resolveInstitution has already 404'd unknown slugs and 403'd
+// suspended/terminated institutions. Exposes ONLY brandingPublic — never a Max
+// Music identifier, and never any authenticated/operational data.
+exports.getBranding = (req, res) => {
+  return ok(res, S.OK, brandingPublic(req.institution));
+};
+
+// Realtime token — minted ONLY for an authenticated actor (req.actor + req.institution
+// set by the middleware chain). Short-lived; the client presents it in the Socket.io
+// handshake. The institutionId is taken from the SERVER-resolved actor, never the
+// client, so a socket can only ever join its own institution's room.
+exports.realtimeToken = (req, res) => {
+  const token = signSocketToken({
+    userId:        req.actor._id,
+    institutionId: req.institution._id,
+    role:          req.actor.role,
+  });
+  return ok(res, S.OK, { token });
 };
 
 // Factory: clears the panel cookie (path-scoped to the slug).

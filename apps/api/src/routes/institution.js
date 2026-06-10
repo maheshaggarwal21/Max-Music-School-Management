@@ -30,6 +30,11 @@ const adminChain   = [resolveInstitution, instAuth('admin'),   scopeGuard, panel
 const teacherChain = [resolveInstitution, instAuth('teacher'), scopeGuard];
 const studentChain = [resolveInstitution, instAuth('student'), scopeGuard];
 
+// ── PUBLIC (pre-auth) ────────────────────────────────────────────────────────
+// White-label branding for the login pages. resolveInstitution only (no session):
+// 404 on unknown slug, 403 on suspended/terminated. Returns brandingPublic only.
+router.get('/:slug/branding', resolveInstitution, Auth.getBranding);
+
 // ── AUTH ───────────────────────────────────────────────────────────────────────
 router.post('/:slug/auth/admin/login',   resolveInstitution, loginLimiter, Auth.adminLogin);
 router.post('/:slug/auth/teacher/login', resolveInstitution, loginLimiter, Auth.teacherLogin);
@@ -42,6 +47,10 @@ router.post('/:slug/auth/student/logout', resolveInstitution, Auth.logout('stude
 router.get('/:slug/auth/admin/me',   ...adminChain,   Auth.me);
 router.get('/:slug/auth/teacher/me', ...teacherChain, Auth.me);
 router.get('/:slug/auth/student/me', ...studentChain, Auth.me);
+
+// Socket.io handshake tokens — authenticated, panel-scoped. (live attendance)
+router.get('/:slug/admin/realtime-token',   ...adminChain,   Auth.realtimeToken);
+router.get('/:slug/teacher/realtime-token', ...teacherChain, Auth.realtimeToken);
 
 // ── ADMIN ───────────────────────────────────────────────────────────────────────
 router.get('/:slug/admin/requests',            ...adminChain, Request.list);
