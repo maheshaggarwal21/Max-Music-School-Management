@@ -73,7 +73,7 @@ export function OperatorBanner() {
     // mirrors openInstitutionAdminPanel() in the operator panel.
     const base =
       process.env.NEXT_PUBLIC_OPERATOR_PANEL_URL ||
-      `${window.location.protocol}//${window.location.hostname}:3010`;
+      `${window.location.protocol}//${window.location.hostname}:3000`;
     window.location.assign(`${base}/institutions`);
   };
 
