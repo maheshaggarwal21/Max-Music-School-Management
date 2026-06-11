@@ -16,6 +16,9 @@ const S = require('../../../config/strings');
 
 function dayKey(d) { return new Date(d).toISOString().slice(0, 10); }
 
+// DayPattern.days values ('mon'..'sun') → JS getUTCDay() (Sun=0..Sat=6).
+const JS_DOW = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
+
 const SELF_POPULATE = [
   { path: 'instrumentId', select: 'name' },
   { path: 'batchId', select: 'name dayPatternId timeSlotId', populate: [
@@ -36,6 +39,18 @@ function scheduleOf(s) {
     days: (b && b.dayPatternId) ? b.dayPatternId.label : null,
     time: (b && b.timeSlotId) ? b.timeSlotId.label : null,
   };
+}
+
+// Soonest date (YYYY-MM-DD) on/after `from` whose weekday is in the pattern, else null.
+function nextClassDate(days, from) {
+  const wanted = new Set((days || []).map(d => JS_DOW[d]).filter(n => n !== undefined));
+  if (wanted.size === 0) return null;
+  const d = new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), from.getUTCDate()));
+  for (let i = 0; i < 14; i++) {
+    if (wanted.has(d.getUTCDay())) return d.toISOString().slice(0, 10);
+    d.setUTCDate(d.getUTCDate() + 1);
+  }
+  return null;
 }
 
 exports.me = async (req, res, next) => {
@@ -81,9 +96,19 @@ exports.dashboard = async (req, res, next) => {
     const total   = present + absent;
     const percent = total ? Math.round((present / total) * 100) : 0;
 
+    // upcomingClass must be a ClassItem (CONTRACTS.md): { date, batchName, time, status }.
+    const upcomingDate = (s.batchId && s.batchId.dayPatternId)
+      ? nextClassDate(s.batchId.dayPatternId.days, new Date())
+      : null;
+
     return ok(res, S.OK, {
-      upcomingClass: s.batchId ? { batchName: sched.batchName, time: sched.time, days: sched.days } : null,
-      holidayNotice: nextHoliday ? { date: nextHoliday.date, reason: nextHoliday.reason || null } : null,
+      upcomingClass: upcomingDate
+        ? { date: upcomingDate, batchName: sched.batchName, time: sched.time, status: 'upcoming' }
+        : null,
+      // holidayNotice is a string|null per the contract — not an object.
+      holidayNotice: nextHoliday
+        ? `${nextHoliday.reason || 'Holiday'} — ${dayKey(nextHoliday.date)}`
+        : null,
       attendance: { percent, present, total },
       credentials: { displayId: s.displayId, schedule: sched.days, sessionSlot: sched.time },
       validity: { start: s.validityStart || null, end: s.validityEnd || null, paidClasses: s.paidClasses || 0 },
@@ -121,18 +146,52 @@ exports.classes = async (req, res, next) => {
   }
 };
 
+// GET /timetable → ClassItem[] (CONTRACTS.md): a bare, dated array. We project the
+// batch's recurring day-pattern onto actual dates across a 6-week window (last week
+// → +5 weeks, so the panel's prev/this/next-week nav always has data), folding in
+// declared holidays and the student's own attendance for past dates.
 exports.timetable = async (req, res, next) => {
   try {
+    const inst = req.institution._id;
     const s = await loadSelf(req);
     if (!s) return notFound(res, S.STUDENT_NOT_FOUND);
-    if (!s.batchId) return ok(res, S.OK, { timetable: [] });
+    if (!s.batchId || !s.batchId.dayPatternId) return ok(res, S.OK, []);
 
     const sched = scheduleOf(s);
-    const days = (s.batchId.dayPatternId && s.batchId.dayPatternId.days) || [];
-    const timetable = days.map(d => ({
-      day: d, batchName: sched.batchName, time: sched.time, status: 'upcoming',
-    }));
-    return ok(res, S.OK, { timetable });
+    const wanted = new Set(
+      (s.batchId.dayPatternId.days || []).map(d => JS_DOW[d]).filter(n => n !== undefined)
+    );
+    if (wanted.size === 0) return ok(res, S.OK, []);
+
+    // Window anchored on the Monday of last week, in UTC (matches how dates are stored).
+    const now = new Date();
+    const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    start.setUTCDate(start.getUTCDate() - ((start.getUTCDay() + 6) % 7) - 7);
+    const end = new Date(start);
+    end.setUTCDate(end.getUTCDate() + 42); // 6 weeks
+
+    const [holidays, attendance] = await Promise.all([
+      Holiday.find({ institutionId: inst, batchId: s.batchId._id, date: { $gte: start, $lt: end } })
+        .select('date').lean(),
+      Attendance.find({ institutionId: inst, studentId: s._id, date: { $gte: start, $lt: end } })
+        .select('date status').lean(),
+    ]);
+    const holidaySet = new Set(holidays.map(h => dayKey(h.date)));
+    const attMap = new Map(attendance.map(a => [dayKey(a.date), a.status]));
+
+    const timetable = [];
+    for (let d = new Date(start); d < end; d.setUTCDate(d.getUTCDate() + 1)) {
+      if (!wanted.has(d.getUTCDay())) continue;
+      const key = d.toISOString().slice(0, 10);
+      let status = 'upcoming';
+      if (holidaySet.has(key)) status = 'holiday';
+      else if (attMap.has(key)) {
+        const a = attMap.get(key);
+        status = a === 'credited' ? 'holiday' : a; // credited shows as a holiday-credit
+      }
+      timetable.push({ date: key, batchName: sched.batchName, time: sched.time, status });
+    }
+    return ok(res, S.OK, timetable);
   } catch (err) {
     next(err);
   }
