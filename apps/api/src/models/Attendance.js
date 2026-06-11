@@ -1,6 +1,7 @@
 'use strict';
 
 const mongoose = require('mongoose');
+const mongoosePaginate = require('mongoose-paginate-v2');
 
 const MarkedBySchema = new mongoose.Schema(
   {
@@ -26,5 +27,7 @@ const AttendanceSchema = new mongoose.Schema(
 AttendanceSchema.index({ institutionId: 1, batchId: 1, date: 1 });
 AttendanceSchema.index({ institutionId: 1, studentId: 1, date: -1 });
 AttendanceSchema.index({ studentId: 1, batchId: 1, date: 1 }, { unique: true });
+
+AttendanceSchema.plugin(mongoosePaginate);
 
 module.exports = mongoose.model('Attendance', AttendanceSchema);
