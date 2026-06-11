@@ -278,10 +278,10 @@ export default function DashboardPage() {
                     <li key={h._id} className="flex items-center gap-3 px-5 py-3">
                       <span className="flex h-10 w-10 shrink-0 flex-col items-center justify-center rounded-lg bg-brand/10 text-brand">
                         <span className="text-[9px] font-bold uppercase leading-none">
-                          {new Date(`${h.date}T00:00:00`).toLocaleString("en-US", { month: "short" })}
+                          {new Date(`${String(h.date).slice(0, 10)}T00:00:00`).toLocaleString("en-US", { month: "short" })}
                         </span>
                         <span className="text-sm font-bold leading-tight">
-                          {new Date(`${h.date}T00:00:00`).getDate()}
+                          {new Date(`${String(h.date).slice(0, 10)}T00:00:00`).getDate()}
                         </span>
                       </span>
                       <div className="min-w-0 flex-1">
