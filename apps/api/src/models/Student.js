@@ -12,6 +12,8 @@ const StudentSchema = new mongoose.Schema(
     name:                    { type: String, required: true, trim: true },
     mobile:                  { type: String, required: true, trim: true },
     email:                   { type: String, lowercase: true, trim: true },
+    guardianName:            { type: String, trim: true },
+    guardianMobile:          { type: String, trim: true },
     gender:                  { type: String, enum: ['male', 'female'] },
     profilePicUrl:           { type: String, trim: true },
     instrumentId:            { type: mongoose.Schema.Types.ObjectId, ref: 'Instrument' },

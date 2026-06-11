@@ -5,7 +5,8 @@ const Batch      = require('../../../models/Batch');
 const Attendance = require('../../../models/Attendance');
 const Holiday    = require('../../../models/Holiday');
 const { brandingPublic } = require('../../../config/instAuthHelpers');
-const { ok, notFound, paginated } = require('../../../config/helper');
+const { auditLog, actorFromReq } = require('../../../config/auditLog');
+const { ok, badRequest, notFound, paginated } = require('../../../config/helper');
 const S = require('../../../config/strings');
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -60,11 +61,55 @@ exports.me = async (req, res, next) => {
     return ok(res, S.OK, {
       student: {
         _id: String(s._id), displayId: s.displayId, name: s.name, mobile: s.mobile,
+        email: s.email || null,
+        guardianName: s.guardianName || null,
+        guardianMobile: s.guardianMobile || null,
         instrument: s.instrumentId ? s.instrumentId.name : null,
         joinStatus: s.joinStatus, validityEnd: s.validityEnd || null,
       },
       institution: brandingPublic(req.institution),
     });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// PATCH /me → limited profile fields (CONTRACTS.md). A student may edit only their
+// own email + guardian contact; identity fields (name/mobile/fees/batch) are admin-only.
+exports.updateMe = async (req, res, next) => {
+  try {
+    const inst = req.institution._id;
+    const b = req.body || {};
+    const email          = b.email          == null ? null : String(b.email).toLowerCase().trim();
+    const guardianName   = b.guardianName   == null ? null : String(b.guardianName).trim();
+    const guardianMobile = b.guardianMobile == null ? null : String(b.guardianMobile).trim();
+
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return badRequest(res, S.VALIDATION_FAILED);
+    if (guardianMobile && !/^\d{10}$/.test(guardianMobile)) return badRequest(res, S.VALIDATION_FAILED);
+
+    const student = await Student.findOne({ _id: req.actor._id, institutionId: inst });
+    if (!student) return notFound(res, S.STUDENT_NOT_FOUND);
+
+    const changes = [];
+    const set = (field, next) => {
+      const cur = student[field] || null;
+      const val = next || null;
+      if (cur !== val) { changes.push({ field, from: cur, to: val }); student[field] = val; }
+    };
+    set('email', email);
+    set('guardianName', guardianName);
+    set('guardianMobile', guardianMobile);
+
+    if (changes.length) {
+      await student.save();
+      await auditLog({
+        institutionId: inst, ...actorFromReq(req),
+        action: 'UPDATE_STUDENT_PROFILE', entityType: 'Student', entityId: student._id,
+        entityLabel: `Student: ${student.name}`, changes, ip: req.ip,
+      });
+    }
+
+    return ok(res, S.OK, null);
   } catch (err) {
     next(err);
   }

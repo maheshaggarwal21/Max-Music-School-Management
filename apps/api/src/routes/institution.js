@@ -131,5 +131,6 @@ router.get('/:slug/student/dashboard', ...studentChain, StudentApp.dashboard);
 router.get('/:slug/student/classes',   ...studentChain, StudentApp.classes);
 router.get('/:slug/student/timetable', ...studentChain, StudentApp.timetable);
 router.get('/:slug/student/me',        ...studentChain, StudentApp.me);
+router.patch('/:slug/student/me',      ...studentChain, StudentApp.updateMe);
 
 module.exports = router;
