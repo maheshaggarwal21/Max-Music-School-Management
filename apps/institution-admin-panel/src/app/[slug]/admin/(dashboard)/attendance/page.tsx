@@ -4,6 +4,7 @@ import { CalendarCheck, ChevronLeft, ChevronRight } from "lucide-react";
 import {
   BlurFade, BorderBeam, Select, StatusBadge, cn,
 } from "@maxmusic/ui";
+import { toast } from "sonner";
 import { api, adminPath, mockable } from "@/lib/api";
 import { MOCK_BATCHES, mockAttendanceGrid, ok, paginate } from "@/lib/mocks";
 import type { ApiResponse, AttendanceGrid, Paginated } from "@/lib/types";
@@ -109,19 +110,50 @@ export default function AttendancePage() {
     [year, month]
   );
 
-  const cycleCell = (studentId: string, date: string) => {
-    setGrid((prev) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        rows: prev.rows.map((row) => {
-          if (row.student._id !== studentId) return row;
-          const current = row.marks[date] ?? "unmarked";
-          const next = CYCLE[(CYCLE.indexOf(current) + 1) % CYCLE.length];
-          return { ...row, marks: { ...row.marks, [date]: next } };
-        }),
-      };
-    });
+  const setCell = (studentId: string, date: string, value: AttendanceStatusValue) => {
+    setGrid((prev) =>
+      prev
+        ? {
+            ...prev,
+            rows: prev.rows.map((row) =>
+              row.student._id === studentId
+                ? { ...row, marks: { ...row.marks, [date]: value } }
+                : row
+            ),
+          }
+        : prev
+    );
+  };
+
+  const cycleCell = async (studentId: string, date: string) => {
+    if (!batchId || !grid) return;
+    const row = grid.rows.find((r) => r.student._id === studentId);
+    const current = row?.marks[date] ?? "unmarked";
+    const next = CYCLE[(CYCLE.indexOf(current) + 1) % CYCLE.length];
+
+    // Optimistic flip.
+    setCell(studentId, date, next);
+
+    // Only present/absent are caller-settable corrections the API persists;
+    // holiday/credited are system-derived (declared holidays) and unmarked = no
+    // record, so the grid carries those visually but never writes them back.
+    if (next !== "present" && next !== "absent") return;
+
+    try {
+      await mockable(
+        () =>
+          api.post<ApiResponse<{ applied: number }>>(adminPath("/attendance/mark"), {
+            batchId,
+            date,
+            marks: [{ studentId, status: next }],
+          }),
+        ok({ applied: 1 }),
+        250
+      );
+    } catch (err) {
+      setCell(studentId, date, current); // revert the optimistic flip
+      toast.error(err instanceof Error ? err.message : "Could not save the mark");
+    }
   };
 
   return (
