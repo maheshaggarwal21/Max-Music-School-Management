@@ -5,6 +5,12 @@
 
 ---
 
+## WORKING PRACTICES
+
+- **Context compaction:** After any heavy task (full QA pass, multi-file fix session, long doc update) — update `.claude/` files and memory **first**, then run `/compact`, then continue. Never let `/compact` fire before the documentation step or the work is lost to the next session.
+
+---
+
 ## WHAT WE ARE BUILDING
 
 A **white-label, multi-tenant music-school SaaS platform**. Max Music School is NOT a
