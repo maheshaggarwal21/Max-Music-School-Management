@@ -1,14 +1,16 @@
 'use strict';
 
-const Batch      = require('../../../models/Batch');
-const Student    = require('../../../models/Student');
-const Attendance = require('../../../models/Attendance');
-const Holiday    = require('../../../models/Holiday');
-const Teacher    = require('../../../models/Teacher');
+const Batch        = require('../../../models/Batch');
+const Student      = require('../../../models/Student');
+const Attendance   = require('../../../models/Attendance');
+const Holiday      = require('../../../models/Holiday');
+const Teacher      = require('../../../models/Teacher');
+const ClassSession = require('../../../models/ClassSession');
 const { auditLog, actorFromReq } = require('../../../config/auditLog');
 const { emitToInstitution } = require('../../../config/socket');
 const { brandingPublic } = require('../../../config/instAuthHelpers');
-const { ok, created, badRequest, notFound } = require('../../../config/helper');
+const { computeKpiMap, computeTeacherKpi } = require('../../../config/teacherKpi');
+const { ok, created, badRequest, notFound, paginated } = require('../../../config/helper');
 const S = require('../../../config/strings');
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -63,6 +65,47 @@ exports.me = async (req, res, next) => {
   }
 };
 
+// PATCH /teacher/me — a teacher updates their own contact details (email/mobile).
+// Scoped to req.actor: a teacher can only ever edit their own record.
+exports.updateMe = async (req, res, next) => {
+  try {
+    const inst = req.institution._id;
+    const email = String((req.body && req.body.email) || '').toLowerCase().trim();
+    const mobile = String((req.body && req.body.mobile) || '').trim();
+    if (!email || !mobile) return badRequest(res, S.VALIDATION_FAILED);
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return badRequest(res, S.VALIDATION_FAILED);
+    if (!/^\d{10}$/.test(mobile)) return badRequest(res, S.VALIDATION_FAILED);
+
+    const teacher = await Teacher.findOne({ _id: req.actor._id, institutionId: inst });
+    if (!teacher) return notFound(res, S.TEACHER_NOT_FOUND);
+
+    // Email is unique per institution — never let one teacher take another's email.
+    if (email !== teacher.email) {
+      const clash = await Teacher.exists({ institutionId: inst, email, _id: { $ne: teacher._id } });
+      if (clash) return badRequest(res, 'That email is already in use');
+    }
+
+    const changes = [];
+    if (teacher.email !== email)   changes.push({ field: 'email',  from: teacher.email,  to: email });
+    if (teacher.mobile !== mobile) changes.push({ field: 'mobile', from: teacher.mobile, to: mobile });
+
+    if (changes.length) {
+      teacher.email = email;
+      teacher.mobile = mobile;
+      await teacher.save();
+      await auditLog({
+        institutionId: inst, ...actorFromReq(req),
+        action: 'UPDATE_TEACHER_PROFILE', entityType: 'Teacher', entityId: teacher._id,
+        entityLabel: `Teacher: ${teacher.name}`, changes, ip: req.ip,
+      });
+    }
+
+    return ok(res, S.OK, null);
+  } catch (err) {
+    next(err);
+  }
+};
+
 exports.myBatches = async (req, res, next) => {
   try {
     const inst = req.institution._id;
@@ -71,7 +114,8 @@ exports.myBatches = async (req, res, next) => {
 
     let batches = await Batch.find(filter).populate(BATCH_POPULATE).sort({ createdAt: -1 }).lean();
     if (day) batches = batches.filter(b => b.dayPatternId && Array.isArray(b.dayPatternId.days) && b.dayPatternId.days.includes(day));
-    return ok(res, S.OK, { batches: batches.map(batchRow) });
+    // Contract (CONTRACTS.md): teacher GET /batches → BatchRow[] (bare array).
+    return ok(res, S.OK, batches.map(batchRow));
   } catch (err) {
     next(err);
   }
@@ -86,12 +130,11 @@ exports.batchStudents = async (req, res, next) => {
       .find({ institutionId: req.institution._id, batchId: batch._id })
       .select('displayId name mobile joinStatus validityEnd').sort({ name: 1 }).lean();
 
-    return ok(res, S.OK, {
-      students: students.map(s => ({
-        _id: String(s._id), displayId: s.displayId, name: s.name, mobile: s.mobile,
-        joinStatus: s.joinStatus, validityEnd: s.validityEnd || null,
-      })),
-    });
+    // Contract (CONTRACTS.md): GET /batches/:id/students → StudentRow[] (bare array).
+    return ok(res, S.OK, students.map(s => ({
+      _id: String(s._id), displayId: s.displayId, name: s.name, mobile: s.mobile,
+      joinStatus: s.joinStatus, validityEnd: s.validityEnd || null,
+    })));
   } catch (err) {
     next(err);
   }
@@ -108,9 +151,10 @@ exports.getAttendance = async (req, res, next) => {
       .find({ institutionId: req.institution._id, batchId, date: dayStart(date) })
       .select('studentId status').lean();
 
+    // Frontend indexes marks[studentId], so return a studentId→status object map.
     return ok(res, S.OK, {
       date: dayKey(date),
-      marks: marks.map(m => ({ studentId: String(m.studentId), status: m.status })),
+      marks: Object.fromEntries(marks.map(m => [String(m.studentId), m.status])),
     });
   } catch (err) {
     next(err);
@@ -167,13 +211,12 @@ exports.listHolidays = async (req, res, next) => {
     const holidays = await Holiday.find({ institutionId: inst, batchId: { $in: myBatchIds } })
       .populate({ path: 'batchId', select: 'name' }).sort({ date: -1 }).lean();
 
-    return ok(res, S.OK, {
-      holidays: holidays.map(h => ({
-        _id: String(h._id),
-        batch: h.batchId ? { _id: String(h.batchId._id), name: h.batchId.name } : null,
-        date: h.date, studentCategory: h.studentCategory, reason: h.reason || null,
-      })),
-    });
+    // Contract (CONTRACTS.md): GET /holidays → HolidayItem[] (bare array).
+    return ok(res, S.OK, holidays.map(h => ({
+      _id: String(h._id),
+      batch: h.batchId ? { _id: String(h.batchId._id), name: h.batchId.name } : null,
+      date: h.date, studentCategory: h.studentCategory, reason: h.reason || null,
+    })));
   } catch (err) {
     next(err);
   }
@@ -206,11 +249,10 @@ exports.declareHoliday = async (req, res, next) => {
       entityLabel: `Holiday: ${batch.name} ${dayKey(date)}`, ip: req.ip,
     });
 
+    // Contract (CONTRACTS.md): POST /holidays → HolidayItem (bare object).
     return created(res, S.CREATED, {
-      holiday: {
-        _id: String(holiday._id), batch: { _id: String(batch._id), name: batch.name },
-        date: holiday.date, studentCategory: holiday.studentCategory, reason: holiday.reason || null,
-      },
+      _id: String(holiday._id), batch: { _id: String(batch._id), name: batch.name },
+      date: holiday.date, studentCategory: holiday.studentCategory, reason: holiday.reason || null,
     });
   } catch (err) {
     next(err);
@@ -242,6 +284,161 @@ exports.deleteHoliday = async (req, res, next) => {
     });
 
     return ok(res, S.DELETED, null);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Teachers roster + KPIs. DECISION: every teacher in the institution may view
+// colleagues and open their class schedule (institution-scoped, not self-scoped).
+// Salary is NEVER exposed here — only KPI %, 0–5 performance, and status.
+// ─────────────────────────────────────────────────────────────────────────────
+exports.listColleagues = async (req, res, next) => {
+  try {
+    const inst = req.institution._id;
+    const teachers = await Teacher.find({ institutionId: inst })
+      .select('displayId name email mobile status isOwner createdAt')
+      .sort({ createdAt: 1 }).lean();
+
+    const kpiMap = await computeKpiMap(inst, teachers.map(t => t._id));
+
+    const items = teachers.map(t => {
+      const kpi = kpiMap.get(String(t._id)) || { kpiPercent: 0, performance: 0 };
+      return {
+        _id: String(t._id),
+        displayId: t.displayId,
+        name: t.name,
+        email: t.email,
+        mobile: t.mobile,
+        status: t.status,
+        role: t.isOwner ? 'owner' : 'staff',
+        since: t.createdAt,
+        kpiPercent: kpi.kpiPercent,
+        performance: kpi.performance,
+      };
+    });
+    return ok(res, S.OK, items);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// A colleague's class schedule — their batches as launchable rows. Optional
+// ?date=YYYY-MM-DD marks which batches already have a session that day.
+exports.colleagueSchedule = async (req, res, next) => {
+  try {
+    const inst = req.institution._id;
+    const teacher = await Teacher.findOne({ _id: req.params.id, institutionId: inst })
+      .select('displayId name status').lean();
+    if (!teacher) return notFound(res, S.TEACHER_NOT_FOUND);
+
+    const date = req.query.date ? dayStart(req.query.date) : null;
+    const batches = await Batch.find({ institutionId: inst, teacherId: teacher._id })
+      .populate(BATCH_POPULATE).sort({ createdAt: -1 }).lean();
+
+    let launched = new Set();
+    if (date && batches.length) {
+      const next = new Date(date); next.setDate(next.getDate() + 1);
+      const sessions = await ClassSession.find({
+        institutionId: inst,
+        batchId: { $in: batches.map(b => b._id) },
+        targetDate: { $gte: date, $lt: next },
+      }).select('batchId').lean();
+      launched = new Set(sessions.map(s => String(s.batchId)));
+    }
+
+    const rows = batches.map(b => ({ ...batchRow(b), launched: launched.has(String(b._id)) }));
+    return ok(res, S.OK, {
+      teacher: { _id: String(teacher._id), name: teacher.name, displayId: teacher.displayId, status: teacher.status },
+      date: date ? dayKey(date) : null,
+      rows,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Class sessions (batch Overview tab "Launch Session" + archive). Institution-
+// scoped batch lookup so any teacher may launch any colleague's class.
+// ─────────────────────────────────────────────────────────────────────────────
+function sessionRow(s) {
+  return {
+    _id: String(s._id),
+    meetingUrl: s.meetingUrl,
+    targetDate: s.targetDate,
+    launchedAt: s.createdAt,
+    launchedBy: s.launchedBy ? { actorRole: s.launchedBy.actorRole } : null,
+  };
+}
+
+exports.batchInfo = async (req, res, next) => {
+  try {
+    const batch = await Batch.findOne({ _id: req.params.id, institutionId: req.institution._id })
+      .populate(BATCH_POPULATE).lean();
+    if (!batch) return notFound(res, S.BATCH_NOT_FOUND);
+    return ok(res, S.OK, batchRow(batch));
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.listSessions = async (req, res, next) => {
+  try {
+    const inst = req.institution._id;
+    const batch = await Batch.findOne({ _id: req.params.id, institutionId: inst }).select('_id').lean();
+    if (!batch) return notFound(res, S.BATCH_NOT_FOUND);
+
+    const page  = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 30));
+    const result = await ClassSession.paginate(
+      { institutionId: inst, batchId: batch._id },
+      { page, limit, sort: { targetDate: -1, createdAt: -1 }, lean: true }
+    );
+    return ok(res, S.OK, paginated(result.docs.map(sessionRow), result));
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.launchSession = async (req, res, next) => {
+  try {
+    const inst = req.institution._id;
+    const { meetingUrl, targetDate } = req.body || {};
+    if (!meetingUrl || !String(meetingUrl).trim()) return badRequest(res, S.VALIDATION_FAILED);
+
+    const batch = await Batch.findOne({ _id: req.params.id, institutionId: inst }).select('name teacherId').lean();
+    if (!batch) return notFound(res, S.BATCH_NOT_FOUND);
+
+    let url;
+    try {
+      url = new URL(String(meetingUrl).trim());
+      if (!['http:', 'https:'].includes(url.protocol)) throw new Error('bad protocol');
+    } catch {
+      return badRequest(res, S.VALIDATION_FAILED);
+    }
+    const when = targetDate ? new Date(targetDate) : new Date();
+    if (Number.isNaN(when.getTime())) return badRequest(res, S.VALIDATION_FAILED);
+
+    const session = await ClassSession.create({
+      institutionId: inst,
+      batchId: batch._id,
+      teacherId: batch.teacherId || undefined,
+      meetingUrl: url.toString(),
+      targetDate: when,
+      launchedBy: { actorId: String(req.actor._id), actorRole: req.actor.role },
+    });
+
+    await auditLog({
+      institutionId: inst, ...actorFromReq(req),
+      action: 'LAUNCH_SESSION', entityType: 'ClassSession', entityId: session._id,
+      entityLabel: `Session: ${batch.name} ${dayKey(when)}`, ip: req.ip,
+    });
+
+    emitToInstitution(String(inst), 'session:launched', { batchId: String(batch._id), targetDate: dayKey(when) });
+
+    return created(res, S.SESSION_LAUNCHED, sessionRow(session));
   } catch (err) {
     next(err);
   }

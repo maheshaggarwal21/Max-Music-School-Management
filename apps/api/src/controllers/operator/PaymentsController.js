@@ -39,8 +39,8 @@ exports.listStudentFees = async (req, res, next) => {
     const { institutionId, status, from, to } = req.query;
 
     const filter = {};
-    if (institutionId) filter.institutionId = institutionId;
-    if (status && status !== 'all') filter.status = status;
+    if (institutionId && institutionId !== 'all') filter.institutionId = institutionId;
+    if (status && status !== 'all')               filter.status = status;
     if (from || to) {
       filter.createdAt = {};
       if (from) filter.createdAt.$gte = new Date(from);
@@ -97,8 +97,8 @@ exports.listRentInvoices = async (req, res, next) => {
     const { institutionId, status } = req.query;
 
     const filter = {};
-    if (institutionId) filter.institutionId = institutionId;
-    if (status && status !== 'all') filter.status = status;
+    if (institutionId && institutionId !== 'all') filter.institutionId = institutionId;
+    if (status && status !== 'all')               filter.status = status;
 
     const result = await RentInvoice.paginate(filter, {
       page, limit, sort: { dueDate: -1 }, lean: true,

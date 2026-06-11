@@ -22,10 +22,18 @@ function roomFor(institutionId) {
 }
 
 function init(server) {
+  // Same allow-list as the REST CORS — never reflect arbitrary origins. In dev,
+  // each panel runs on its own localhost port, so allow any localhost origin.
+  const allowed = [process.env.PLATFORM_DOMAIN_URL, process.env.OPERATOR_DOMAIN_URL].filter(Boolean);
+  const isDev = process.env.NODE_ENV !== 'production';
   io = new Server(server, {
-    // Same allow-list as the REST CORS — never reflect arbitrary origins.
     cors: {
-      origin: [process.env.PLATFORM_DOMAIN_URL, process.env.OPERATOR_DOMAIN_URL].filter(Boolean),
+      origin(origin, cb) {
+        if (!origin) return cb(null, true);
+        if (allowed.includes(origin)) return cb(null, true);
+        if (isDev && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return cb(null, true);
+        return cb(new Error('Not allowed by CORS'));
+      },
       credentials: true,
     },
   });

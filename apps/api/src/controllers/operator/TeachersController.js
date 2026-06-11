@@ -2,8 +2,8 @@
 
 const Teacher = require('../../models/Teacher');
 const Batch   = require('../../models/Batch');
-const { ok, notFound, badRequest, paginated } = require('../../config/helper');
-const { auditLog, actorFromReq } = require('../../config/auditLog');
+const { ok, badRequest, notFound, paginated } = require('../../config/helper');
+const { auditLog, diff, actorFromReq } = require('../../config/auditLog');
 const S = require('../../config/strings');
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -58,7 +58,7 @@ exports.list = async (req, res, next) => {
     const { search, institutionId, employmentType, status } = req.query;
 
     const filter = {};
-    if (institutionId)   filter.institutionId = institutionId;
+    if (institutionId && institutionId !== 'all')   filter.institutionId = institutionId;
     if (employmentType && employmentType !== 'all') filter.employmentType = employmentType;
     if (status && status !== 'all')                 filter.status = status;
     if (search) {
@@ -89,57 +89,58 @@ exports.get = async (req, res, next) => {
   }
 };
 
-// God-mode edit from the operator panel. Profile + salary + status only —
-// panelAccess and institution are managed via the institution lifecycle actions.
-exports.patch = async (req, res, next) => {
+// ── GOD-MODE EDIT ──────────────────────────────────────────────────────────────
+// Operator can patch a teacher's profile, salary, and active/inactive status from
+// any institution. Audited per-diff under the teacher's own institutionId. PBAC
+// (panelAccess) and ownership are managed via grant/revoke, not this endpoint.
+exports.update = async (req, res, next) => {
   try {
-    const teacher = await Teacher.findById(req.params.id);
-    if (!teacher) return notFound(res, S.TEACHER_NOT_FOUND);
+    const t = await Teacher.findById(req.params.id);
+    if (!t) return notFound(res, S.TEACHER_NOT_FOUND);
 
     const b = req.body || {};
-    const changes = [];
-    const apply = (field, value) => {
-      const from = teacher[field] ?? null;
-      if (String(from) === String(value)) return;
-      changes.push({ field, from, to: value });
-      teacher[field] = value;
-    };
+    const before = t.toObject();
 
-    if (typeof b.name === 'string' && b.name.trim()) apply('name', b.name.trim());
+    if (typeof b.name === 'string' && b.name.trim())     t.name = b.name.trim();
     if (typeof b.mobile === 'string' && b.mobile.trim()) {
       if (!/^\d{10}$/.test(b.mobile.trim())) return badRequest(res, S.VALIDATION_FAILED);
-      apply('mobile', b.mobile.trim());
+      t.mobile = b.mobile.trim();
     }
     if (b.salaryAmount !== undefined) {
-      const n = Number(b.salaryAmount);
-      if (!Number.isFinite(n) || n < 0) return badRequest(res, S.VALIDATION_FAILED);
-      apply('salaryAmount', Math.round(n));
+      if (b.salaryAmount === null || b.salaryAmount === '') {
+        t.salaryAmount = undefined;
+      } else {
+        const n = Number(b.salaryAmount);
+        if (!Number.isFinite(n) || n < 0) return badRequest(res, S.VALIDATION_FAILED);
+        t.salaryAmount = Math.round(n);
+      }
     }
     if (b.status !== undefined) {
       if (!['active', 'inactive'].includes(b.status)) return badRequest(res, S.VALIDATION_FAILED);
-      const wasActive = teacher.status === 'active';
-      apply('status', b.status);
       // Deactivation logs the teacher out everywhere (two-level invalidation).
-      if (wasActive && b.status === 'inactive') teacher.tokenVersion += 1;
+      if (t.status === 'active' && b.status === 'inactive') t.tokenVersion += 1;
+      t.status = b.status;
     }
 
+    await t.save();
+
+    const changes = diff(before, t.toObject(), ['name', 'mobile', 'salaryAmount', 'status']);
     if (changes.length) {
-      await teacher.save();
       await auditLog({
-        institutionId: teacher.institutionId,
+        institutionId: t.institutionId,
         ...actorFromReq(req),
         action:      'UPDATE_TEACHER',
         entityType:  'Teacher',
-        entityId:    teacher._id,
-        entityLabel: `Teacher: ${teacher.name}`,
+        entityId:    t._id,
+        entityLabel: `Teacher: ${t.name}`,
         changes,
-        ip: req.ip,
+        ip:          req.ip,
       });
     }
 
-    const fresh = await Teacher.findById(teacher._id).populate(POPULATE).lean();
-    const bMap = await activeBatchMap([fresh._id]);
-    return ok(res, S.UPDATED, { teacher: serialize(fresh, bMap.get(String(fresh._id)) || 0) });
+    const fresh = await Teacher.findById(t._id).populate(POPULATE).lean();
+    const bMap = await activeBatchMap([t._id]);
+    return ok(res, S.TEACHER_UPDATED, { teacher: serialize(fresh, bMap.get(String(t._id)) || 0) });
   } catch (err) {
     next(err);
   }

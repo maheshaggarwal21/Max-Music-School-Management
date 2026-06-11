@@ -105,7 +105,7 @@ export interface AuditLogItem {
   entityType: string;
   entityId: string;
   entityLabel: string | null;
-  changes: { field: string; from: unknown; to: unknown }[];
+  changes?: { field: string; from: unknown; to: unknown }[];
   before: object | null;
   after: object | null;
   ip: string | null;
@@ -303,8 +303,8 @@ export interface OperatorSettingsData {
   profile: { name: string; email: string };
   twoFactorEnabled: boolean;
   defaultRent: { amount: number; billingCycle: "monthly" };
-  /** Mock-mode only — live instruments are per-institution, not a platform master list. */
-  instruments?: InstrumentMasterItem[];
+  /** Platform master catalog (PlatformSettings singleton) — offered to every institution. */
+  instruments: InstrumentMasterItem[];
 }
 
 // ── Slug change requests (GET /api/operator/slug-requests) ───────────────────

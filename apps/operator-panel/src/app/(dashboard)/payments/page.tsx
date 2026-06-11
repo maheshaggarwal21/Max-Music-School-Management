@@ -22,11 +22,11 @@ import { Tabs } from "@/components/tabs";
 import { Tag } from "@/components/tag";
 import { api, mockable } from "@/lib/api";
 import {
-  INSTITUTION_OPTIONS,
   mockMarkRentPaid,
   mockPaymentList,
   mockRentInvoiceList,
 } from "@/lib/mocks";
+import { useInstitutionOptions } from "@/lib/use-institution-options";
 import type { ApiResponse, OperatorPaymentRow, Paginated, RentInvoiceItem } from "@/lib/types";
 
 const LIMIT = 10;
@@ -56,6 +56,7 @@ export default function PaymentsPage() {
   const [feePage, setFeePage] = useState(1);
   const [feeInstitutionId, setFeeInstitutionId] = useState<string | null>(null);
   const [feeStatus, setFeeStatus] = useState<string | null>("all");
+  const institutionOptions = useInstitutionOptions();
 
   // ── Rent invoices state ──
   const [rents, setRents] = useState<RentInvoiceItem[]>([]);
@@ -269,7 +270,7 @@ export default function PaymentsPage() {
           <BlurFade delay={0.15}>
             <div className="flex flex-wrap items-center gap-3">
               <Select
-                options={[{ value: "", label: "All institutions" }, ...INSTITUTION_OPTIONS]}
+                options={[{ value: "", label: "All institutions" }, ...institutionOptions]}
                 value={feeInstitutionId ?? ""}
                 onChange={(v) => {
                   setFeeInstitutionId(v || null);

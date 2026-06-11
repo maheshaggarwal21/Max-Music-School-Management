@@ -21,7 +21,7 @@ const S = require('../../../config/strings');
 function escapeRegex(s) { return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 
 const EDITABLE = [
-  'teacherId', 'batchId', 'instrumentId', 'classType', 'mode', 'joinStatus',
+  'teacherId', 'batchId', 'instrumentId', 'gender', 'classType', 'mode', 'joinStatus',
   'sessionType', 'category', 'validityStart', 'validityEnd', 'validityDays',
   'paidClasses', 'upcomingClasses', 'paidAmount', 'upcomingAmount', 'status',
 ];
@@ -112,7 +112,8 @@ exports.get = async (req, res, next) => {
       batch: s.batchId ? { _id: String(s.batchId._id), name: s.batchId.name } : null,
       assignedVideoChapterId: s.assignedVideoChapterId ? String(s.assignedVideoChapterId) : null,
     };
-    return ok(res, S.OK, { student: detail });
+    // Contract (CONTRACTS.md): GET /students/:id → StudentDetail (bare object).
+    return ok(res, S.OK, detail);
   } catch (err) {
     next(err);
   }

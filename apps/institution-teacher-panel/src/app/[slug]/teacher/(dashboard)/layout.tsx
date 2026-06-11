@@ -6,26 +6,29 @@
 import { useEffect, useState } from "react";
 import { useParams, usePathname, useRouter } from "next/navigation";
 import {
-  CalendarOff,
   ClipboardCheck,
   LayoutDashboard,
   Moon,
   Music2,
   Sun,
   UserRound,
+  Users,
 } from "lucide-react";
 import { BrandingProvider, Sidebar, cn, useThemeTransition } from "@maxmusic/ui";
 import { api, mockable, teacherAuthPath, teacherPath } from "@/lib/api";
 import { MOCK_ME, MOCK_OK } from "@/lib/mocks";
 import type { ApiResponse, BrandingPublic, TeacherMeData } from "@/lib/types";
 import { MobileNav } from "@/components/mobile-nav";
+import { TopNav } from "@/components/top-nav";
 import { PageLoading } from "@/components/skeletons";
 
+// Holidays moved INTO the dashboard (no standalone tab). Teachers roster is
+// reachable from the sidebar and the top-nav button.
 const NAV_ITEMS = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { label: "My Batches", href: "/batches", icon: Music2 },
   { label: "Attendance", href: "/attendance", icon: ClipboardCheck },
-  { label: "Holidays", href: "/holidays", icon: CalendarOff },
+  { label: "Teachers", href: "/teachers", icon: Users },
   { label: "Profile", href: "/profile", icon: UserRound },
 ];
 
@@ -122,6 +125,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         />
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
           <MobileHeader branding={me.institution} />
+          <TopNav
+            teacherName={me.teacher.name}
+            schoolName={me.institution.schoolName}
+            logoUrl={me.institution.logoUrl}
+            base={base}
+            onSignOut={signOut}
+          />
           <main className={cn("flex-1 overflow-y-auto pb-24 md:pb-0")}>
             {children}
           </main>

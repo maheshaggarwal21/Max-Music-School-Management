@@ -1,6 +1,7 @@
 "use client";
 import * as React from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Check, ChevronDown, Search, X } from "lucide-react";
 import { cn } from "@maxmusic/ui/lib/utils";
 
@@ -38,14 +39,42 @@ export function Select(props: SelectProps) {
 
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const [mounted, setMounted] = useState(false);
+  const [coords, setCoords] = useState<{ top: number; left: number; width: number } | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
-  // close on outside click
+  useEffect(() => setMounted(true), []);
+
+  // Position the portalled menu under the trigger (fixed coords so it escapes
+  // any parent transform/stacking context — e.g. animated <BlurFade> wrappers).
+  useLayoutEffect(() => {
+    if (!open) return;
+    const reposition = () => {
+      const t = triggerRef.current;
+      if (!t) return;
+      const r = t.getBoundingClientRect();
+      setCoords({ top: r.bottom + 4, left: r.left, width: r.width });
+    };
+    reposition();
+    window.addEventListener("resize", reposition);
+    window.addEventListener("scroll", reposition, true);
+    return () => {
+      window.removeEventListener("resize", reposition);
+      window.removeEventListener("scroll", reposition, true);
+    };
+  }, [open]);
+
+  // close on outside click (trigger lives in rootRef, menu is portalled elsewhere)
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      if (rootRef.current?.contains(target)) return;
+      if (menuRef.current?.contains(target)) return;
+      setOpen(false);
     };
     document.addEventListener("mousedown", onDown);
     return () => document.removeEventListener("mousedown", onDown);
@@ -110,6 +139,7 @@ export function Select(props: SelectProps) {
 
       <div className="relative">
         <button
+          ref={triggerRef}
           type="button"
           disabled={disabled}
           onClick={() => setOpen((v) => !v)}
@@ -140,8 +170,18 @@ export function Select(props: SelectProps) {
           </span>
         </button>
 
-        {open && (
-          <div className="absolute z-50 mt-1 w-full overflow-hidden rounded-md border border-border bg-popover shadow-lg">
+        {open && mounted && coords && createPortal(
+          <div
+            ref={menuRef}
+            style={{
+              position: "fixed",
+              top: coords.top,
+              left: coords.left,
+              width: coords.width,
+              zIndex: 9999,
+            }}
+            className="overflow-hidden rounded-md border border-border bg-popover text-popover-foreground shadow-lg"
+          >
             {searchable && (
               <div className="relative border-b border-border">
                 <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
@@ -177,7 +217,8 @@ export function Select(props: SelectProps) {
                 ))
               )}
             </ul>
-          </div>
+          </div>,
+          document.body
         )}
       </div>
 

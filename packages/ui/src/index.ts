@@ -43,6 +43,7 @@ export {
 // form
 export { Input, type InputProps } from "./components/form/input";
 export { Select, type SelectProps, type SelectOption } from "./components/form/select";
+export { TimePicker, type TimePickerProps } from "./components/form/time-picker";
 export {
   DatePicker,
   type DatePickerProps,

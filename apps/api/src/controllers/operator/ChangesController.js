@@ -40,10 +40,10 @@ exports.list = async (req, res, next) => {
     const { institutionId, entityType, action, actorRole, actorName, from, to } = req.query;
 
     const filter = {};
-    if (institutionId) filter.institutionId = institutionId;
-    if (entityType)    filter.entityType = entityType;
-    if (action)        filter.action = action;
-    if (actorRole && actorRole !== 'all') filter.actorRole = actorRole;
+    if (institutionId && institutionId !== 'all') filter.institutionId = institutionId;
+    if (entityType && entityType !== 'all')       filter.entityType = entityType;
+    if (action && action !== 'all')               filter.action = action;
+    if (actorRole && actorRole !== 'all')         filter.actorRole = actorRole;
     if (actorName)     filter.actorName = new RegExp(escapeRegex(actorName), 'i');
     if (from || to) {
       filter.createdAt = {};

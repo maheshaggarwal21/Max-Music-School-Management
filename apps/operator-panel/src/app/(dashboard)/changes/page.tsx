@@ -26,7 +26,8 @@ import { PageHeader } from "@/components/page-header";
 import { Skeleton } from "@/components/skeleton";
 import { Tag } from "@/components/tag";
 import { api, mockable } from "@/lib/api";
-import { INSTITUTION_OPTIONS, mockChangesList } from "@/lib/mocks";
+import { mockChangesList } from "@/lib/mocks";
+import { useInstitutionOptions } from "@/lib/use-institution-options";
 import type { ApiResponse, AuditLogItem, Paginated } from "@/lib/types";
 
 const LIMIT = 8;
@@ -75,6 +76,7 @@ export default function ChangesPage() {
   const [institutionId, setInstitutionId] = useState<string | null>(null);
   const [actorRole, setActorRole] = useState<string | null>("all");
   const [range, setRange] = useState<DateRange>({ from: null, to: null });
+  const institutionOptions = useInstitutionOptions();
   const [page, setPage] = useState(1);
 
   const fetchItems = useCallback(async () => {
@@ -128,7 +130,7 @@ export default function ChangesPage() {
       <BlurFade delay={0.1}>
         <div className="flex flex-wrap items-center gap-3">
           <Select
-            options={[{ value: "", label: "All institutions" }, ...INSTITUTION_OPTIONS]}
+            options={[{ value: "", label: "All institutions" }, ...institutionOptions]}
             value={institutionId ?? ""}
             onChange={(v) => {
               setInstitutionId(v || null);

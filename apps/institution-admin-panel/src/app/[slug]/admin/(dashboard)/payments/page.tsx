@@ -50,8 +50,15 @@ export default function PaymentsPage() {
   const [matching, setMatching] = useState<WebhookEventRow | null>(null);
   const [matchPaymentId, setMatchPaymentId] = useState<string | null>(null);
 
+  // student list for the manual-entry dropdown — fetched live per institution
+  const [students, setStudents] = useState<{ _id: string; name: string; displayId: string }[]>([]);
+
   useEffect(() => {
     let cancelled = false;
+    mockable(
+      () => api.get<ApiResponse<Paginated<{ _id: string; name: string; displayId: string }>>>(adminPath("/students?page=1&limit=100")),
+      ok(paginate(MOCK_STUDENTS))
+    ).then((r) => !cancelled && setStudents((r.data as Paginated<{ _id: string; name: string; displayId: string }>)?.items ?? []));
     mockable(
       () => api.get<ApiResponse<Paginated<PaymentRow>>>(adminPath("/payments?page=1&limit=100")),
       ok(paginate(MOCK_PAYMENTS))
@@ -110,7 +117,7 @@ export default function PaymentsPage() {
         ok(null),
         500
       );
-      const student = MOCK_STUDENTS.find((s) => s._id === form.studentId)!;
+      const student = students.find((s) => s._id === form.studentId)!;
       setPayments((prev) => [
         {
           _id: `pay_local_${Date.now()}`,
@@ -329,7 +336,7 @@ export default function PaymentsPage() {
             required
             searchable
             placeholder="Select student"
-            options={MOCK_STUDENTS.map((s) => ({
+            options={students.map((s) => ({
               value: s._id,
               label: `${s.name} (${s.displayId})`,
             }))}

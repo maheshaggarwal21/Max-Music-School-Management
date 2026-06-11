@@ -33,11 +33,12 @@ router.post('/institutions/:id/impersonate',  Institution.impersonate);
 
 // Cross-institution collections
 router.get('/students',       Students.list);
+router.post('/students',      Students.create);   // god-mode enrol into any institution
 router.get('/students/:id',   Students.get);
-router.patch('/students/:id', Students.patch);
+router.patch('/students/:id', Students.update);   // god-mode edit (audited)
 router.get('/teachers',       Teachers.list);
 router.get('/teachers/:id',   Teachers.get);
-router.patch('/teachers/:id', Teachers.patch);
+router.patch('/teachers/:id', Teachers.update);   // god-mode edit (audited)
 
 // Money
 router.get('/payments',                  Payments.listStudentFees);
@@ -53,10 +54,12 @@ router.post('/slug-requests/:id/reject',  SlugRequests.reject);
 router.get('/changes', Changes.list);
 
 // Settings
-router.get('/settings',              Settings.getProfile);
-router.patch('/settings',            Settings.updateProfile);
-router.post('/settings/2fa',         Settings.toggle2fa);
-router.get('/settings/instruments',  Settings.listInstruments);
-router.post('/settings/instruments', Settings.upsertInstrument);
+router.get('/settings',               Settings.getSettings);
+router.patch('/settings',             Settings.updateSettings);
+router.post('/settings/2fa/enable',   Settings.enable2fa);
+router.post('/settings/2fa/verify',   Settings.verify2fa);
+router.post('/settings/2fa/disable',  Settings.disable2fa);
+router.get('/settings/instruments',   Settings.listInstruments);
+router.post('/settings/instruments',  Settings.upsertInstrument);
 
 module.exports = router;

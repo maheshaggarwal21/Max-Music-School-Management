@@ -1,9 +1,24 @@
 'use strict';
 
-const Student = require('../../models/Student');
-const { ok, notFound, badRequest, paginated } = require('../../config/helper');
-const { auditLog, actorFromReq } = require('../../config/auditLog');
+const mongoose    = require('mongoose');
+const Student     = require('../../models/Student');
+const Institution = require('../../models/Institution');
+const Batch       = require('../../models/Batch');
+const { nextDisplayId } = require('../../config/specialFunctions');
+const { studentRefsValid } = require('../../config/refGuard');
+const { hash, randomTempPassword } = require('../../config/password');
+const { ok, created, badRequest, notFound, paginated } = require('../../config/helper');
+const { auditLog, diff, actorFromReq } = require('../../config/auditLog');
 const S = require('../../config/strings');
+
+const JOIN_STATUSES = ['trial', 'active_soon', 'active', 'inactive'];
+
+// Fields the operator may set on a new student (same set the admin create accepts).
+const CREATE_FIELDS = [
+  'teacherId', 'batchId', 'instrumentId', 'gender', 'classType', 'mode', 'joinStatus',
+  'sessionType', 'category', 'validityStart', 'validityEnd', 'validityDays',
+  'paidClasses', 'upcomingClasses', 'paidAmount', 'upcomingAmount', 'status',
+];
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CROSS-INSTITUTION student view (god-mode). The ONLY place students from many
@@ -49,11 +64,11 @@ exports.list = async (req, res, next) => {
     const { search, institutionId, status, joinStatus, instrumentId, teacherId } = req.query;
 
     const filter = {};
-    if (institutionId) filter.institutionId = institutionId;
-    if (status && status !== 'all')         filter.status = status;
-    if (joinStatus && joinStatus !== 'all') filter.joinStatus = joinStatus;
-    if (instrumentId)  filter.instrumentId = instrumentId;
-    if (teacherId)     filter.teacherId = teacherId;
+    if (institutionId && institutionId !== 'all') filter.institutionId = institutionId;
+    if (status && status !== 'all')               filter.status = status;
+    if (joinStatus && joinStatus !== 'all')       filter.joinStatus = joinStatus;
+    if (instrumentId && instrumentId !== 'all')   filter.instrumentId = instrumentId;
+    if (teacherId && teacherId !== 'all')         filter.teacherId = teacherId;
     if (search) {
       const rx = new RegExp(escapeRegex(search), 'i');
       filter.$or = [{ name: rx }, { mobile: rx }, { displayId: rx }];
@@ -69,6 +84,63 @@ exports.list = async (req, res, next) => {
   }
 };
 
+// ── GOD-MODE CREATE ──────────────────────────────────────────────────────────
+// Operator directly enrols a student into ANY institution (institutionId comes
+// from the body — this is the ONE create that is cross-institution by design).
+// Mirrors the admin create, but the target tenant is explicit + validated. All
+// teacher/batch/instrument refs are checked against THAT institution (golden rule).
+exports.create = async (req, res, next) => {
+  try {
+    const { institutionId, name, mobile } = req.body || {};
+    if (!institutionId || !mongoose.isValidObjectId(institutionId)) return badRequest(res, S.VALIDATION_FAILED);
+    if (!name || !mobile) return badRequest(res, S.VALIDATION_FAILED);
+
+    const inst = await Institution.findById(institutionId).select('_id status').lean();
+    if (!inst) return notFound(res, S.INST_NOT_FOUND);
+    if (inst.status === 'terminated') return badRequest(res, S.INST_NOT_AVAILABLE);
+
+    // GOLDEN RULE: foreign teacher/batch/instrument refs rejected before persist.
+    if (!(await studentRefsValid(inst._id, req.body))) return badRequest(res, S.STUDENT_BAD_REFS);
+
+    if (req.body.joinStatus !== undefined && !JOIN_STATUSES.includes(req.body.joinStatus)) {
+      return badRequest(res, S.VALIDATION_FAILED);
+    }
+
+    const displayId    = await nextDisplayId(inst._id, 'student');
+    const tempPassword = randomTempPassword();
+    const passwordHash = await hash(tempPassword);
+
+    const doc = {
+      institutionId: inst._id, displayId,
+      name: String(name).trim(), mobile: String(mobile).trim(), passwordHash,
+    };
+    if (req.body.email) doc.email = String(req.body.email).toLowerCase().trim();
+    for (const f of CREATE_FIELDS) if (req.body[f] !== undefined) doc[f] = req.body[f];
+
+    const student = await Student.create(doc);
+    if (student.batchId) {
+      await Batch.updateOne({ _id: student.batchId, institutionId: inst._id }, { $inc: { studentCount: 1 } });
+    }
+
+    await auditLog({
+      institutionId: inst._id,
+      ...actorFromReq(req),
+      action:      'CREATE_STUDENT',
+      entityType:  'Student',
+      entityId:    student._id,
+      entityLabel: `Student: ${student.name}`,
+      after:       { displayId: student.displayId, paidAmount: student.paidAmount },
+      ip:          req.ip,
+    });
+
+    // Re-fetch populated so the operator table row carries institution/teacher tags.
+    const full = await Student.findById(student._id).populate(POPULATE).lean();
+    return created(res, S.STUDENT_CREATED, { student: serialize(full), tempPassword });
+  } catch (err) {
+    next(err);
+  }
+};
+
 exports.get = async (req, res, next) => {
   try {
     const s = await Student.findById(req.params.id).populate(POPULATE).lean();
@@ -79,70 +151,64 @@ exports.get = async (req, res, next) => {
   }
 };
 
-// God-mode edit from the operator panel. Profile + fee fields only — enrollment
-// refs (batch/teacher/instrument) are managed inside the institution admin panel.
-const JOIN_STATUSES = ['trial', 'active_soon', 'active', 'inactive'];
+// ── GOD-MODE EDIT ──────────────────────────────────────────────────────────────
+// Operator can patch a student's profile + fee fields from any institution. Each
+// change is audited per-diff, scoped to the student's OWN institutionId (so it
+// surfaces in that institution's activity feed). Enrollment-structural fields
+// (teacher/batch/instrument) are managed inside the institution admin panel, not here.
 const FEE_FIELDS = ['paidAmount', 'upcomingAmount', 'paidClasses', 'validityEnd'];
 
-exports.patch = async (req, res, next) => {
+exports.update = async (req, res, next) => {
   try {
-    const student = await Student.findById(req.params.id);
-    if (!student) return notFound(res, S.STUDENT_NOT_FOUND);
+    const s = await Student.findById(req.params.id);
+    if (!s) return notFound(res, S.STUDENT_NOT_FOUND);
 
     const b = req.body || {};
-    const changes = [];
-    const apply = (field, value) => {
-      const from = field === 'validityEnd'
-        ? (student[field] ? new Date(student[field]).toISOString().slice(0, 10) : null)
-        : (student[field] ?? null);
-      const to = field === 'validityEnd'
-        ? (value ? new Date(value).toISOString().slice(0, 10) : null)
-        : value;
-      if (String(from) === String(to)) return;
-      changes.push({ field, from, to });
-      student[field] = value === null ? undefined : value;
-    };
+    const before = s.toObject();
 
-    if (typeof b.name === 'string' && b.name.trim()) apply('name', b.name.trim());
+    if (typeof b.name === 'string' && b.name.trim())   s.name = b.name.trim();
     if (typeof b.mobile === 'string' && b.mobile.trim()) {
       if (!/^\d{10}$/.test(b.mobile.trim())) return badRequest(res, S.VALIDATION_FAILED);
-      apply('mobile', b.mobile.trim());
+      s.mobile = b.mobile.trim();
     }
     if (b.joinStatus !== undefined) {
       if (!JOIN_STATUSES.includes(b.joinStatus)) return badRequest(res, S.VALIDATION_FAILED);
-      apply('joinStatus', b.joinStatus);
+      s.joinStatus = b.joinStatus;
     }
     if (b.validityEnd !== undefined) {
-      if (b.validityEnd !== null && Number.isNaN(Date.parse(b.validityEnd))) {
+      if (b.validityEnd != null && b.validityEnd !== '' && Number.isNaN(Date.parse(b.validityEnd))) {
         return badRequest(res, S.VALIDATION_FAILED);
       }
-      apply('validityEnd', b.validityEnd === null ? null : new Date(b.validityEnd));
+      s.validityEnd = b.validityEnd == null || b.validityEnd === '' ? undefined : new Date(b.validityEnd);
     }
     for (const f of ['paidAmount', 'upcomingAmount', 'paidClasses']) {
       if (b[f] !== undefined) {
         const n = Number(b[f]);
         if (!Number.isFinite(n) || n < 0) return badRequest(res, S.VALIDATION_FAILED);
-        apply(f, Math.round(n));
+        s[f] = Math.round(n);
       }
     }
 
+    await s.save();
+
+    const changes = diff(before, s.toObject(),
+      ['name', 'mobile', 'joinStatus', 'validityEnd', 'paidAmount', 'upcomingAmount', 'paidClasses']);
     if (changes.length) {
-      await student.save();
       const onlyFees = changes.every(c => FEE_FIELDS.includes(c.field));
       await auditLog({
-        institutionId: student.institutionId,
+        institutionId: s.institutionId,
         ...actorFromReq(req),
         action:      onlyFees ? 'UPDATE_PAID_AMOUNT' : 'UPDATE_STUDENT',
         entityType:  'Student',
-        entityId:    student._id,
-        entityLabel: `Student: ${student.name}`,
+        entityId:    s._id,
+        entityLabel: `Student: ${s.name}`,
         changes,
-        ip: req.ip,
+        ip:          req.ip,
       });
     }
 
-    const fresh = await Student.findById(student._id).populate(POPULATE).lean();
-    return ok(res, S.UPDATED, { student: serialize(fresh) });
+    const fresh = await Student.findById(s._id).populate(POPULATE).lean();
+    return ok(res, S.STUDENT_UPDATED, { student: serialize(fresh) });
   } catch (err) {
     next(err);
   }

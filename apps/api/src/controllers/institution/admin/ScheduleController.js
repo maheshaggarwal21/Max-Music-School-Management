@@ -2,6 +2,7 @@
 
 const DayPattern = require('../../../models/DayPattern');
 const TimeSlot   = require('../../../models/TimeSlot');
+const Instrument = require('../../../models/Instrument');
 const { auditLog, actorFromReq } = require('../../../config/auditLog');
 const { ok, created, badRequest, notFound } = require('../../../config/helper');
 const S = require('../../../config/strings');
@@ -14,6 +15,18 @@ const S = require('../../../config/strings');
 
 const dayItem  = d => ({ _id: String(d._id), days: d.days, label: d.label, isActive: d.isActive });
 const slotItem = t => ({ _id: String(t._id), startTime: t.startTime, endTime: t.endTime, label: t.label, isOnline: t.isOnline });
+const instrItem = i => ({ _id: String(i._id), name: i.name, isActive: i.isActive });
+
+// ── Instruments (read-only reference list; instruments are provisioned per
+// institution by the operator). Powers batch + enrollment-request dropdowns. ──
+exports.listInstruments = async (req, res, next) => {
+  try {
+    const items = await Instrument.find({ institutionId: req.institution._id }).sort({ name: 1 }).lean();
+    return ok(res, S.OK, { instruments: items.map(instrItem) });
+  } catch (err) {
+    next(err);
+  }
+};
 
 const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
 const DAY_ENUM = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];

@@ -1,19 +1,20 @@
 'use strict';
 
-const Operator   = require('../../models/Operator');
-const Instrument = require('../../models/Instrument');
+const Operator         = require('../../models/Operator');
+const Instrument       = require('../../models/Instrument');
+const PlatformSettings = require('../../models/PlatformSettings');
 const totp = require('../../config/totp');
 const { ok, badRequest, notFound } = require('../../config/helper');
 const S = require('../../config/strings');
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Operator settings. Profile + 2FA enrolment + per-institution instrument master.
-// Operator profile/settings are PLATFORM-level (no institutionId) → NOT auditLog'd
-// (auditLog requires an institutionId; it is for institution-scoped writes only).
+// Operator settings. Profile + 2FA enrolment + platform defaults (default rent,
+// instrument master catalog). All PLATFORM-level (no institutionId) → NOT
+// auditLog'd (auditLog requires an institutionId; it is for institution-scoped
+// writes only). The per-institution instrument endpoints live further below.
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Single settings payload shape consumed by the operator Settings page.
-function settingsPayload(op) {
+function serializeSettings(op, ps) {
   return {
     profile: {
       _id:   String(op._id),
@@ -24,76 +25,123 @@ function settingsPayload(op) {
     },
     twoFactorEnabled: op.twoFactorEnabled,
     defaultRent: {
-      amount:       (op.defaultRent && op.defaultRent.amount) || 2500000,
-      billingCycle: (op.defaultRent && op.defaultRent.billingCycle) || 'monthly',
+      amount:       ps.defaultRent ? ps.defaultRent.amount : 0,
+      billingCycle: ps.defaultRent ? ps.defaultRent.billingCycle : 'monthly',
     },
-    // No platform-level instrument master — instruments are per-institution.
+    instruments: (ps.instruments || []).map(i => ({
+      _id: String(i._id), name: i.name, isActive: i.isActive,
+    })),
   };
 }
 
-exports.getProfile = async (req, res, next) => {
+exports.getSettings = async (req, res, next) => {
   try {
-    const op = await Operator.findById(req.operator._id).lean();
+    const [op, ps] = await Promise.all([
+      Operator.findById(req.operator._id).lean(),
+      PlatformSettings.getSingleton(),
+    ]);
     if (!op) return notFound(res, S.NOT_FOUND);
-    return ok(res, S.OK, settingsPayload(op));
+    return ok(res, S.OK, serializeSettings(op, ps));
   } catch (err) {
     next(err);
   }
 };
 
-exports.updateProfile = async (req, res, next) => {
+// Accepts a partial settings object: { profile?, defaultRent?, instruments? }.
+exports.updateSettings = async (req, res, next) => {
   try {
-    const body = req.body || {};
-    // The settings page PATCHes { profile: { name, email }, defaultRent, … };
-    // also accept the flat { name, email } shape.
-    const { name, email } = body.profile || body;
-    const { defaultRent } = body;
+    const { profile, defaultRent, instruments } = req.body || {};
 
-    const update = {};
-    if (typeof name === 'string' && name.trim()) update.name = name.trim();
-    if (typeof email === 'string' && email.trim()) update.email = email.toLowerCase().trim();
-    if (defaultRent && Number.isFinite(defaultRent.amount) && defaultRent.amount > 0) {
-      update['defaultRent.amount'] = Math.round(defaultRent.amount);
-      update['defaultRent.billingCycle'] = 'monthly';
+    // ── operator profile ──
+    if (profile && typeof profile === 'object') {
+      const update = {};
+      if (typeof profile.name === 'string' && profile.name.trim()) update.name = profile.name.trim();
+      if (typeof profile.email === 'string' && profile.email.trim()) update.email = profile.email.toLowerCase().trim();
+      if (Object.keys(update).length) {
+        try {
+          await Operator.updateOne({ _id: req.operator._id }, { $set: update });
+        } catch (e) {
+          if (e && e.code === 11000) return badRequest(res, S.VALIDATION_FAILED); // dup email
+          throw e;
+        }
+      }
     }
-    if (!Object.keys(update).length) return badRequest(res, S.VALIDATION_FAILED);
 
-    try {
-      await Operator.updateOne({ _id: req.operator._id }, { $set: update });
-    } catch (e) {
-      if (e && e.code === 11000) return badRequest(res, S.VALIDATION_FAILED); // dup email
-      throw e;
+    // ── platform defaults (rent + instrument catalog) ──
+    const ps = await PlatformSettings.getSingleton();
+    if (defaultRent && typeof defaultRent === 'object') {
+      if (defaultRent.amount !== undefined) {
+        const n = Number(defaultRent.amount);
+        if (!Number.isFinite(n) || n < 0) return badRequest(res, S.VALIDATION_FAILED);
+        ps.defaultRent.amount = n;
+      }
+      // billingCycle is fixed to 'monthly' by the schema enum
     }
+    if (Array.isArray(instruments)) {
+      // full replace — names are unique (case-insensitive), blanks dropped
+      const seen = new Set();
+      ps.instruments = instruments
+        .filter(i => i && typeof i.name === 'string' && i.name.trim())
+        .filter(i => {
+          const k = i.name.trim().toLowerCase();
+          if (seen.has(k)) return false;
+          seen.add(k);
+          return true;
+        })
+        .map(i => ({ name: i.name.trim(), isActive: i.isActive !== false }));
+    }
+    await ps.save();
 
     const op = await Operator.findById(req.operator._id).lean();
-    return ok(res, S.UPDATED, settingsPayload(op));
+    return ok(res, S.UPDATED, serializeSettings(op, ps));
   } catch (err) {
     next(err);
   }
 };
 
-// 2FA is MANDATORY for operators. This endpoint (re)enrolls TOTP and returns a
-// fresh QR; disabling is refused so an operator can never lock 2FA off.
-exports.toggle2fa = async (req, res, next) => {
+// ── 2FA enrolment (mandatory for operators) ────────────────────────────────────
+// enable → mints a fresh secret held as PENDING (not yet active) and returns it
+// for the authenticator app. verify → confirms a code, promotes pending→active.
+// disable → refused: an operator can never lock 2FA off.
+exports.enable2fa = async (req, res, next) => {
   try {
-    const { action } = req.body || {};
-    if (action === 'disable') return badRequest(res, S.OPERATOR_2FA_MANDATORY);
-    if (action !== 'enable')  return badRequest(res, S.VALIDATION_FAILED);
-
-    const op = await Operator.findById(req.operator._id);
+    const op = await Operator.findById(req.operator._id).select('+pendingTotpSecret');
     if (!op) return notFound(res, S.NOT_FOUND);
 
     const secret = totp.generateSecret();
-    op.totpSecret       = secret;
-    op.twoFactorEnabled = true;
+    op.pendingTotpSecret = secret;
     await op.save();
 
-    const qr = await totp.qrDataUrl({ email: op.email, secret });
+    const otpauthUrl = totp.otpauthUrl({ email: op.email, secret });
     // Plain secret returned ONCE for manual entry; never persisted in any log.
-    return ok(res, S.OK, { twoFactor: { qrDataUrl: qr, secret } });
+    return ok(res, S.OK, { otpauthUrl, secret });
   } catch (err) {
     next(err);
   }
+};
+
+exports.verify2fa = async (req, res, next) => {
+  try {
+    const { code } = req.body || {};
+    const op = await Operator.findById(req.operator._id).select('+pendingTotpSecret +totpSecret');
+    if (!op) return notFound(res, S.NOT_FOUND);
+    if (!op.pendingTotpSecret) return badRequest(res, S.VALIDATION_FAILED);
+    if (!totp.verify(code, op.pendingTotpSecret)) return badRequest(res, S.AUTH_2FA_INVALID);
+
+    op.totpSecret        = op.pendingTotpSecret;
+    op.pendingTotpSecret = undefined;
+    op.twoFactorEnabled  = true;
+    await op.save();
+
+    return ok(res, S.OK, { twoFactorEnabled: true });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.disable2fa = async (req, res, next) => {
+  // Security invariant: 2FA is mandatory for operators — disabling is never allowed.
+  return badRequest(res, S.OPERATOR_2FA_MANDATORY);
 };
 
 // ── Instrument master (per-institution; operator manages any via god-mode) ─────
