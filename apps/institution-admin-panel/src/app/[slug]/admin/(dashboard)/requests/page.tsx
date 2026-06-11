@@ -124,9 +124,9 @@ export default function RequestsPage() {
     }
     setSaving(true);
     try {
-      await mockable(
+      const res = await mockable(
         () =>
-          api.post<ApiResponse>(adminPath("/requests"), {
+          api.post<ApiResponse<{ request: RequestItem } | null>>(adminPath("/requests"), {
             name: form.name.trim(),
             mobile: form.mobile,
             email: form.email || undefined,
@@ -137,24 +137,24 @@ export default function RequestsPage() {
         ok(null),
         500
       );
+      // Live mode returns the persisted request — its real _id is what approve/reject
+      // post back, so a locally fabricated row is only acceptable as the mock fallback.
       const instrument = instruments.find((i) => i._id === form.instrumentId) ?? null;
       const dp = dayPatterns.find((d) => d._id === form.preferredDayPatternId) ?? null;
       const ts = timeSlots.find((t) => t._id === form.preferredTimeSlotId) ?? null;
-      setRequests((prev) => [
-        {
-          _id: `req_local_${Date.now()}`,
-          name: form.name.trim(),
-          mobile: form.mobile,
-          email: form.email || null,
-          preferredDays: dp ? { _id: dp._id, label: dp.label } : null,
-          preferredTime: ts ? { _id: ts._id, label: ts.label } : null,
-          instrument,
-          status: "pending",
-          paymentStatus: "unpaid",
-          createdAt: new Date().toISOString(),
-        },
-        ...(prev ?? []),
-      ]);
+      const row: RequestItem = res.data?.request ?? {
+        _id: `req_local_${Date.now()}`,
+        name: form.name.trim(),
+        mobile: form.mobile,
+        email: form.email || null,
+        preferredDays: dp ? { _id: dp._id, label: dp.label } : null,
+        preferredTime: ts ? { _id: ts._id, label: ts.label } : null,
+        instrument,
+        status: "pending",
+        paymentStatus: "unpaid",
+        createdAt: new Date().toISOString(),
+      };
+      setRequests((prev) => [row, ...(prev ?? [])]);
       toast.success("Enrollment request created");
       setCreating(false);
       setForm(EMPTY_FORM);
