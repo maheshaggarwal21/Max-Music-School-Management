@@ -218,6 +218,27 @@ History of the old split is in `team-division.md` (reference only).
 > (god-mode create), `time-picker` ui component, suitable-times rework; teacher holidays page removed
 > (folded into batch detail). Details: `documentation/qa-e2e-2026-06-11.md` merge section.
 
+> **Hotfix + perf session (2026-06-12): ✅ user-reported issues triaged — 1 real bug fixed, PBAC verified
+> clean, perf pass landed.** User reported 4 issues from local testing. (1) **PBAC grant-admin "errors" —
+> NOT REPRODUCIBLE, architecture verified clean at every layer:** API repro script (create managed →
+> grant → owner logs into admin panel with `['teacher','admin']` → dashboard 200s → stale cookie correctly
+> 401s) + full browser click-through of grant/revoke on the operator detail page + DB inspection of the
+> user's 3 test institutions (abc, mahesh-music-school, kritgun-music-school — all owners correctly granted).
+> Likely what the user saw = the BY-DESIGN mass logout after grant (tokenVersion bumps log out the whole
+> institution) + stale zombie dev servers. (2) **ISSUE-019 (`f08ee66`) Exit operator view dead-ended:**
+> `operator-banner.tsx` fallback pointed at port **3010** but the operator panel runs on **3000**, and dev
+> `.env.local` lacked `NEXT_PUBLIC_OPERATOR_PANEL_URL` → ERR_CONNECTION_REFUSED, no way back. Fixed fallback
+> + env var; browser-verified impersonate→banner→exit→ lands on `/institutions`. (3) **UI lag root-caused
+> to the `@maxmusic/ui` barrel (`dbeed63`):** importing one Button compiled the WHOLE barrel (recharts,
+> motion, all primitives) into every page chunk (~2 MB/page dev). Fix = `experimental.optimizePackageImports:
+> ['@maxmusic/ui','recharts']` in all 4 panels' next.config. Measured: operator layout.js 2,023→702 kB,
+> institutions page 2,026→703 kB; `next build` operator+admin PASS (87.5 kB shared First Load JS).
+> (4) **API perf (`d6c0138`):** `compression()` gzip (list payloads 5-10x smaller over the wire) +
+> `autoIndex: false` in production (index builds belong in deploy-time migrations). **BUG-03 CLOSED by
+> analysis** — every ClassSession query also filters `batchId`; the existing `{institutionId,batchId,
+> targetDate}` index covers all of them. Remaining lag is environmental: dev-mode compiles + 7.5 GB RAM +
+> remote Atlas RTT (~100-500 ms/call) — production build on the VPS removes the first two.
+
 **H1 + H2 complete** — scaffold + 16 models + `packages/types` ready. **P1-R /plan-eng-review ✅** (5 model fixes). **P2-R /cso ✅** — 5 checkpoint Qs clean; .gitignore + lockfile + nodemailer@8 + node-cron@4 fixed. **Phase 3 (Operator APIs) ✅** — 9 controllers + 29 routes behind `operatorAuth`. **P3-R /review ✅** — 5 fixes (existingTeacher isolation guard, grant/revoke idempotency = no mass-logout, impersonate targetUserId required, audit accuracy). **Phase 4 (Institution APIs) ✅** — 10 controllers + 46 routes under `/api/inst/:slug/*`; every login JWT embeds `instVersion`+`userVersion`; brandingPublic-only (white-label). **P4-R /cso ✅** — 1 HIGH fixed (`config/refGuard.studentRefsValid` rejects cross-institution teacher/batch/instrument refs in student create/patch + request approve — they leaked foreign labels via populate); other 4 checkpoint Qs clean. **BACKEND COMPLETE (Phases 0-4).** **Frontend integration (current session) ✅** — Dev B's 4-panel frontend merged (PR #1). Dev A pass over it: (1) **H2 type migration** — all 4 apps now import the shared contract (`ApiResponse`/`Paginated`/`BrandingPublic` + enums) from `@maxmusic/types` instead of local mirrors (drift eliminated); (2) **`[slug]` routing fix** — the 3 institution panels were flat route-groups (`/dashboard`) that 404 behind nginx; restructured to real `app/[slug]/<panel>/(auth|dashboard)/*` with slug-aware nav, validated by `next build` ×4; (3) **multi-tenant slug fixes** — 401-redirect now `/<slug>/<panel>/login` (was hardcoded `/login`), teacher panel now derives slug from the URL (was a build-time `NEXT_PUBLIC_INSTITUTION_SLUG` env var = one-slug-per-build); (4) **new public `GET /api/inst/:slug/branding`** endpoint (controller + route + CONTRACTS) wired into all 3 login pages — clears the teacher TODO(H5) + student BLOCKED notes. **Phase 7 backend (current session) ✅** — (1) **Socket.io** (`config/socket.js`) shares the HTTP server, rooms keyed by institutionId; auth via a short-lived `JWT_SECRET_SOCKET` token minted by `GET /:slug/{admin,teacher}/realtime-token` (panel cookies are path-scoped so they can't reach `/socket.io`); room derives from the VERIFIED token only; `emitToInstitution` (already called by teacher `markAttendance`) now live → unblocks teacher `TODO(H3)` backend-side. (2) **Daily cron** (`config/cron.js`, 00:05 `CRON_TZ`) advances `active_soon→active`, expires validity→inactive (both audited per-student as the `system` actor), and flags overdue rent. (3) **Razorpay webhook** (`POST /api/webhooks/razorpay`, `WebhookController`) mounted pre-json with `express.raw`; timing-safe HMAC verify (fails closed), idempotent by paymentId+eventType, tenant from payload `notes`; read-only RazorpayWebhookEvent feed only. (4) **Branded mailer** (`config/mailer.js`) lazy transport, From-name = institution `branding.schoolName` (never "Max Music"), fails soft. All smoke-tested. Next: H4/H5 live wiring (`NEXT_PUBLIC_API_URL` + `/qa`); Dev B wires `TODO(H3)` client to realtime-token + Socket.io; then Phase 8 (QA + deploy).
 
 > **Isolation lesson (P4-R):** scoping the `:id` lookup by `institutionId` is NOT enough — client-supplied foreign-key refs (`teacherId`/`batchId`/`instrumentId`) in create/patch bodies must ALSO be verified to belong to the institution before persist, or a foreign id leaks the other tenant's data through Mongoose `populate` (which has no tenant filter). Always run refs through `config/refGuard`.
@@ -426,8 +447,11 @@ Phase 8 — Finish: live wiring + QA + deploy
                                            listeners on 4000+3000–3003 before starting the stack.
   L9 /ship                               ⏸ HELD (user decision — not pushed)
   L10–L13 nginx/TLS/PM2/VPS deploy       ← pending (local deploy done; VPS not)
-  OPEN BUGS                              P3 only — ClassSession index (BUG-03) · god-token tokenVersion
-                                           window (BUG-05). ISSUE-001 BlurFade FIXED 41a8634 (AUDIT.md §7)
+  OPEN BUGS                              ONE P3/INFO left — god-token tokenVersion window (BUG-05).
+                                           BUG-03 CLOSED 2026-06-12 by analysis (all ClassSession queries
+                                           filter batchId; covered by {institutionId,batchId,targetDate}).
+                                           ISSUE-001 BlurFade FIXED 41a8634 · ISSUE-019 exit-operator-view
+                                           port FIXED f08ee66 (AUDIT.md §7)
 ```
 
 Handoffs: H1 ✅ · H2 ✅ (packages/types exported — Dev B can wire typed responses) · H3 ✅ (Phase 2 done) · H4 ✅ (Phase 3 operator API contracts in CONTRACTS.md) · H5 ✅ (Phase 4 institution API contracts in CONTRACTS.md — Dev B can build all 4 panels) · H6 after Phase 7.
