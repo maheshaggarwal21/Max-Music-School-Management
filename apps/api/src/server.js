@@ -13,12 +13,16 @@ const cors = require('cors');
 const cookieParser = require('cookie-parser');
 const helmet = require('helmet');
 const morgan = require('morgan');
+const compression = require('compression');
 
 const app = express();
 const PORT = process.env.PORT || 4000;
 
 // ── Security & parsing middleware ────────────────────────────────────────────
 app.use(helmet());
+// Gzip JSON responses — list endpoints (audit feeds, rosters) shrink 5-10x over
+// the wire. Webhook raw-body HMAC is unaffected (compression is response-side).
+app.use(compression());
 // Drop undefined entries so a missing env var can never collapse the
 // allow-list into "reflect any origin".
 const allowedOrigins = [process.env.PLATFORM_DOMAIN_URL, process.env.OPERATOR_DOMAIN_URL].filter(Boolean);

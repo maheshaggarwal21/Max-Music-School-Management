@@ -14,6 +14,9 @@ async function connect() {
   await mongoose.connect(uri, {
     serverSelectionTimeoutMS: 10000,
     maxPoolSize: 50,
+    // Index builds belong to deploy-time migrations in production, not request
+    // startup — autoIndex on a populated collection blocks writes mid-traffic.
+    autoIndex: process.env.NODE_ENV !== 'production',
   });
 
   connected = true;
