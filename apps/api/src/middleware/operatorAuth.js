@@ -10,7 +10,6 @@ const S = require('../config/strings');
 // Requirements:
 //   - cookie present + JWT valid
 //   - token.panel === 'operator'
-//   - token.twoFactorCompleted === true (no 2FA = no session)
 //   - token.tokenVersion === operator.tokenVersion (server-side invalidation)
 //   - operator exists
 // On success: req.operator = the operator doc (lean).
@@ -26,10 +25,6 @@ module.exports = async function operatorAuth(req, res, next) {
       decoded = verify(token, 'operator');
     } catch {
       return unauthorized(res, S.AUTH_TOKEN_INVALID);
-    }
-
-    if (!decoded.twoFactorCompleted) {
-      return unauthorized(res, S.AUTH_2FA_REQUIRED);
     }
 
     const operator = await Operator.findById(decoded.sub).lean();

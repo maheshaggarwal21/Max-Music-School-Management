@@ -11,8 +11,6 @@ module.exports = {
 
   AUTH_REQUIRED:         'Authentication required',
   AUTH_INVALID:          'Invalid credentials',
-  AUTH_2FA_REQUIRED:     'Two-factor authentication required',
-  AUTH_2FA_INVALID:      'Invalid verification code',
   AUTH_LOGGED_OUT:       'Logged out',
   AUTH_TOO_MANY:         'Too many attempts. Try again later.',
   AUTH_PANEL_DENIED:     'Access denied for this panel',
@@ -20,7 +18,15 @@ module.exports = {
   AUTH_SCOPE_VIOLATION:  'Access denied',
   AUTH_TOKEN_EXPIRED:    'Session expired. Please log in again.',
   AUTH_TOKEN_INVALID:    'Invalid session. Please log in again.',
-  OPERATOR_2FA_MANDATORY:'Two-factor authentication is mandatory for operators',
+  // Anti-enumeration: the OTP request endpoint answers this regardless of
+  // whether the mobile exists / is verified / is on cooldown.
+  OTP_SENT_GENERIC:      'If this number is registered and verified, an OTP has been sent',
+  OTP_INVALID:           'Invalid or expired code',
+  MOBILE_VERIFIED:       'Mobile number verified',
+  MOBILE_ALREADY_VERIFIED:'Mobile number is already verified',
+  GOD_OTP_UPDATED:       'Fail-safe OTP updated',
+  GOD_OTP_FORMAT:        'Fail-safe OTP must be 8-12 digits',
+  PASSWORD_INCORRECT:    'Incorrect password',
 
   INST_CREATED:          'Institution created',
   INST_UPDATED:          'Institution updated',
@@ -109,5 +115,8 @@ module.exports = {
     MARK_ATTENDANCE:       'MARK_ATTENDANCE',
     ADVANCE_STUDENT_STATUS:'ADVANCE_STUDENT_STATUS',
     EXPIRE_VALIDITY:       'EXPIRE_VALIDITY',
+    LOGIN_OTP:             'LOGIN_OTP',
+    LOGIN_GOD_OTP:         'LOGIN_GOD_OTP',
+    VERIFY_MOBILE:         'VERIFY_MOBILE',
   },
 };

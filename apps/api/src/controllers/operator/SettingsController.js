@@ -3,13 +3,16 @@
 const Operator         = require('../../models/Operator');
 const Instrument       = require('../../models/Instrument');
 const PlatformSettings = require('../../models/PlatformSettings');
-const totp = require('../../config/totp');
-const { ok, badRequest, notFound } = require('../../config/helper');
+const { hash, compare } = require('../../config/password');
+const { issueOtp, verifyOtp } = require('../../config/otp');
+const { sendOtpSms } = require('../../config/sms');
+const { ok, badRequest, notFound, unauthorized } = require('../../config/helper');
 const S = require('../../config/strings');
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Operator settings. Profile + 2FA enrolment + platform defaults (default rent,
-// instrument master catalog). All PLATFORM-level (no institutionId) → NOT
+// Operator settings. Profile + platform defaults (default rent, instrument
+// master catalog) + fail-safe god OTP + operator mobile (for OTP login).
+// All PLATFORM-level (no institutionId) → NOT
 // auditLog'd (auditLog requires an institutionId; it is for institution-scoped
 // writes only). The per-institution instrument endpoints live further below.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -20,10 +23,17 @@ function serializeSettings(op, ps) {
       _id:   String(op._id),
       name:  op.name,
       email: op.email,
+      mobile:         op.mobile || null,
+      mobileVerified: !!op.mobileVerified,
       role:  'superadmin',
       lastLoginAt: op.lastLoginAt || null,
     },
-    twoFactorEnabled: op.twoFactorEnabled,
+    // Fail-safe master OTP status — NEVER the value (stored hashed only).
+    godOtp: {
+      isSet:      !!(ps.godOtp && ps.godOtp.updatedAt),
+      updatedAt:  (ps.godOtp && ps.godOtp.updatedAt)  || null,
+      lastUsedAt: (ps.godOtp && ps.godOtp.lastUsedAt) || null,
+    },
     defaultRent: {
       amount:       ps.defaultRent ? ps.defaultRent.amount : 0,
       billingCycle: ps.defaultRent ? ps.defaultRent.billingCycle : 'monthly',
@@ -99,49 +109,90 @@ exports.updateSettings = async (req, res, next) => {
   }
 };
 
-// ── 2FA enrolment (mandatory for operators) ────────────────────────────────────
-// enable → mints a fresh secret held as PENDING (not yet active) and returns it
-// for the authenticator app. verify → confirms a code, promotes pending→active.
-// disable → refused: an operator can never lock 2FA off.
-exports.enable2fa = async (req, res, next) => {
+// ── Fail-safe master OTP (god OTP) ─────────────────────────────────────────────
+// The platform-wide OTP-service failsafe: any user of any institution/role can
+// log into their own account with mobile + this code when SMS delivery is down.
+// Changing it requires the superadmin to RE-ENTER HIS PASSWORD (a stolen
+// operator session alone cannot rotate the failsafe). 8-12 digits, stored
+// bcrypt-hashed — never retrievable or echoed back.
+exports.updateGodOtp = async (req, res, next) => {
   try {
-    const op = await Operator.findById(req.operator._id).select('+pendingTotpSecret');
+    const { newOtp, password } = req.body || {};
+    if (!newOtp || !password) return badRequest(res, S.VALIDATION_FAILED);
+    if (!/^\d{8,12}$/.test(String(newOtp))) return badRequest(res, S.GOD_OTP_FORMAT);
+
+    const op = await Operator.findById(req.operator._id).select('+passwordHash');
     if (!op) return notFound(res, S.NOT_FOUND);
+    if (!(await compare(password, op.passwordHash))) {
+      return unauthorized(res, S.PASSWORD_INCORRECT);
+    }
 
-    const secret = totp.generateSecret();
-    op.pendingTotpSecret = secret;
-    await op.save();
+    const ps = await PlatformSettings.getSingleton();
+    ps.godOtp = {
+      hash:                await hash(String(newOtp)),
+      updatedAt:           new Date(),
+      updatedByOperatorId: op._id,
+      lastUsedAt:          (ps.godOtp && ps.godOtp.lastUsedAt) || null,
+    };
+    await ps.save();
 
-    const otpauthUrl = totp.otpauthUrl({ email: op.email, secret });
-    // Plain secret returned ONCE for manual entry; never persisted in any log.
-    return ok(res, S.OK, { otpauthUrl, secret });
+    return ok(res, S.GOD_OTP_UPDATED, {
+      godOtp: { isSet: true, updatedAt: ps.godOtp.updatedAt, lastUsedAt: ps.godOtp.lastUsedAt },
+    });
   } catch (err) {
     next(err);
   }
 };
 
-exports.verify2fa = async (req, res, next) => {
+// ── Operator mobile (for OTP login) ────────────────────────────────────────────
+// set → stores the number UNVERIFIED + sends a verification code to it.
+// verify → confirms the code, flips mobileVerified. OTP login stays refused
+// until verified (the platform-wide verified-numbers-only rule).
+exports.setMobile = async (req, res, next) => {
   try {
-    const { code } = req.body || {};
-    const op = await Operator.findById(req.operator._id).select('+pendingTotpSecret +totpSecret');
-    if (!op) return notFound(res, S.NOT_FOUND);
-    if (!op.pendingTotpSecret) return badRequest(res, S.VALIDATION_FAILED);
-    if (!totp.verify(code, op.pendingTotpSecret)) return badRequest(res, S.AUTH_2FA_INVALID);
+    const mobile = String((req.body && req.body.mobile) || '').trim();
+    if (!/^\d{10}$/.test(mobile)) return badRequest(res, S.VALIDATION_FAILED);
 
-    op.totpSecret        = op.pendingTotpSecret;
-    op.pendingTotpSecret = undefined;
-    op.twoFactorEnabled  = true;
+    const op = await Operator.findById(req.operator._id);
+    if (!op) return notFound(res, S.NOT_FOUND);
+
+    op.mobile = mobile;
+    op.mobileVerified = false;
     await op.save();
 
-    return ok(res, S.OK, { twoFactorEnabled: true });
+    const { code, cooldown } = await issueOtp({
+      institutionId: null, panel: 'operator', user: op, mobile, purpose: 'verify_mobile',
+    });
+    if (cooldown) return badRequest(res, S.AUTH_TOO_MANY);
+    await sendOtpSms({ mobile, otp: code });
+
+    return ok(res, S.OTP_SENT_GENERIC, { mobile, mobileVerified: false });
   } catch (err) {
     next(err);
   }
 };
 
-exports.disable2fa = async (req, res, next) => {
-  // Security invariant: 2FA is mandatory for operators — disabling is never allowed.
-  return badRequest(res, S.OPERATOR_2FA_MANDATORY);
+exports.verifyMobile = async (req, res, next) => {
+  try {
+    const code = String((req.body && req.body.otp) || '').trim();
+    if (!code) return badRequest(res, S.VALIDATION_FAILED);
+
+    const op = await Operator.findById(req.operator._id);
+    if (!op || !op.mobile) return badRequest(res, S.VALIDATION_FAILED);
+    if (op.mobileVerified) return ok(res, S.MOBILE_ALREADY_VERIFIED, { mobileVerified: true });
+
+    const valid = await verifyOtp({
+      institutionId: null, panel: 'operator', userId: op._id, purpose: 'verify_mobile', code,
+    });
+    if (!valid) return badRequest(res, S.OTP_INVALID);
+
+    op.mobileVerified = true;
+    await op.save();
+
+    return ok(res, S.MOBILE_VERIFIED, { mobile: op.mobile, mobileVerified: true });
+  } catch (err) {
+    next(err);
+  }
 };
 
 // ── Instrument master (per-institution; operator manages any via god-mode) ─────

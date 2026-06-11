@@ -3,7 +3,7 @@
 // Run from repo root:  node scripts/seed.js   (or: npm run seed)
 //
 // Creates (idempotent — safe to re-run; re-running resets the demo passwords):
-//   1. Operator superadmin (with TOTP 2FA secret → printed for authenticator setup)
+//   1. Operator superadmin (single-step login: email+password or mobile OTP)
 //   2. One demo institution (mode: autonomous, status: active, slug: demo-school)
 //   3. The owner teacher (isOwner, panelAccess: ['teacher','admin'])
 //      → ONE credential opens BOTH the admin panel (by email) and teacher panel (by mobile)
@@ -14,7 +14,6 @@ require('dotenv').config({ path: path.join(__dirname, '..', 'apps', 'api', '.env
 
 const db = require('../apps/api/src/config/db');
 const { hash } = require('../apps/api/src/config/password');
-const totp = require('../apps/api/src/config/totp');
 
 const Operator = require('../apps/api/src/models/Operator');
 const Institution = require('../apps/api/src/models/Institution');
@@ -178,24 +177,17 @@ async function main() {
   await db.connect();
 
   // ── 1. Operator superadmin ──────────────────────────────────────────────────
-  let operator = await Operator.findOne({ email: OPERATOR.email }).select('+totpSecret');
+  let operator = await Operator.findOne({ email: OPERATOR.email });
   const passwordHash = await hash(OPERATOR.password);
-  let totpSecret;
   if (!operator) {
-    totpSecret = totp.generateSecret();
     operator = await Operator.create({
       name: OPERATOR.name,
       email: OPERATOR.email,
       passwordHash,
-      twoFactorEnabled: true,
-      totpSecret,
     });
     console.log('[seed] ✓ created operator');
   } else {
-    totpSecret = operator.totpSecret || totp.generateSecret();
     operator.passwordHash = passwordHash;     // reset to known demo password
-    operator.totpSecret = totpSecret;
-    operator.twoFactorEnabled = true;
     await operator.save();
     console.log('[seed] ✓ updated operator (password reset)');
   }
@@ -272,16 +264,12 @@ async function main() {
   await seedTeaching(institution, owner, teacherHash);
 
   // ── Summary ─────────────────────────────────────────────────────────────────
-  const otpauth = totp.otpauthUrl({ email: operator.email, secret: totpSecret });
   console.log('\n────────────────────────────────────────────────────────────');
   console.log(' SEED COMPLETE — demo credentials');
   console.log('────────────────────────────────────────────────────────────');
   console.log(' OPERATOR (superadmin)   http://localhost:3000');
   console.log(`   email     ${OPERATOR.email}`);
   console.log(`   password  ${OPERATOR.password}`);
-  console.log('   2FA: add this secret to Google Authenticator / Authy:');
-  console.log(`   secret    ${totpSecret}`);
-  console.log(`   otpauth   ${otpauth}`);
   console.log('');
   console.log(` ADMIN panel             http://localhost:3001/${INSTITUTION.slug}/admin/login`);
   console.log(`   email     ${OWNER.email}`);

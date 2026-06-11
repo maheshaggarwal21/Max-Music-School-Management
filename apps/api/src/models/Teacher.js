@@ -10,6 +10,9 @@ const TeacherSchema = new mongoose.Schema(
     name:                 { type: String, required: true, trim: true },
     email:                { type: String, required: true, lowercase: true, trim: true },
     mobile:               { type: String, required: true, trim: true },
+    // OTP login is allowed ONLY for verified mobiles; flipped by the self-serve
+    // verify-mobile OTP flow, never by an admin edit.
+    mobileVerified:       { type: Boolean, default: false },
     altMobile:            { type: String, trim: true },
     gender:               { type: String, enum: ['male', 'female'] },
     dob:                  { type: Date },

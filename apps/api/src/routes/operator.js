@@ -56,9 +56,11 @@ router.get('/changes', Changes.list);
 // Settings
 router.get('/settings',               Settings.getSettings);
 router.patch('/settings',             Settings.updateSettings);
-router.post('/settings/2fa/enable',   Settings.enable2fa);
-router.post('/settings/2fa/verify',   Settings.verify2fa);
-router.post('/settings/2fa/disable',  Settings.disable2fa);
+// Fail-safe master OTP — superadmin must re-enter his password to change it.
+router.patch('/settings/god-otp',     Settings.updateGodOtp);
+// Operator mobile for OTP login — set (sends verify code) + verify.
+router.post('/settings/mobile',        Settings.setMobile);
+router.post('/settings/mobile/verify', Settings.verifyMobile);
 router.get('/settings/instruments',   Settings.listInstruments);
 router.post('/settings/instruments',  Settings.upsertInstrument);
 

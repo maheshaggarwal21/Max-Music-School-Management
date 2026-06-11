@@ -12,9 +12,10 @@ const resolveInstitution = require('../middleware/resolveInstitution');
 const instAuth   = require('../middleware/instAuth');
 const scopeGuard = require('../middleware/scopeGuard');
 const panelGuard = require('../middleware/panelGuard');
-const { loginLimiter } = require('../middleware/rateLimit');
+const { loginLimiter, otpRequestLimiter } = require('../middleware/rateLimit');
 
 const Auth       = require('../controllers/institution/AuthController');
+const OtpAuth    = require('../controllers/institution/OtpAuthController');
 const Dashboard  = require('../controllers/institution/admin/DashboardController');
 const Request    = require('../controllers/institution/admin/RequestController');
 const Student    = require('../controllers/institution/admin/StudentController');
@@ -44,6 +45,15 @@ router.post('/:slug/auth/admin/login',   resolveInstitution, loginLimiter, Auth.
 router.post('/:slug/auth/teacher/login', resolveInstitution, loginLimiter, Auth.teacherLogin);
 router.post('/:slug/auth/student/login', resolveInstitution, loginLimiter, Auth.studentLogin);
 
+// OTP login alternative — request answers generically (anti-enumeration);
+// verify accepts the delivered code or the platform fail-safe OTP.
+router.post('/:slug/auth/admin/otp/request',   resolveInstitution, otpRequestLimiter, OtpAuth.otpRequest('admin'));
+router.post('/:slug/auth/teacher/otp/request', resolveInstitution, otpRequestLimiter, OtpAuth.otpRequest('teacher'));
+router.post('/:slug/auth/student/otp/request', resolveInstitution, otpRequestLimiter, OtpAuth.otpRequest('student'));
+router.post('/:slug/auth/admin/otp/verify',    resolveInstitution, loginLimiter, OtpAuth.otpVerify('admin'));
+router.post('/:slug/auth/teacher/otp/verify',  resolveInstitution, loginLimiter, OtpAuth.otpVerify('teacher'));
+router.post('/:slug/auth/student/otp/verify',  resolveInstitution, loginLimiter, OtpAuth.otpVerify('student'));
+
 router.post('/:slug/auth/admin/logout',   resolveInstitution, Auth.logout('admin'));
 router.post('/:slug/auth/teacher/logout', resolveInstitution, Auth.logout('teacher'));
 router.post('/:slug/auth/student/logout', resolveInstitution, Auth.logout('student'));
@@ -55,6 +65,15 @@ router.get('/:slug/auth/student/me', ...studentChain, Auth.me);
 // Socket.io handshake tokens — authenticated, panel-scoped. (live attendance)
 router.get('/:slug/admin/realtime-token',   ...adminChain,   Auth.realtimeToken);
 router.get('/:slug/teacher/realtime-token', ...teacherChain, Auth.realtimeToken);
+
+// Self-serve mobile verification (logged-in; the only path that flips
+// mobileVerified — OTP login is refused until the owner proves the number).
+router.post('/:slug/admin/verify-mobile/request',   ...adminChain,   OtpAuth.verifyMobileRequest('admin'));
+router.post('/:slug/admin/verify-mobile/confirm',   ...adminChain,   OtpAuth.verifyMobileConfirm('admin'));
+router.post('/:slug/teacher/verify-mobile/request', ...teacherChain, OtpAuth.verifyMobileRequest('teacher'));
+router.post('/:slug/teacher/verify-mobile/confirm', ...teacherChain, OtpAuth.verifyMobileConfirm('teacher'));
+router.post('/:slug/student/verify-mobile/request', ...studentChain, OtpAuth.verifyMobileRequest('student'));
+router.post('/:slug/student/verify-mobile/confirm', ...studentChain, OtpAuth.verifyMobileConfirm('student'));
 
 // ── ADMIN ───────────────────────────────────────────────────────────────────────
 router.get('/:slug/admin/dashboard', ...adminChain, Dashboard.get);

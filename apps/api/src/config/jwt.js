@@ -100,21 +100,6 @@ function verifySocketToken(token) {
   return d;
 }
 
-// 2FA challenge token (between password step and TOTP step). Stateless.
-function signChallengeToken({ operatorId }) {
-  return jwt.sign(
-    { operatorId, stage: '2fa-pending' },
-    secretFor('operator'),
-    { expiresIn: '5m' }
-  );
-}
-
-function verifyChallengeToken(token) {
-  const d = jwt.verify(token, secretFor('operator'));
-  if (d.stage !== '2fa-pending') throw new Error('Not a challenge token');
-  return d;
-}
-
 // Cookie options (httpOnly, secure in prod, sameSite).
 // Institution cookies are path-scoped so they cannot leak cross-institution.
 function cookieOptions(panel, slug) {
@@ -138,8 +123,6 @@ module.exports = {
   verifyGodToken,
   signSocketToken,
   verifySocketToken,
-  signChallengeToken,
-  verifyChallengeToken,
   cookieOptions,
   COOKIE_NAME,
   PANEL_EXPIRY,

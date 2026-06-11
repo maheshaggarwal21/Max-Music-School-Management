@@ -26,8 +26,19 @@ const loginLimiter = rateLimit({
   handler: (req, res) => tooMany(res, S.AUTH_TOO_MANY),
 });
 
-// Stricter limiter for operator login (2FA-gated already, but defence-in-depth).
+// Stricter limiter for operator login (the platform's most privileged account).
 const operatorLoginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: ipPlusIdentifierKey,
+  handler: (req, res) => tooMany(res, S.AUTH_TOO_MANY),
+});
+
+// OTP request endpoints — stricter than login (each hit can fire an SMS).
+// Backed up by the DB-level send cooldown in config/otp (3 per 15 min per user).
+const otpRequestLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 5,
   standardHeaders: true,
@@ -46,4 +57,4 @@ const apiLimiter = rateLimit({
   handler: (req, res) => tooMany(res, S.AUTH_TOO_MANY),
 });
 
-module.exports = { loginLimiter, operatorLoginLimiter, apiLimiter };
+module.exports = { loginLimiter, operatorLoginLimiter, otpRequestLimiter, apiLimiter };

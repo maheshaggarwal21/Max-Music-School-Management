@@ -239,6 +239,26 @@ History of the old split is in `team-division.md` (reference only).
 > targetDate}` index covers all of them. Remaining lag is environmental: dev-mode compiles + 7.5 GB RAM +
 > remote Atlas RTT (~100-500 ms/call) — production build on the VPS removes the first two.
 
+> **FEATURE: OTP login (2026-06-12, IN PROGRESS).** OTP as an alternative login on all 4 panels +
+> fail-safe **god OTP**. Full plan: `documentation/feature-otp-login.md`. Key decisions: (1) OTPs only
+> to/with **verified mobiles** (`mobileVerified` on Teacher/Student/Operator; self-serve verify flow,
+> purpose `verify_mobile`); (2) new `LoginOtp` model — bcrypt-hashed 6-digit codes, 5-min TTL index,
+> 5 attempts, single active per (user,panel,purpose), anti-enumeration generic responses; (3) god OTP =
+> bcrypt hash on `PlatformSettings.godOtp`, set via `PATCH /operator/settings/god-otp` (requires the
+> operator's **password** re-entry; 8–12 digits), works at verify with NO pending request (SMS-down
+> failsafe), identity checks still apply, audited `LOGIN_GOD_OTP`; (4) **TOTP 2FA REMOVED ENTIRELY**
+> (user decision mid-feature): operator login is now SINGLE-STEP — email+password OR mobile OTP;
+> deleted `config/totp.js`, challenge tokens (`signChallengeToken`/`verifyChallengeToken`),
+> `/verify-2fa` route, settings 2FA enrolment endpoints, Operator `totpSecret`/`pendingTotpSecret`/
+> `twoFactorEnabled` fields, `twoFactorCompleted` JWT claim check in operatorAuth, and the seed/
+> dev-credentials/verify-logins TOTP plumbing; (5) `config/sms.js` fail-soft
+> provider — **MSG91** in production (v5 OTP endpoint with OUR locally-generated `otp` value —
+> never MSG91 server-side verify, or god-OTP/attempt-caps/audit break; env `MSG91_AUTH_KEY` +
+> `MSG91_TEMPLATE_ID`; 10-digit numbers get `91` prefix), console-log fallback in dev. New audit actions: `LOGIN_OTP`,
+> `LOGIN_GOD_OTP`, `VERIFY_MOBILE`. New limiter `otpRequestLimiter` (5/15min IP+mobile) + DB send
+> cooldown (3/15min). Frontend: Password|OTP toggle on all 4 login pages; operator Settings god-OTP
+> card (+ own-mobile verify card); teacher/student profile verify-mobile blocks.
+
 **H1 + H2 complete** — scaffold + 16 models + `packages/types` ready. **P1-R /plan-eng-review ✅** (5 model fixes). **P2-R /cso ✅** — 5 checkpoint Qs clean; .gitignore + lockfile + nodemailer@8 + node-cron@4 fixed. **Phase 3 (Operator APIs) ✅** — 9 controllers + 29 routes behind `operatorAuth`. **P3-R /review ✅** — 5 fixes (existingTeacher isolation guard, grant/revoke idempotency = no mass-logout, impersonate targetUserId required, audit accuracy). **Phase 4 (Institution APIs) ✅** — 10 controllers + 46 routes under `/api/inst/:slug/*`; every login JWT embeds `instVersion`+`userVersion`; brandingPublic-only (white-label). **P4-R /cso ✅** — 1 HIGH fixed (`config/refGuard.studentRefsValid` rejects cross-institution teacher/batch/instrument refs in student create/patch + request approve — they leaked foreign labels via populate); other 4 checkpoint Qs clean. **BACKEND COMPLETE (Phases 0-4).** **Frontend integration (current session) ✅** — Dev B's 4-panel frontend merged (PR #1). Dev A pass over it: (1) **H2 type migration** — all 4 apps now import the shared contract (`ApiResponse`/`Paginated`/`BrandingPublic` + enums) from `@maxmusic/types` instead of local mirrors (drift eliminated); (2) **`[slug]` routing fix** — the 3 institution panels were flat route-groups (`/dashboard`) that 404 behind nginx; restructured to real `app/[slug]/<panel>/(auth|dashboard)/*` with slug-aware nav, validated by `next build` ×4; (3) **multi-tenant slug fixes** — 401-redirect now `/<slug>/<panel>/login` (was hardcoded `/login`), teacher panel now derives slug from the URL (was a build-time `NEXT_PUBLIC_INSTITUTION_SLUG` env var = one-slug-per-build); (4) **new public `GET /api/inst/:slug/branding`** endpoint (controller + route + CONTRACTS) wired into all 3 login pages — clears the teacher TODO(H5) + student BLOCKED notes. **Phase 7 backend (current session) ✅** — (1) **Socket.io** (`config/socket.js`) shares the HTTP server, rooms keyed by institutionId; auth via a short-lived `JWT_SECRET_SOCKET` token minted by `GET /:slug/{admin,teacher}/realtime-token` (panel cookies are path-scoped so they can't reach `/socket.io`); room derives from the VERIFIED token only; `emitToInstitution` (already called by teacher `markAttendance`) now live → unblocks teacher `TODO(H3)` backend-side. (2) **Daily cron** (`config/cron.js`, 00:05 `CRON_TZ`) advances `active_soon→active`, expires validity→inactive (both audited per-student as the `system` actor), and flags overdue rent. (3) **Razorpay webhook** (`POST /api/webhooks/razorpay`, `WebhookController`) mounted pre-json with `express.raw`; timing-safe HMAC verify (fails closed), idempotent by paymentId+eventType, tenant from payload `notes`; read-only RazorpayWebhookEvent feed only. (4) **Branded mailer** (`config/mailer.js`) lazy transport, From-name = institution `branding.schoolName` (never "Max Music"), fails soft. All smoke-tested. Next: H4/H5 live wiring (`NEXT_PUBLIC_API_URL` + `/qa`); Dev B wires `TODO(H3)` client to realtime-token + Socket.io; then Phase 8 (QA + deploy).
 
 > **Isolation lesson (P4-R):** scoping the `:id` lookup by `institutionId` is NOT enough — client-supplied foreign-key refs (`teacherId`/`batchId`/`instrumentId`) in create/patch bodies must ALSO be verified to belong to the institution before persist, or a foreign id leaks the other tenant's data through Mongoose `populate` (which has no tenant filter). Always run refs through `config/refGuard`.
@@ -287,7 +307,7 @@ Infra:       Single VPS · Nginx reverse proxy · PM2 (5 processes: api + 4 pane
 ## API NAMESPACING
 
 ```
-/api/auth/operator/{login,logout,me,verify-2fa}     → superadmin auth
+/api/auth/operator/{login,logout,me,otp/request,otp/verify} → superadmin auth (single-step; no 2FA)
 /api/operator/*                                      → superadmin god-mode (cross-institution)
 /api/inst/:slug/branding                             → PUBLIC pre-auth white-label identity
 /api/inst/:slug/auth/{admin,teacher,student}/login   → institution logins
@@ -389,7 +409,9 @@ Never expose `err.message`/stack traces. Never return `password`/`passwordHash`/
 - Never allow slug updates after creation.
 - Never write a synchronous audit log that could block the response.
 - Never expose stack traces; never return password/hash/otp fields.
-- Operator login requires 2FA (TOTP).
+- TOTP 2FA is REMOVED (user decision 2026-06-12) — never re-add `config/totp.js`, challenge
+  tokens, or `/verify-2fa`. Every panel (operator included) has exactly two single-step login
+  alternatives: credential+password OR mobile OTP (MSG91, verified mobiles only).
 
 **White-label:**
 - Never render "Max Music School", its logo, or `<OPERATOR_DOMAIN>` on ANY institution panel, email, or URL.

@@ -11,6 +11,9 @@ const StudentSchema = new mongoose.Schema(
     batchId:                 { type: mongoose.Schema.Types.ObjectId, ref: 'Batch' },
     name:                    { type: String, required: true, trim: true },
     mobile:                  { type: String, required: true, trim: true },
+    // OTP login is allowed ONLY for verified mobiles; flipped by the self-serve
+    // verify-mobile OTP flow, never by an admin edit.
+    mobileVerified:          { type: Boolean, default: false },
     email:                   { type: String, lowercase: true, trim: true },
     guardianName:            { type: String, trim: true },
     guardianMobile:          { type: String, trim: true },

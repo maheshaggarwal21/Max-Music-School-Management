@@ -7,7 +7,7 @@
 //
 //   node scripts/dev-credentials.js   ← uses repo-root .env
 //
-// Prints every working credential + the operator TOTP secret at the end.
+// Prints every working credential at the end.
 
 require('dotenv').config();
 
@@ -38,10 +38,13 @@ function hr() { console.log('─'.repeat(64)); }
 async function main() {
   await connect();
 
-  // 1. Operator — reset password, read TOTP secret.
-  const operator = await Operator.findOne({ email: OPERATOR_EMAIL }).select('+totpSecret');
+  // 1. Operator — reset password (single-step login; TOTP 2FA removed).
+  const operator = await Operator.findOne({ email: OPERATOR_EMAIL });
   if (!operator) throw new Error(`Operator ${OPERATOR_EMAIL} not found — run seed first.`);
   operator.passwordHash = await hash(PW.operator);
+  // Dev mobile pre-verified so operator OTP login is testable locally.
+  operator.mobile = operator.mobile || '9000000001';
+  operator.mobileVerified = true;
   await operator.save();
 
   // 2. Institution + owner teacher.
@@ -53,6 +56,7 @@ async function main() {
   owner.passwordHash = await hash(PW.teacher);
   owner.panelAccess  = ['teacher', 'admin']; // grant admin so admin panel works
   owner.status       = 'active';
+  owner.mobileVerified = true;               // dev: pre-verified for OTP login QA
   await owner.save();
 
   // 3. Demo student — upsert one active student for the student panel.
@@ -72,6 +76,7 @@ async function main() {
   student.passwordHash = await hash(PW.student);
   student.status       = 'active';
   student.joinStatus   = 'active';
+  student.mobileVerified = true;             // dev: pre-verified for OTP login QA
   await student.save();
 
   hr();
@@ -79,10 +84,10 @@ async function main() {
   hr();
   console.log('Institution slug :', inst.slug);
   console.log('');
-  console.log('OPERATOR (panel :3000)  — requires TOTP 2FA');
+  console.log('OPERATOR (panel :3000)  — email+password OR mobile OTP');
   console.log('  email      :', OPERATOR_EMAIL);
   console.log('  password   :', PW.operator);
-  console.log('  TOTP secret:', operator.totpSecret);
+  console.log('  mobile     :', operator.mobile, '(verified — OTP login enabled)');
   console.log('');
   console.log('ADMIN (panel :3001)  — login by EMAIL');
   console.log('  email      :', owner.email);

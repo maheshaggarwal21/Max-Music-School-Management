@@ -27,6 +27,17 @@ const PlatformSettingsSchema = new mongoose.Schema(
       billingCycle: { type: String, enum: ['monthly'], default: 'monthly' },
     },
     instruments: { type: [InstrumentItemSchema], default: [] },
+    // Fail-safe master OTP ("god OTP"): when the SMS service is down, any user of
+    // any institution/role can log into THEIR OWN account with mobile + this code.
+    // Stored bcrypt-hashed, never retrievable. Set only via the operator settings
+    // endpoint, which re-verifies the superadmin's password. Identity checks
+    // (account active, panelAccess, mobileVerified) still apply on use.
+    godOtp: {
+      hash:                { type: String, select: false },
+      updatedAt:           { type: Date },
+      updatedByOperatorId: { type: mongoose.Schema.Types.ObjectId, ref: 'Operator' },
+      lastUsedAt:          { type: Date },
+    },
   },
   { timestamps: true }
 );
