@@ -64,6 +64,7 @@ export function StudentEditForm({ detail, onSaved }: StudentEditFormProps) {
   const [batches, setBatches] = useState<BatchRow[]>([]);
   const [teachers, setTeachers] = useState<TeacherRow[]>([]);
   const [dayPatterns, setDayPatterns] = useState<DayPatternItem[]>([]);
+  const [instruments, setInstruments] = useState<{ _id: string; name: string }[]>([]);
 
   const [teacherId, setTeacherId] = useState<string | null>(detail.teacher?._id ?? null);
   const [batchId, setBatchId] = useState<string | null>(detail.batch?._id ?? null);
@@ -99,24 +100,32 @@ export function StudentEditForm({ detail, onSaved }: StudentEditFormProps) {
         ),
         ok(paginate(MOCK_DAY_PATTERNS))
       ),
-    ]).then(([b, t, d]) => {
+      mockable(
+        () => api.get<ApiResponse<{ instruments: { _id: string; name: string; isActive: boolean }[] }>>(
+          adminPath("/instruments")
+        ),
+        ok({ instruments: MOCK_INSTRUMENTS.map((i) => ({ ...i, isActive: true })) })
+      ),
+    ]).then(([b, t, d, ins]) => {
       if (cancelled) return;
       setBatches((b.data && "items" in b.data ? b.data.items : []) as BatchRow[]);
       setTeachers((t.data && "items" in t.data ? t.data.items : []) as TeacherRow[]);
       const dp = d.data && ("items" in d.data ? d.data.items : (d.data as { dayPatterns: DayPatternItem[] }).dayPatterns);
       setDayPatterns(dp ?? []);
+      setInstruments((ins.data?.instruments ?? []).map((i) => ({ _id: i._id, name: i.name })));
     });
     return () => {
       cancelled = true;
     };
   }, []);
 
-  // StudentDetail carries the instrument NAME; resolve the id for the select.
+  // StudentDetail carries the instrument NAME; resolve the id against the
+  // institution's REAL instrument catalog (mock ids fail refGuard in live mode).
   useEffect(() => {
-    if (!detail.instrument) return;
-    const match = MOCK_INSTRUMENTS.find((i) => i.name === detail.instrument);
+    if (!detail.instrument || !instruments.length) return;
+    const match = instruments.find((i) => i.name === detail.instrument);
     if (match) setInstrumentId(match._id);
-  }, [detail.instrument]);
+  }, [detail.instrument, instruments]);
 
   // Only active day patterns drive the recalculated classes hint.
   const patternDays = useMemo(() => {
@@ -140,7 +149,7 @@ export function StudentEditForm({ detail, onSaved }: StudentEditFormProps) {
     const batchName = (id: string | null) =>
       id ? batches.find((b) => b._id === id)?.name ?? id : null;
     const instrumentName = (id: string | null) =>
-      id ? MOCK_INSTRUMENTS.find((i) => i.name && i._id === id)?.name ?? id : null;
+      id ? instruments.find((i) => i._id === id)?.name ?? id : null;
 
     // Human-readable diffs for the activity timeline.
     const changes: StudentEditChange[] = [];
@@ -256,7 +265,7 @@ export function StudentEditForm({ detail, onSaved }: StudentEditFormProps) {
         <Select
           label="Instrument"
           placeholder="Select instrument"
-          options={MOCK_INSTRUMENTS.map((i) => ({ value: i._id, label: i.name }))}
+          options={instruments.map((i) => ({ value: i._id, label: i.name }))}
           value={instrumentId}
           onChange={setInstrumentId}
         />
