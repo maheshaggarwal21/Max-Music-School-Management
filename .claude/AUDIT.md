@@ -119,7 +119,7 @@ Living board: `orchestrate/tasks.md` · Architecture: `ARCHITECTURE.md` · API: 
 
 ---
 
-## 7. FULL E2E `/qa` — LIVE-MODE CONTRACT BUGS (2026-06-11, in progress)
+## 7. FULL E2E `/qa` — LIVE-MODE CONTRACT BUGS (2026-06-11) ✅ COMPLETE (all 4 panels; 19 issues fixed)
 
 > Exhaustive browser click-through of every tab/workflow against the LIVE stack, driven by
 > `documentation/feature-inventory/`. Full narrative + evidence: `documentation/qa-e2e-2026-06-11.md`.
@@ -184,6 +184,35 @@ not credited by a regular-category holiday). White-label clean throughout.
 
 **Same drift lesson again** (ISSUE-013): the frontend assumed the mock date shape; the live API
 sent full ISO. ISSUE-001/014 are HTML/animation correctness, not isolation/audit/white-label.
+
+### Student panel phase (2026-06-11) — 4 bugs, all fixed + re-verified
+Tested with seeded student 106001 (no batch → empty states) and enrolled student 106002 (mobile
+6666666666, Guitar Mon-Wed batch, 2 attendance records → data-rich views). Verified live: login/
+sign-out, **dashboard** ("YOUR NEXT CLASS … 15 Jun 2026 · IN 4 DAYS", attendance 100% 2/2, validity),
+**My Classes** (2 PRESENT sessions), **Timetable** (weekly grid Mon 8 + Wed 10), **Payments** (empty
+reconciliation feed — correct), **Profile** (guardian edit → 200 + `UPDATE_STUDENT_PROFILE` audit +
+revert). White-label clean all 5 pages; clean console on fresh load.
+| Issue | Sev | Bug | Commit |
+|---|---|---|---|
+| ISSUE-015 | critical | `GET /student/classes` 500 — `Attendance.paginate` undefined; model never registered `mongoose-paginate-v2`. Now `.plugin(mongoosePaginate)`. | `8f07b64` |
+| ISSUE-016 | critical | `/timetable` returned `{timetable:[{day}]}`, contract is bare `ClassItem[]` w/ `date` → "object not iterable" crash. Backend now emits dated 6-week sessions (holidays + attendance folded). | `e638cff` |
+| ISSUE-017 | critical | dashboard `upcomingClass` lacked `date` (+ `holidayNotice` was an object) → `relativeDay(undefined)` crash. Now a `ClassItem` + string notice. | `e638cff` |
+| ISSUE-018 | high | student profile Save → 404; `PATCH /student/me` route + controller never built. Implemented `updateMe` (email + guardian, audited) + model fields + route. | `cbd6a38` |
+
+ISSUE-015/018 are genuine **backend gaps** (missing plugin; un-built contract route); 016/017 are the
+same contract drift, but the live API violated `CONTRACTS.md` so the fix was backend-side.
+
+---
+
+## FULL E2E `/qa` — FINAL VERDICT (2026-06-11): ✅ COMPLETE, all 4 panels
+**19 issues found + fixed + browser-re-verified** across operator (6: ISSUE-002..007), admin (4:
+ISSUE-008..011), teacher (3: ISSUE-013/014/001), student (4: ISSUE-015..018), plus the 2 pre-phase P2s
+(BUG-01/02); **ISSUE-012 closed (not reproduced)**. Every tab/workflow/write exercised live in the
+browser. Data isolation, audit logging (correct actor + diff on every write), white-label (zero "Max
+Music" at runtime), PBAC, operator 2FA, and Socket.io live attendance all verified clean; console is
+warning-free on fresh loads. Dominant root cause across all panels: **mock-built frontend vs drifted
+live API** (envelopes, missing routes/fields, sentinels, mock ids, ISO-vs-bare dates). Full narrative:
+`documentation/qa-e2e-2026-06-11.md` §FINAL VERDICT. Remaining (non-QA): `/ship` (HELD) → VPS deploy.
 
 ---
 

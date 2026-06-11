@@ -175,6 +175,26 @@ History of the old split is in `team-division.md` (reference only).
 > transient warnings were Fast-Refresh/dev artifacts, absent on clean loads. Remaining: student panel
 > (booted on :3003) → /qa close-out. Details: `documentation/qa-e2e-2026-06-11.md`.
 
+> **Student panel E2E phase (2026-06-11): ✅ COMPLETE — 4 bugs fixed → FULL 4-PANEL E2E DONE.**
+> Tested with seeded student 106001 (no batch → empty states) + enrolled student 106002 (mobile
+> `6666666666`/`Student@123`, Guitar Mon-Wed batch, 2 attendance records → data-rich). Verified live:
+> login/sign-out, **dashboard** ("YOUR NEXT CLASS … 15 Jun 2026 · IN 4 DAYS", attendance 100% 2/2,
+> validity 60d, weekly schedule), **My Classes** (2 PRESENT sessions), **Timetable** (weekly grid Mon 8
+> + Wed 10 class), **Payments** (pending-contract empty feed — correct), **Profile** (guardian edit →
+> 200 + `UPDATE_STUDENT_PROFILE` audit + revert). White-label clean all 5 pages; clean console. **4
+> bugs found, fixed, re-verified:** ISSUE-015 (`8f07b64`) `GET /student/classes` 500 — `Attendance.paginate`
+> undefined (model never registered `mongoose-paginate-v2`); ISSUE-016 (`e638cff`) `/timetable` returned
+> `{timetable:[{day}]}` not the contract `ClassItem[]` w/ `date` → "object not iterable" crash → backend
+> now emits dated 6-week sessions (holidays+attendance folded); ISSUE-017 (`e638cff`) dashboard
+> `upcomingClass` lacked `date` → `relativeDay(undefined)` crash → now a ClassItem + string `holidayNotice`;
+> ISSUE-018 (`cbd6a38`) student profile Save 404 — `PATCH /student/me` route+controller never built →
+> implemented audited `updateMe` + guardian model fields. ISSUE-015/018 = genuine backend gaps; 016/017 =
+> the live API violated `CONTRACTS.md` (fixed backend-side). **FINAL VERDICT: full 4-panel E2E COMPLETE —
+> 19 issues fixed (BUG-01/02 + ISSUE-001..018), ISSUE-012 closed; isolation/audit/white-label/PBAC/2FA/
+> Socket.io all clean.** Windows note: nodemon races EADDRINUSE on backend-edit restart — after a backend
+> edit, taskkill :4000 + TaskStop + fresh `npm run dev` (`node --check` first). Details + final verdict:
+> `documentation/qa-e2e-2026-06-11.md`.
+
 > **Mid-session merge (2026-06-11, `4afb761`): Dev B PR #3 resolved.** PR #3 (teacher-panel
 > renovation + `config/teacherKpi.js` KPI engine + their own contract fixes) conflicted with the QA
 > commits in 11 files — both sides had fixed the SAME bugs independently. Resolutions: (1) DayPattern
@@ -387,16 +407,15 @@ Phase 8 — Finish: live wiring + QA + deploy
   L5 Socket.io client TODO(H3)           ✅ DONE — teacher lib/socket.ts (realtime-token → socket rooms)
   L6 mailer trigger wiring               ✅ DONE — P7-04 (owner/teacher/student welcome + grant-admin)
   L7 operator 2FA live check             ✅ DONE (2026-06-11) — TOTP 2FA login → dashboard in browser
-  L8 /qa full E2E                        🔄 IN PROGRESS (2026-06-11) — inventory of all 4 panels written;
-                                           BOTH P2s FIXED (daysKey ca0b244 + useId 85e2b47, DB migrated);
-                                           Dev B PR #3 merged (4afb761); OPERATOR DONE — 6 bugs
-                                           (ISSUE-002..007); ADMIN DONE — 4 bugs (ISSUE-008..011);
-                                           TEACHER DONE — 3 bugs (ISSUE-013 holiday Invalid-Date /
-                                           ISSUE-014 nested-anchor roster / ISSUE-001 BlurFade ref
-                                           warning on ALL panels = closes BUG-04) + attendance/
-                                           Socket.io/KPI/holidays/profile verified + console CLEAN;
-                                           ISSUE-012 CLOSED (not reproduced). All white-label CLEAN.
-                                           REMAINING: student panel (booted on :3003) → /qa close-out.
+  L8 /qa full E2E                        ✅ COMPLETE (2026-06-11) — all 4 panels, every tab/workflow;
+                                           19 issues found+fixed+browser-re-verified: BOTH P2s
+                                           (daysKey ca0b244 + useId 85e2b47); OPERATOR 6 (ISSUE-002..007);
+                                           ADMIN 4 (ISSUE-008..011); TEACHER 3 (ISSUE-013/014/001 BlurFade
+                                           = closes BUG-04); STUDENT 4 (ISSUE-015 paginate-500 /
+                                           ISSUE-016 timetable contract / ISSUE-017 dashboard contract /
+                                           ISSUE-018 student PATCH /me never built); ISSUE-012 CLOSED.
+                                           Isolation/audit/white-label/PBAC/2FA/Socket.io CLEAN; console
+                                           warning-free on fresh loads. Report: documentation/qa-e2e-2026-06-11.md.
                                            NOTE: ONE panel dev-server at a time (7.5GB RAM); KILL all
                                            listeners on 4000+3000–3003 before starting the stack.
   L9 /ship                               ⏸ HELD (user decision — not pushed)
