@@ -156,6 +156,25 @@ History of the old split is in `team-division.md` (reference only).
 > warning — didn't recur, logged. **Same drift lesson: mock-built frontend vs live API.** Remaining:
 > teacher panel (booted), student panel, ISSUE-001/012. Details: `documentation/qa-e2e-2026-06-11.md`.
 
+> **Teacher panel E2E phase (2026-06-11): ✅ COMPLETE — 3 bugs fixed + console now clean.**
+> Tested as QA Guitar Teacher (100003, mobile `7777777777`/`Teacher@123`) — the owner teacher (100001)
+> has no batches; the guitar teacher owns the one batch + trial student. Verified live: login/sign-out,
+> dashboard, My Batches, batch detail (overview/launch-archive/attendance/students), **attendance one-tap
+> mark→save→DB persist + `MARK_ATTENDANCE` audit + Socket.io `attendance:marked` re-fetch round-trip**
+> (realtime-token handshake fired), **Teachers roster + live KPI** (`config/teacherKpi.js` — 0.7/14% only
+> for the teacher with a batch+attendance, 0 for the rest = engine is live), teacher detail/relaunch,
+> **profile edit** (persist + `UPDATE_TEACHER_PROFILE` diff + revert), **holiday declare/remove**
+> (`CREATE_/DELETE_HOLIDAY` audit; trial student correctly NOT credited by a regular-category holiday).
+> White-label clean throughout. **3 live-mode bugs found, fixed (one commit each), browser re-verified:**
+> ISSUE-013 (`73766df`) dashboard holiday tile rendered "Invalid Date NaN" — `${h.date}T00:00:00` assumed
+> the bare mock date but the live API returns full ISO → `String(h.date).slice(0,10)`; ISSUE-014 (`2d24e16`)
+> roster row `<Link>` (`<a>`) wrapped mailto:/tel: `<a>` → invalid nested anchors → inner anchors became
+> `<button>`; **ISSUE-001 (`41a8634`) the BlurFade `ref is not a prop` warning on EVERY page of ALL 4
+> panels** — dead `AnimatePresence`/`exit` around an always-mounted motion.div → removed; teacher console
+> now warning-free on a fresh load (**also closes BUG-04**). **ISSUE-012 CLOSED** — not reproduced; the
+> transient warnings were Fast-Refresh/dev artifacts, absent on clean loads. Remaining: student panel
+> (booted on :3003) → /qa close-out. Details: `documentation/qa-e2e-2026-06-11.md`.
+
 > **Mid-session merge (2026-06-11, `4afb761`): Dev B PR #3 resolved.** PR #3 (teacher-panel
 > renovation + `config/teacherKpi.js` KPI engine + their own contract fixes) conflicted with the QA
 > commits in 11 files — both sides had fixed the SAME bugs independently. Resolutions: (1) DayPattern
@@ -370,18 +389,20 @@ Phase 8 — Finish: live wiring + QA + deploy
   L7 operator 2FA live check             ✅ DONE (2026-06-11) — TOTP 2FA login → dashboard in browser
   L8 /qa full E2E                        🔄 IN PROGRESS (2026-06-11) — inventory of all 4 panels written;
                                            BOTH P2s FIXED (daysKey ca0b244 + useId 85e2b47, DB migrated);
-                                           Dev B PR #3 merged (4afb761); OPERATOR PANEL DONE — 6 bugs
-                                           (ISSUE-002..007); ADMIN PANEL DONE — 4 more bugs found+fixed+
-                                           re-verified (ISSUE-008..011: assign-teacher UI / fabricated
-                                           request id / mock-instrument refGuard 400 / attendance not
-                                           persisted) + all admin workflows + white-label CLEAN.
-                                           REMAINING: teacher panel (booted) + student panel + ISSUE-001/012.
+                                           Dev B PR #3 merged (4afb761); OPERATOR DONE — 6 bugs
+                                           (ISSUE-002..007); ADMIN DONE — 4 bugs (ISSUE-008..011);
+                                           TEACHER DONE — 3 bugs (ISSUE-013 holiday Invalid-Date /
+                                           ISSUE-014 nested-anchor roster / ISSUE-001 BlurFade ref
+                                           warning on ALL panels = closes BUG-04) + attendance/
+                                           Socket.io/KPI/holidays/profile verified + console CLEAN;
+                                           ISSUE-012 CLOSED (not reproduced). All white-label CLEAN.
+                                           REMAINING: student panel (booted on :3003) → /qa close-out.
                                            NOTE: ONE panel dev-server at a time (7.5GB RAM); KILL all
                                            listeners on 4000+3000–3003 before starting the stack.
   L9 /ship                               ⏸ HELD (user decision — not pushed)
   L10–L13 nginx/TLS/PM2/VPS deploy       ← pending (local deploy done; VPS not)
-  OPEN BUGS                              P3 only — ISSUE-001 BlurFade ref-warning · ClassSession index ·
-                                           god-token tokenVersion window (AUDIT.md §6 status list)
+  OPEN BUGS                              P3 only — ClassSession index (BUG-03) · god-token tokenVersion
+                                           window (BUG-05). ISSUE-001 BlurFade FIXED 41a8634 (AUDIT.md §7)
 ```
 
 Handoffs: H1 ✅ · H2 ✅ (packages/types exported — Dev B can wire typed responses) · H3 ✅ (Phase 2 done) · H4 ✅ (Phase 3 operator API contracts in CONTRACTS.md) · H5 ✅ (Phase 4 institution API contracts in CONTRACTS.md — Dev B can build all 4 panels) · H6 after Phase 7.

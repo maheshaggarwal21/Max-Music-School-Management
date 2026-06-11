@@ -138,7 +138,7 @@ Living board: `orchestrate/tasks.md` · Architecture: `ARCHITECTURE.md` · API: 
 
 Verified workflows: TOTP login · create institution · grant-admin (scenario 3) · suspend/reactivate ·
 god-mode student edit (audit + activity rail) · default-rent save round-trip · all 9 tabs render with live data.
-Remaining: admin/teacher/student panel phases + ISSUE-001 + impersonation banner (see qa-e2e doc §Remaining).
+Remaining: student panel phase + /qa close-out (operator/admin/teacher done; ISSUE-001 fixed; see qa-e2e doc §Remaining).
 
 **Merge note (`4afb761`):** Dev B PR #3 landed mid-QA and had independently fixed BUG-01, ISSUE-004,
 ISSUE-006 and ISSUE-007 in parallel. Conflicts in 11 files resolved keeping the live-DB-compatible
@@ -155,7 +155,7 @@ Full table: `documentation/qa-e2e-2026-06-11.md` §merge.
 | ISSUE-009 | critical | New-request created an optimistic row with a fabricated `_id`; approve/reject posted it → CastError 500. No enrollment approvable live. Now uses the persisted request. | `30a2df7` |
 | ISSUE-010 | high | Student edit resolved `instrumentId` from `MOCK_INSTRUMENTS` → live PATCH sent a mock id → refGuard `STUDENT_BAD_REFS` 400. No edit could save. Now loads the real `/instruments` catalog. | `e332559` |
 | ISSUE-011 | high | Attendance month-grid `cycleCell` was local-state only — corrections never hit the API, lost on reload. Now POSTs `/attendance/mark` (present/absent) optimistically. | `7daa4d1` |
-| ISSUE-012 | low | One transient React "argument changed size between renders" warning (dev-only, didn't recur). Not root-caused; logged. | open |
+| ISSUE-012 | low | One transient React "argument changed size between renders" warning (dev-only, didn't recur). Not root-caused; logged. | ✅ CLOSED in teacher phase — not reproduced; console clean on fresh load |
 
 Admin workflows verified clean (no fix): suitable-days (BUG-01 UI re-verify + dup-reject), suitable-times
 (create + end-before-start validation + toggle), batch create/launch-session, add teacher, request→approve→student
@@ -167,6 +167,23 @@ phase: mock-built frontend drifted from the live API — only live click-through
 **Environment note:** an unaudited bulk demo dataset (30 `STU-10NN` students + teachers/batches)
 appeared in `demo-school` via direct DB write during the session — no repo code generates it;
 likely another machine/process on the same Atlas dev DB. Rotate dev `MONGO_URI` if unexpected.
+
+### Teacher panel phase (2026-06-11) — 3 live-mode bugs, all fixed + re-verified
+Tested as QA Guitar Teacher (100003, mobile 7777777777) since the owner teacher has no batches.
+Verified live: login/sign-out, dashboard, My Batches, batch detail (overview/attendance/students),
+**attendance mark→save→DB persist + `MARK_ATTENDANCE` audit + Socket.io re-fetch round-trip**,
+**Teachers roster + live KPI** (`config/teacherKpi.js` — non-zero only for the teacher with a
+batch+attendance), teacher detail/relaunch, **profile edit** (persist + `UPDATE_TEACHER_PROFILE`
+diff + revert), **holiday declare/remove** (`CREATE_/DELETE_HOLIDAY` audit; trial student correctly
+not credited by a regular-category holiday). White-label clean throughout.
+| Issue | Sev | Bug | Commit |
+|---|---|---|---|
+| ISSUE-013 | high | Dashboard holiday tile "Invalid Date NaN" — `${h.date}T00:00:00` assumed bare `YYYY-MM-DD`, live API returns full ISO. Now `String(h.date).slice(0,10)`. | `73766df` |
+| ISSUE-014 | low | Roster row `<Link>` (`<a>`) wrapped mailto:/tel: `<a>` → invalid nested anchors. Inner anchors → `<button>`. | `2d24e16` |
+| ISSUE-001 | low | `BlurFade` `ref is not a prop` on **every page of all 4 panels** (shared `packages/ui`) — dead AnimatePresence/exit. Removed. Closes BUG-04; teacher console now clean on fresh load. | `41a8634` |
+
+**Same drift lesson again** (ISSUE-013): the frontend assumed the mock date shape; the live API
+sent full ISO. ISSUE-001/014 are HTML/animation correctness, not isolation/audit/white-label.
 
 ---
 
