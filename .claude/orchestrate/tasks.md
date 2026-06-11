@@ -13,9 +13,9 @@
 **Live deploy DONE (2026-06-11):** all 5 processes up locally vs Mongo Atlas; all 4 panel logins verified (API + browser, incl. operator TOTP 2FA). SWC binary fix (`@next/swc-win32-x64-msvc@14.2.33` + `NEXT_IGNORE_INCORRECT_LOCKFILE=1`); start panels independently, not via turbo. Creds via `scripts/dev-credentials.js`, verified by `scripts/verify-logins.js`.
 **gstack pipeline re-run DONE (2026-06-11) — ✅ all 6 PASS** (eng-review + cso×2 + review + qa×2). Isolation/audit/white-label/PBAC/2FA clean. See `../AUDIT.md §6`.
 **Full end-to-end audit (2026-06-10) — ✅ PASS** (`../AUDIT.md`): isolation, refGuard, audit-logging, white-label, token storage, slug immutability, types/build all clean.
-**Full E2E `/qa` IN PROGRESS (2026-06-11):** feature inventory of all 4 panels written (`documentation/feature-inventory/`); both P2 bugs FIXED (BUG-01 `daysKey` + live-DB migration `ca0b244`; BUG-02 `useId()` `85e2b47`); **operator panel phase COMPLETE — 6 live-mode contract bugs found, fixed, browser re-verified (ISSUE-002..007, see `documentation/qa-e2e-2026-06-11.md` + AUDIT.md §7)**. Box fits only ONE Next dev panel + API at a time (7.5 GB RAM) — QA proceeds panel-by-panel.
+**Full E2E `/qa` IN PROGRESS (2026-06-11):** feature inventory of all 4 panels written (`documentation/feature-inventory/`); both P2 bugs FIXED (BUG-01 `daysKey` + live-DB migration `ca0b244`; BUG-02 `useId()` `85e2b47`); **operator panel phase COMPLETE — 6 live-mode contract bugs (ISSUE-002..007)**; **admin panel phase COMPLETE — 4 more contract bugs found, fixed, browser re-verified (ISSUE-008..011: assign-teacher UI, fabricated request id, mock instrument refGuard 400, attendance not persisted)** + all admin workflows clean + white-label clean (see `documentation/qa-e2e-2026-06-11.md` + AUDIT.md §7). Box fits only ONE Next dev panel + API at a time (7.5 GB RAM) — QA proceeds panel-by-panel. **REMAINING: teacher panel (booted, not yet tested), student panel, ISSUE-001/012 fixes.**
 **Merge resolved (2026-06-11, `4afb761`):** Dev B PR #3 (teacher-panel renovation + teacherKpi engine + parallel contract fixes) conflicted with the QA commits in 11 files. Kept OUR `daysKey` (live DB already migrated; their `dayKey` twin + migration script dropped, seed.js renamed); took THEIR `PlatformSettings` singleton + two-step 2FA settings (`/2fa/enable`→`/2fa/verify`; `Operator.defaultRent` removed — platform rent now on PlatformSettings, starts ₹0); took their `update`/god-mode-create controllers with our validations + teacher tokenVersion-on-deactivate security graft; `'all'`-sentinel fix theirs (superset). Verified: node --check, API graph loads, operator `next build` ✅. Details: `documentation/qa-e2e-2026-06-11.md` §merge.
-**Next action:** continue E2E — admin panel (incl. BUG-01 UI re-verify via 2 day-patterns sharing a day, enrollment approve, holidays, attendance grid, branding, slug request, impersonation banner; + PR #3's new add-student dialog & suitable-times rework) → teacher panel (attendance + Socket.io; + PR #3's My Teachers/KPI pages) → student panel → fix ISSUE-001 (`BlurFade` ref warning) → final QA report. Then `/ship` (currently HELD) + VPS deploy (L11–L13). **Before starting the stack: kill ALL listeners on ports 4000 + 3000–3003 first.**
+**Next action (QA paused by user 2026-06-11 after admin phase):** resume E2E — teacher panel (:3002, already booted: login by mobile, dashboard, batches, one-tap attendance + Socket.io live refresh, holidays, profile, **PR #3's My Teachers roster/detail/KPI pages**) → student panel (:3003) → fix ISSUE-001 (`BlurFade` ref warning) + ISSUE-012 (transient hooks deps-size warning) → final QA report + /qa skill close-out. Then `/ship` (currently HELD) + VPS deploy (L11–L13). **Before starting the stack: kill ALL listeners on ports 4000 + 3000–3003 first** (`netstat -ano | grep :PORT | grep -i listening` → `taskkill //F //PID`).
 **Blocking dependency:** VPS deploy needs production `.env` (S3/SMTP/Razorpay creds + real domains).
 
 ---
@@ -191,6 +191,7 @@
 | BUG-03 | P3 | `apps/api/src/models/ClassSession.js:28` | possibly missing `{institutionId,targetDate}` index | open — verify vs queries |
 | BUG-04 | P3 | `packages/ui` `BlurFade` | `ref is not a prop` warning (framer-motion `AnimatePresence/PopChild`) | open = ISSUE-001; fix in E2E close-out |
 | BUG-05 | INFO | `apps/api/src/middleware/instAuth.js:73` | god-token path doesn't re-check `operator.tokenVersion` (15-min window) | open — only if instant operator revocation required |
+| ISSUE-012 | low | (unlocated) | transient React "argument changed size between renders" warning, dev-only, didn't recur | open — root-cause in close-out |
 
 ### E2E /qa live-mode contract bugs (2026-06-11) — all FIXED + browser re-verified
 | ID | Sev | Panel | Bug | Commit |
@@ -201,6 +202,10 @@
 | ISSUE-005 | critical | operator | institution detail crash — live `{institution}` envelope vs bare mock shape | `5fddb67` |
 | ISSUE-006 | critical | operator | Settings crash + phantom 2FA endpoints → defaultRent on Operator model, full settings payload, one-step mandatory-2FA card, instruments card mock-only | `5567ba6` |
 | ISSUE-007 | high | operator API | god-mode edit PATCH routes didn't exist → implemented audited `PATCH /operator/{students,teachers}/:id` | `cfc8c06` |
+| ISSUE-008 | high | admin | Setting-Phase batch had no UI to assign a teacher → never went Active; added assign modal calling existing `PATCH /batches/:id` | `cba3be9` |
+| ISSUE-009 | critical | admin | new-request inserted a fabricated `_id`; approve/reject posted it → CastError 500; now uses persisted request | `30a2df7` |
+| ISSUE-010 | high | admin | student edit resolved `instrumentId` from MOCK catalog → refGuard `STUDENT_BAD_REFS` 400; now loads real `/instruments` | `e332559` |
+| ISSUE-011 | high | admin | attendance month-grid `cycleCell` local-only → corrections lost; now POSTs `/attendance/mark` | `7daa4d1` |
 
 > Full detail + evidence: `documentation/qa-e2e-2026-06-11.md` · AUDIT.md §7.
 > Environment anomaly: unaudited bulk mock dataset (30 `STU-10NN` students) written to `demo-school`

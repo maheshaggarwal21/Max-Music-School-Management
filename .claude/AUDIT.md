@@ -148,6 +148,22 @@ controllers with our stricter validations + teacher tokenVersion-on-deactivate s
 ISSUE-006/007 rows above describe the pre-merge fixes; the post-merge contract is the PR #3 shape.
 Full table: `documentation/qa-e2e-2026-06-11.md` §merge.
 
+### Admin panel phase (post-merge, 2026-06-11) — 4 live-mode contract bugs, all fixed + re-verified
+| Issue | Sev | Bug | Commit |
+|---|---|---|---|
+| ISSUE-008 | high | Setting-Phase batch had no UI to assign a teacher → could never go Active (backend PATCH existed, no caller). Added assign-teacher modal to batch console. | `cba3be9` |
+| ISSUE-009 | critical | New-request created an optimistic row with a fabricated `_id`; approve/reject posted it → CastError 500. No enrollment approvable live. Now uses the persisted request. | `30a2df7` |
+| ISSUE-010 | high | Student edit resolved `instrumentId` from `MOCK_INSTRUMENTS` → live PATCH sent a mock id → refGuard `STUDENT_BAD_REFS` 400. No edit could save. Now loads the real `/instruments` catalog. | `e332559` |
+| ISSUE-011 | high | Attendance month-grid `cycleCell` was local-state only — corrections never hit the API, lost on reload. Now POSTs `/attendance/mark` (present/absent) optimistically. | `7daa4d1` |
+| ISSUE-012 | low | One transient React "argument changed size between renders" warning (dev-only, didn't recur). Not root-caused; logged. | open |
+
+Admin workflows verified clean (no fix): suitable-days (BUG-01 UI re-verify + dup-reject), suitable-times
+(create + end-before-start validation + toggle), batch create/launch-session, add teacher, request→approve→student
+(+temp password), add-student dialog, student detail/activity/edit, holiday declare/remove (credit reversal),
+manual fee entry + reconciliation, branding edit (→ public `/branding`), slug-change request (→ pending, operator
+queue), impersonation banner (white-label clean), white-label sweep all 10 pages. **Same lesson as the operator
+phase: mock-built frontend drifted from the live API — only live click-through of every write catches it.**
+
 **Environment note:** an unaudited bulk demo dataset (30 `STU-10NN` students + teachers/batches)
 appeared in `demo-school` via direct DB write during the session — no repo code generates it;
 likely another machine/process on the same Atlas dev DB. Rotate dev `MONGO_URI` if unexpected.

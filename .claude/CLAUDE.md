@@ -139,6 +139,23 @@ History of the old split is in `team-division.md` (reference only).
 > Remaining: admin → teacher → student phases, ISSUE-001 (BlurFade `ref` warning),
 > impersonation banner, final report.
 
+> **Admin panel E2E phase (2026-06-11, post-merge): ✅ COMPLETE — 4 contract bugs fixed.**
+> Every admin tab + workflow exercised live in the browser on the merged code. **4 live-mode
+> contract bugs found, fixed (one commit each), browser re-verified:** ISSUE-008 (`cba3be9`) a
+> Setting-Phase batch had no UI to assign a teacher → could never go Active (backend PATCH existed,
+> no caller); ISSUE-009 (`30a2df7`) new-request inserted a fabricated `req_local_<ts>` id → approve
+> posted it → CastError 500, no enrollment approvable live; ISSUE-010 (`e332559`) student edit
+> resolved `instrumentId` from `MOCK_INSTRUMENTS` → live PATCH sent a mock id → refGuard
+> `STUDENT_BAD_REFS` 400, no edit could save; ISSUE-011 (`7daa4d1`) attendance month-grid corrections
+> were local-state only, never persisted. Verified clean (no fix): suitable-days (BUG-01 UI re-verify +
+> dup-reject), suitable-times (+ end-before-start validation), batch create/launch-session,
+> add-teacher, request→approve→student (+temp password), add-student dialog, student detail/activity,
+> holiday declare/remove (credit reversal), manual fee entry + reconciliation, branding edit (→ public
+> `/branding`), slug-change request (→ pending, operator queue), impersonation banner (white-label
+> clean), white-label sweep all 10 pages. ISSUE-012 (low, dev-only) a transient hooks deps-size
+> warning — didn't recur, logged. **Same drift lesson: mock-built frontend vs live API.** Remaining:
+> teacher panel (booted), student panel, ISSUE-001/012. Details: `documentation/qa-e2e-2026-06-11.md`.
+
 > **Mid-session merge (2026-06-11, `4afb761`): Dev B PR #3 resolved.** PR #3 (teacher-panel
 > renovation + `config/teacherKpi.js` KPI engine + their own contract fixes) conflicted with the QA
 > commits in 11 files — both sides had fixed the SAME bugs independently. Resolutions: (1) DayPattern
@@ -351,13 +368,16 @@ Phase 8 — Finish: live wiring + QA + deploy
   L5 Socket.io client TODO(H3)           ✅ DONE — teacher lib/socket.ts (realtime-token → socket rooms)
   L6 mailer trigger wiring               ✅ DONE — P7-04 (owner/teacher/student welcome + grant-admin)
   L7 operator 2FA live check             ✅ DONE (2026-06-11) — TOTP 2FA login → dashboard in browser
-  L8 /qa full E2E                        🔄 IN PROGRESS (2026-06-11) — inventory of all 4 panels written
-                                           (documentation/feature-inventory/); BOTH P2s FIXED (daysKey
-                                           ca0b244 + useId 85e2b47, DB migrated); OPERATOR PANEL DONE —
-                                           6 live-mode contract bugs found+fixed+re-verified
-                                           (ISSUE-002..007, AUDIT.md §7 + documentation/qa-e2e-2026-06-11.md);
-                                           admin/teacher/student phases + ISSUE-001 next. NOTE: box fits
-                                           ONE panel dev-server at a time (7.5GB RAM) — QA panel-by-panel.
+  L8 /qa full E2E                        🔄 IN PROGRESS (2026-06-11) — inventory of all 4 panels written;
+                                           BOTH P2s FIXED (daysKey ca0b244 + useId 85e2b47, DB migrated);
+                                           Dev B PR #3 merged (4afb761); OPERATOR PANEL DONE — 6 bugs
+                                           (ISSUE-002..007); ADMIN PANEL DONE — 4 more bugs found+fixed+
+                                           re-verified (ISSUE-008..011: assign-teacher UI / fabricated
+                                           request id / mock-instrument refGuard 400 / attendance not
+                                           persisted) + all admin workflows + white-label CLEAN.
+                                           REMAINING: teacher panel (booted) + student panel + ISSUE-001/012.
+                                           NOTE: ONE panel dev-server at a time (7.5GB RAM); KILL all
+                                           listeners on 4000+3000–3003 before starting the stack.
   L9 /ship                               ⏸ HELD (user decision — not pushed)
   L10–L13 nginx/TLS/PM2/VPS deploy       ← pending (local deploy done; VPS not)
   OPEN BUGS                              P3 only — ISSUE-001 BlurFade ref-warning · ClassSession index ·
