@@ -3,11 +3,16 @@
 // - Base URL comes exclusively from NEXT_PUBLIC_API_URL — NEVER hardcode a domain.
 // - When NEXT_PUBLIC_API_URL is empty/unset, the panel runs in MOCK MODE:
 //   pages use mockable(realCall, mockData) and get the mock with simulated latency.
+// - PROXY MODE (NEXT_PUBLIC_API_PROXY="1"): requests go to the panel's OWN origin
+//   ("" base ⇒ relative URLs) and next.config rewrites proxy /api/* to the backend.
+//   This makes the auth cookie strictly first-party/same-origin — the reliable way
+//   to run panel + API on different localhost ports without cross-site cookie loss.
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
+const PROXY = process.env.NEXT_PUBLIC_API_PROXY === "1";
+const BASE_URL = PROXY ? "" : (process.env.NEXT_PUBLIC_API_URL ?? "");
 
-/** True when no API origin is configured ⇒ all data comes from local mocks. */
-export const MOCKS_ENABLED = !process.env.NEXT_PUBLIC_API_URL;
+/** True when no API origin is configured AND not proxying ⇒ all data from mocks. */
+export const MOCKS_ENABLED = !PROXY && !process.env.NEXT_PUBLIC_API_URL;
 
 /**
  * Resolve `mock` (with simulated latency) when mocks are enabled,

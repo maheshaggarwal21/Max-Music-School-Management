@@ -12,6 +12,8 @@ const S = require('../config/strings');
 // not here — middleware just enforces request budgets.
 // ─────────────────────────────────────────────────────────────────────────────
 
+const isProd = process.env.NODE_ENV === 'production';
+
 function ipPlusIdentifierKey(req) {
   const ident = (req.body && (req.body.email || req.body.mobile)) || '';
   return `${req.ip}|${String(ident).toLowerCase()}`;
@@ -19,7 +21,8 @@ function ipPlusIdentifierKey(req) {
 
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 min
-  max: 10,                  // 10 attempts per (IP, identifier) per window
+  max: isProd ? 10 : 50,    // attempts per (IP, identifier) per window
+  skipSuccessfulRequests: true, // only FAILED attempts count — a correct login never locks you out
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: ipPlusIdentifierKey,
@@ -29,7 +32,8 @@ const loginLimiter = rateLimit({
 // Stricter limiter for operator login (2FA-gated already, but defence-in-depth).
 const operatorLoginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 5,
+  max: isProd ? 5 : 50,
+  skipSuccessfulRequests: true, // the multi-step login (login → verify-2fa) must not self-trip on success
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: ipPlusIdentifierKey,
