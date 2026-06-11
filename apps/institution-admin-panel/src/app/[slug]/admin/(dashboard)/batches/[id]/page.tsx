@@ -7,12 +7,12 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import {
-  BlurFade, BorderBeam, Button, Input, Modal, StatusBadge, cn,
+  BlurFade, BorderBeam, Button, Input, Modal, Select, StatusBadge, cn,
 } from "@maxmusic/ui";
 import { formatDate, formatPhone } from "@maxmusic/utils";
 import { api, adminPath, mockable } from "@/lib/api";
 import {
-  MOCK_HOLIDAYS, mockAttendanceGrid, mockBatchAttendanceClasses, mockBatchDetail,
+  MOCK_HOLIDAYS, MOCK_TEACHERS, mockAttendanceGrid, mockBatchAttendanceClasses, mockBatchDetail,
   mockBatchRoster, mockBatchSessions, ok, paginate,
 } from "@/lib/mocks";
 import type {
@@ -64,6 +64,12 @@ export default function BatchDetailPage() {
 
   // Students
   const [roster, setRoster] = useState<BatchStudentItem[] | null>(null);
+
+  // Assign teacher (a setting-phase batch activates once one is assigned)
+  const [assignOpen, setAssignOpen] = useState(false);
+  const [teachers, setTeachers] = useState<{ _id: string; name: string; status: string }[] | null>(null);
+  const [assignTeacherId, setAssignTeacherId] = useState<string | null>(null);
+  const [assigning, setAssigning] = useState(false);
 
   useEffect(() => {
     if (!batchId) return;
@@ -246,6 +252,48 @@ export default function BatchDetailPage() {
     }
   };
 
+  const openAssign = () => {
+    setAssignOpen(true);
+    if (teachers) return;
+    mockable(
+      () =>
+        api.get<ApiResponse<Paginated<{ _id: string; name: string; status: string }>>>(
+          adminPath("/teachers?page=1&limit=100")
+        ),
+      ok(paginate(MOCK_TEACHERS))
+    )
+      .then((r) => setTeachers(r.data?.items ?? []))
+      .catch(() => setTeachers([]));
+  };
+
+  const submitAssign = async () => {
+    if (!batch || !assignTeacherId || assigning) return;
+    setAssigning(true);
+    try {
+      const teacher = teachers?.find((t) => t._id === assignTeacherId) ?? null;
+      const r = await mockable(
+        () =>
+          api.patch<ApiResponse<{ batch: BatchDetail }>>(adminPath(`/batches/${batchId}`), {
+            teacherId: assignTeacherId,
+          }),
+        ok({
+          batch: {
+            ...batch,
+            teacher: teacher ? { _id: teacher._id, name: teacher.name } : batch.teacher,
+            status: "active" as const,
+          },
+        })
+      );
+      if (r.data?.batch) setBatch(r.data.batch);
+      setAssignOpen(false);
+      toast.success("Teacher assigned — the batch is now active");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not assign the teacher");
+    } finally {
+      setAssigning(false);
+    }
+  };
+
   return (
     <PageShell
       title={batch?.name ?? "Batch"}
@@ -269,10 +317,21 @@ export default function BatchDetailPage() {
               <Clock className="h-3 w-3" />
               {batch.dayPattern?.label ?? "—"} · {batch.timeSlot?.label ?? "—"}
             </span>
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-border px-2.5 py-1 text-muted-foreground">
-              <User className="h-3 w-3" />
-              {batch.teacher?.name ?? "Setting Phase — no teacher"}
-            </span>
+            {batch.teacher ? (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-border px-2.5 py-1 text-muted-foreground">
+                <User className="h-3 w-3" />
+                {batch.teacher.name}
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={openAssign}
+                className="inline-flex items-center gap-1.5 rounded-full border border-dashed border-brand/60 px-2.5 py-1 font-semibold text-brand transition-colors hover:bg-brand/10"
+              >
+                <User className="h-3 w-3" />
+                Setting Phase — assign teacher
+              </button>
+            )}
             <span className="inline-flex items-center gap-1.5 rounded-full border border-border px-2.5 py-1 text-muted-foreground">
               <Users className="h-3 w-3" />
               {batch.studentCount} student{batch.studentCount === 1 ? "" : "s"}
@@ -672,6 +731,41 @@ export default function BatchDetailPage() {
             })}
           </ul>
         )}
+      </Modal>
+
+      {/* Assign teacher — flips a setting-phase batch to active */}
+      <Modal
+        open={assignOpen}
+        onClose={() => setAssignOpen(false)}
+        title="Assign teacher"
+        subtitle="Assigning a teacher moves this batch out of Setting Phase and makes it active."
+      >
+        <div className="space-y-4">
+          <Select
+            label="Teacher"
+            required
+            placeholder={teachers === null ? "Loading teachers…" : "Select teacher"}
+            options={(teachers ?? [])
+              .filter((t) => t.status === "active")
+              .map((t) => ({ value: t._id, label: t.name }))}
+            value={assignTeacherId}
+            onChange={(v) => setAssignTeacherId(v)}
+          />
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" className="rounded-full" onClick={() => setAssignOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="brand"
+              className="rounded-full"
+              disabled={!assignTeacherId || assigning}
+              onClick={submitAssign}
+            >
+              {assigning ? <Loader2 className="h-4 w-4 animate-spin" /> : <User className="h-4 w-4" />}
+              Assign Teacher
+            </Button>
+          </div>
+        </div>
       </Modal>
     </PageShell>
   );
