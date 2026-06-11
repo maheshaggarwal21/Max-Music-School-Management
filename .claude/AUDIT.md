@@ -140,6 +140,14 @@ Verified workflows: TOTP login · create institution · grant-admin (scenario 3)
 god-mode student edit (audit + activity rail) · default-rent save round-trip · all 9 tabs render with live data.
 Remaining: admin/teacher/student panel phases + ISSUE-001 + impersonation banner (see qa-e2e doc §Remaining).
 
+**Merge note (`4afb761`):** Dev B PR #3 landed mid-QA and had independently fixed BUG-01, ISSUE-004,
+ISSUE-006 and ISSUE-007 in parallel. Conflicts in 11 files resolved keeping the live-DB-compatible
+`daysKey` (ours), adopting their `PlatformSettings` + two-step 2FA settings design (supersedes the
+ISSUE-006 one-step card; Operator.defaultRent field removed) and their `update`/god-mode-create
+controllers with our stricter validations + teacher tokenVersion-on-deactivate security graft.
+ISSUE-006/007 rows above describe the pre-merge fixes; the post-merge contract is the PR #3 shape.
+Full table: `documentation/qa-e2e-2026-06-11.md` §merge.
+
 **Environment note:** an unaudited bulk demo dataset (30 `STU-10NN` students + teachers/batches)
 appeared in `demo-school` via direct DB write during the session — no repo code generates it;
 likely another machine/process on the same Atlas dev DB. Rotate dev `MONGO_URI` if unexpected.
