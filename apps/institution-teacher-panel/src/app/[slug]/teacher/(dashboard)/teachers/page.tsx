@@ -121,23 +121,25 @@ export default function TeachersPage() {
                         <p className="truncate text-[11px] text-muted-foreground">{t.email}</p>
                       </div>
                       {/* connect */}
+                      {/* Buttons, not <a> — these sit inside the row's <Link>, and an
+                          anchor nested in an anchor is invalid HTML (React warns). */}
                       <div className="hidden items-center gap-1.5 text-muted-foreground md:flex">
-                        <a
-                          href={`mailto:${t.email}`}
-                          onClick={(e) => e.stopPropagation()}
+                        <button
+                          type="button"
+                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); window.location.href = `mailto:${t.email}`; }}
                           className="flex h-7 w-7 items-center justify-center rounded-md hover:bg-muted hover:text-foreground"
                           aria-label="Email"
                         >
                           <Mail className="h-3.5 w-3.5" />
-                        </a>
-                        <a
-                          href={`tel:${t.mobile}`}
-                          onClick={(e) => e.stopPropagation()}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); window.location.href = `tel:${t.mobile}`; }}
                           className="flex h-7 w-7 items-center justify-center rounded-md hover:bg-muted hover:text-foreground"
                           aria-label="Message"
                         >
                           <MessageSquare className="h-3.5 w-3.5" />
-                        </a>
+                        </button>
                       </div>
                       {/* account */}
                       <span
