@@ -36,6 +36,7 @@ router.post('/institutions/:id/impersonate',  Institution.impersonate);
 // Cross-institution collections
 router.get('/students',       Students.list);
 router.post('/students',      Students.create);   // god-mode enrol into any institution
+router.get('/students/:id/catalog', Students.catalog); // institution catalog for the edit form
 router.get('/students/:id',   Students.get);
 router.patch('/students/:id', Students.update);   // god-mode edit (audited)
 router.get('/teachers',       Teachers.list);

@@ -20,6 +20,7 @@ const StudentSchema = new mongoose.Schema(
     gender:                  { type: String, enum: ['male', 'female'] },
     profilePicUrl:           { type: String, trim: true },
     instrumentId:            { type: mongoose.Schema.Types.ObjectId, ref: 'Instrument' },
+    classLevelId:            { type: mongoose.Schema.Types.ObjectId, ref: 'ClassLevel' },
     classType:               { type: String, trim: true },
     mode:                    { type: String, enum: ['online', 'offline'], default: 'online' },
     joinStatus:              { type: String, enum: ['trial', 'active_soon', 'active', 'inactive'], default: 'trial', required: true },
@@ -32,12 +33,20 @@ const StudentSchema = new mongoose.Schema(
     upcomingClasses:         { type: Number, default: 0, min: 0 },
     paidAmount:              { type: Number, default: 0, min: 0 },
     upcomingAmount:          { type: Number, default: 0, min: 0 },
+    // Total committed fee for the current term (paise), snapshotted from the
+    // ClassLevel at enrollment. paymentStatus is DERIVED from paidAmount vs
+    // feeTotal via config/payments.derivePaymentStatus — never set by the client.
+    feeTotal:                { type: Number, default: 0, min: 0 },
+    paymentStatus:           { type: String, enum: ['unpaid', 'partial', 'paid', 'free'], default: 'unpaid', required: true },
+    remarks:                 { type: String, trim: true },
     assignedVideoChapterId:  { type: mongoose.Schema.Types.ObjectId },
     requestId:               { type: mongoose.Schema.Types.ObjectId, ref: 'EnrollmentRequest' },
     recoveryOtp:             { type: String, select: false },
     passwordHash:            { type: String, select: false },
     tokenVersion:            { type: Number, default: 0 },
-    status:                  { type: String, enum: ['active', 'inactive'], default: 'active', required: true },
+    // 'hold' — manually paused (e.g. partial payment): NOT deactivated, can still
+    // log in, and the validity-expiry cron will not flip it to inactive.
+    status:                  { type: String, enum: ['active', 'inactive', 'hold'], default: 'active', required: true },
   },
   { timestamps: true }
 );
@@ -45,6 +54,7 @@ const StudentSchema = new mongoose.Schema(
 StudentSchema.index({ institutionId: 1, createdAt: -1 });
 StudentSchema.index({ institutionId: 1, status: 1 });
 StudentSchema.index({ institutionId: 1, joinStatus: 1 });
+StudentSchema.index({ institutionId: 1, paymentStatus: 1 });
 StudentSchema.index({ institutionId: 1, teacherId: 1 });
 StudentSchema.index({ institutionId: 1, batchId: 1 });
 StudentSchema.index({ institutionId: 1, validityEnd: 1 });

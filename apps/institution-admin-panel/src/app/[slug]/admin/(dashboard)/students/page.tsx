@@ -5,14 +5,13 @@ import {
   Avatar, BlurFade, Button, SearchBar, Select, StatusBadge,
 } from "@maxmusic/ui";
 import { Table, type DataTableColumn } from "@/components/table";
-import { formatDate, formatPhone } from "@maxmusic/utils";
+import { formatCurrency, formatDate, formatPhone } from "@maxmusic/utils";
 import { api, adminPath, mockable } from "@/lib/api";
 import { MOCK_STUDENTS, MOCK_TEACHERS, ok, paginate } from "@/lib/mocks";
 import type { ApiResponse, JoinStatus, Paginated, StudentRow } from "@/lib/types";
 import { PageShell } from "@/components/page-shell";
 import { EmptyState } from "@/components/empty-state";
 import { TableSkeleton } from "@/components/skeletons";
-import { StudentDetailModal } from "@/components/student-detail-modal";
 import { StudentEditDialog } from "@/components/student-edit-dialog";
 import { AddStudentDialog } from "@/components/add-student-dialog";
 
@@ -28,7 +27,6 @@ export default function StudentsPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [teacherFilter, setTeacherFilter] = useState<string | null>(null);
-  const [selected, setSelected] = useState<StudentRow | null>(null);
   const [editing, setEditing] = useState<StudentRow | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [teachers, setTeachers] = useState<{ _id: string; name: string }[]>([]);
@@ -107,6 +105,20 @@ export default function StudentsPage() {
         ),
     },
     { key: "joinStatus", label: "Status", render: (s) => <StatusBadge status={s.joinStatus} /> },
+    {
+      key: "paymentStatus",
+      label: "Payment",
+      render: (s) => (
+        <div className="flex flex-col gap-0.5">
+          <StatusBadge status={s.paymentStatus} />
+          {s.remainingAmount > 0 && (
+            <span className="text-[10px] font-medium text-amber-600 dark:text-amber-500">
+              {formatCurrency(s.remainingAmount)} left
+            </span>
+          )}
+        </div>
+      ),
+    },
     {
       key: "validityEnd",
       label: "Validity",
@@ -191,17 +203,10 @@ export default function StudentsPage() {
           <Table
             columns={columns}
             data={visible}
-            onRowClick={(row) => setSelected(row)}
+            onRowClick={(row) => setEditing(row)}
           />
         )}
       </BlurFade>
-
-      {/* Row click → read-only detail popup */}
-      <StudentDetailModal
-        studentId={selected?._id ?? null}
-        studentName={selected?.name}
-        onClose={() => setSelected(null)}
-      />
 
       {/* Add Student → big form, direct enrollment (bypasses request flow) */}
       <AddStudentDialog open={addOpen} onClose={() => setAddOpen(false)} onCreated={load} />

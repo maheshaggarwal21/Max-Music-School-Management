@@ -185,6 +185,33 @@ exports.dashboard = async (req, res, next) => {
   }
 };
 
+// GET /contact → the student's own teacher + the institution support contact.
+// WHITE-LABEL: exposes ONLY the institution's own teacher and the institution's
+// own contact details (schoolName + contactEmail). No Max Music identifiers.
+exports.contact = async (req, res, next) => {
+  try {
+    const s = await Student.findOne({ _id: req.actor._id, institutionId: req.institution._id })
+      .populate({
+        path: 'batchId',
+        select: 'teacherId',
+        populate: { path: 'teacherId', select: 'name mobile' },
+      })
+      .lean();
+    if (!s) return notFound(res, S.STUDENT_NOT_FOUND);
+
+    const t = s.batchId && s.batchId.teacherId;
+    return ok(res, S.OK, {
+      teacher: t ? { name: t.name, mobile: t.mobile } : null,
+      support: {
+        schoolName: req.institution.branding.schoolName,
+        email: req.institution.contactEmail || null,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 exports.classes = async (req, res, next) => {
   try {
     const inst = req.institution._id;

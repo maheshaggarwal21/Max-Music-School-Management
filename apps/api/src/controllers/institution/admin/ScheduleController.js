@@ -3,6 +3,7 @@
 const DayPattern = require('../../../models/DayPattern');
 const TimeSlot   = require('../../../models/TimeSlot');
 const Instrument = require('../../../models/Instrument');
+const PlatformSettings = require('../../../models/PlatformSettings');
 const { auditLog, actorFromReq } = require('../../../config/auditLog');
 const { ok, created, badRequest, notFound } = require('../../../config/helper');
 const S = require('../../../config/strings');
@@ -21,7 +22,48 @@ const instrItem = i => ({ _id: String(i._id), name: i.name, isActive: i.isActive
 // institution by the operator). Powers batch + enrollment-request dropdowns. ──
 exports.listInstruments = async (req, res, next) => {
   try {
-    const items = await Instrument.find({ institutionId: req.institution._id }).sort({ name: 1 }).lean();
+    const inst = req.institution._id;
+
+    // Sync this institution's instruments to mirror the operator's GLOBAL catalog
+    // (PlatformSettings.instruments), which is "available to every institution".
+    // Catalog-sourced rows (fromCatalog:true) track the catalog's active set by
+    // name: created when added, reactivated when re-enabled, DEACTIVATED (never
+    // deleted — batches reference them) when removed/disabled. Institution-specific
+    // or seeded instruments (fromCatalog:false) are never touched.
+    const ps = await PlatformSettings.getSingleton();
+    const activeCatalog = (ps.instruments || [])
+      .filter(i => i.isActive !== false)
+      .map(i => String(i.name || '').trim())
+      .filter(Boolean);
+    const activeSet = new Set(activeCatalog.map(n => n.toLowerCase()));
+
+    const existing = await Instrument.find({ institutionId: inst }).lean();
+    const byName = new Map(existing.map(i => [i.name.toLowerCase(), i]));
+
+    const ops = [];
+    // 1. Every active catalog instrument must exist, be active, and be flagged.
+    for (const name of activeCatalog) {
+      const cur = byName.get(name.toLowerCase());
+      if (!cur) {
+        ops.push({ insertOne: { document: { institutionId: inst, name, isActive: true, fromCatalog: true } } });
+      } else if (!cur.isActive || !cur.fromCatalog) {
+        // reactivate + mark as catalog-sourced (self-heals rows materialized earlier)
+        ops.push({ updateOne: { filter: { _id: cur._id }, update: { $set: { isActive: true, fromCatalog: true } } } });
+      }
+    }
+    // 2. Catalog-sourced rows dropped from the active catalog → deactivate (keep refs).
+    for (const i of existing) {
+      if (i.fromCatalog && i.isActive && !activeSet.has(i.name.toLowerCase())) {
+        ops.push({ updateOne: { filter: { _id: i._id }, update: { $set: { isActive: false } } } });
+      }
+    }
+    if (ops.length) {
+      try { await Instrument.bulkWrite(ops, { ordered: false }); }
+      catch (e) { if (!e || e.code !== 11000) throw e; } // ignore dup-name races
+    }
+
+    // Dropdowns only ever want ACTIVE instruments.
+    const items = await Instrument.find({ institutionId: inst, isActive: true }).sort({ name: 1 }).lean();
     return ok(res, S.OK, { instruments: items.map(instrItem) });
   } catch (err) {
     next(err);

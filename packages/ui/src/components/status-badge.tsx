@@ -14,6 +14,7 @@ const TONE = {
   // generic / institution status
   active: "positive",
   pending: "attention",
+  hold: "attention",
   inactive: "neutral",
   suspended: "negative",
   terminated: "negative",

@@ -140,6 +140,7 @@ export function StudentDetailModal({
             <span className="font-mono text-xs">{detail.displayId}</span>
             <StatusBadge status={detail.joinStatus} />
             <StatusBadge status={detail.mode} />
+            <StatusBadge status={detail.paymentStatus} />
           </span>
         ) : (
           "Loading profile…"
@@ -181,6 +182,7 @@ export function StudentDetailModal({
                 <Field label="Mobile" value={formatPhone(detail.mobile)} />
                 <Field label="Email" value={detail.email ?? "—"} />
                 <Field label="Instrument" value={detail.instrument ?? "—"} />
+                <Field label="Class level" value={detail.classLevel?.name ?? "—"} />
                 <Field label="Class type" value={detail.classType ?? "—"} />
                 <Field label="Batch" value={detail.batch?.name ?? "Not assigned"} />
                 <Field label="Teacher" value={detail.teacher?.name ?? "Not assigned"} />
@@ -207,22 +209,54 @@ export function StudentDetailModal({
                 </p>
               </div>
 
-              {/* Fees + classes */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-lg border border-border bg-card p-3">
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                    Paid
+              {/* Financials & Admin */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-brand">
+                    Financials &amp; Admin
                   </p>
-                  <p className="mt-1 text-lg font-bold text-brand">{formatCurrency(detail.paidAmount)}</p>
-                  <p className="text-[11px] text-muted-foreground">{detail.paidClasses} classes purchased</p>
+                  <StatusBadge status={detail.paymentStatus} />
                 </div>
-                <div className="rounded-lg border border-border bg-card p-3">
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                    Upcoming
-                  </p>
-                  <p className="mt-1 text-lg font-bold">{formatCurrency(detail.upcomingAmount)}</p>
-                  <p className="text-[11px] text-muted-foreground">{detail.upcomingClasses} classes remaining</p>
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="rounded-lg border border-border bg-card p-3">
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Total fee</p>
+                    <p className="mt-1 text-base font-bold">{formatCurrency(detail.feeTotal)}</p>
+                  </div>
+                  <div className="rounded-lg border border-border bg-card p-3">
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Paid</p>
+                    <p className="mt-1 text-base font-bold text-brand">{formatCurrency(detail.paidAmount)}</p>
+                    <p className="text-[11px] text-muted-foreground">{detail.paidClasses} classes</p>
+                  </div>
+                  <div
+                    className={cn(
+                      "rounded-lg border p-3",
+                      detail.remainingAmount > 0
+                        ? "border-amber-500/30 bg-amber-500/[0.06]"
+                        : "border-border bg-card"
+                    )}
+                  >
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Remaining</p>
+                    <p
+                      className={cn(
+                        "mt-1 text-base font-bold",
+                        detail.remainingAmount > 0 ? "text-amber-600 dark:text-amber-500" : "text-muted-foreground"
+                      )}
+                    >
+                      {formatCurrency(detail.remainingAmount)}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground">{detail.remainingAmount > 0 ? "left to pay" : "fully paid"}</p>
+                  </div>
                 </div>
+                <div className="grid grid-cols-2 gap-3 text-xs text-muted-foreground">
+                  <span>Upcoming amount: <span className="font-medium text-foreground">{formatCurrency(detail.upcomingAmount)}</span></span>
+                  <span>Upcoming classes: <span className="font-medium text-foreground">{detail.upcomingClasses}</span></span>
+                </div>
+                {detail.remarks && (
+                  <div className="rounded-lg border border-border bg-muted/30 p-3">
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Remarks</p>
+                    <p className="mt-1 whitespace-pre-wrap text-sm">{detail.remarks}</p>
+                  </div>
+                )}
               </div>
 
               {/* Attendance summary */}

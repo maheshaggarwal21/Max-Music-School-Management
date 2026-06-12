@@ -37,7 +37,8 @@ function roleFor(panel) {
 async function findEligibleUser({ inst, panel, mobile }) {
   if (panel === 'student') {
     const student = await Student.findOne({ institutionId: inst._id, mobile });
-    if (!student || student.status !== 'active' || !student.mobileVerified) return null;
+    // 'hold' students may still log in — only 'inactive' is blocked.
+    if (!student || student.status === 'inactive' || !student.mobileVerified) return null;
     return student;
   }
   const teacher = await Teacher.findOne({ institutionId: inst._id, mobile });

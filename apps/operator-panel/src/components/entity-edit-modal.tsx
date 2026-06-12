@@ -29,7 +29,7 @@ import { useOperatorSession } from "@/lib/auth";
 import { mockEntityActivity, recordEntityActivity } from "@/lib/mocks";
 import type { ApiResponse, AuditLogItem, Paginated } from "@/lib/types";
 
-export type EditFieldType = "text" | "phone" | "currency" | "number" | "select" | "date";
+export type EditFieldType = "text" | "phone" | "currency" | "number" | "select" | "date" | "textarea";
 
 export interface EditField {
   key: string;
@@ -263,6 +263,19 @@ export function EntityEditModal({
           value={v}
           onChange={(nv) => setValue(f.key, nv)}
         />
+      );
+    if (f.type === "textarea")
+      return (
+        <label key={f.key} className="flex w-full flex-col gap-1.5">
+          <span className="text-xs font-medium text-foreground">{f.label}</span>
+          <textarea
+            rows={2}
+            placeholder={f.placeholder}
+            value={v ?? ""}
+            onChange={(e) => setValue(f.key, e.target.value)}
+            className="w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none transition-all placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+          />
+        </label>
       );
     return (
       <Input

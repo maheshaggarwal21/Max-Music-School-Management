@@ -23,6 +23,7 @@ const Teacher    = require('../controllers/institution/admin/TeacherController')
 const Batch      = require('../controllers/institution/admin/BatchController');
 const Attendance = require('../controllers/institution/admin/AttendanceController');
 const Schedule   = require('../controllers/institution/admin/ScheduleController');
+const ClassLevel = require('../controllers/institution/admin/ClassLevelController');
 const Payment    = require('../controllers/institution/admin/PaymentController');
 const HolidayAdm = require('../controllers/institution/admin/HolidayController');
 const Session    = require('../controllers/institution/admin/SessionController');
@@ -131,6 +132,11 @@ router.post('/:slug/admin/time-slots',        ...adminChain, Schedule.createTime
 router.patch('/:slug/admin/time-slots/:id',   ...adminChain, Schedule.toggleTimeSlot);
 router.get('/:slug/admin/instruments',        ...adminChain, Schedule.listInstruments);
 
+router.get('/:slug/admin/class-levels',        ...adminChain, ClassLevel.list);
+router.post('/:slug/admin/class-levels',       ...adminChain, ClassLevel.create);
+router.patch('/:slug/admin/class-levels/:id',  ...adminChain, ClassLevel.update);
+router.delete('/:slug/admin/class-levels/:id', ...adminChain, ClassLevel.remove);
+
 router.get('/:slug/admin/payments/reconciliation', ...adminChain, Payment.reconciliationFeed);
 router.get('/:slug/admin/payments',                ...adminChain, Payment.list);
 router.post('/:slug/admin/payments',               ...adminChain, Payment.createPayment);
@@ -157,6 +163,7 @@ router.get('/:slug/teacher/colleagues/:id/schedule',...teacherChain, TeacherApp.
 router.get('/:slug/student/dashboard', ...studentChain, StudentApp.dashboard);
 router.get('/:slug/student/classes',   ...studentChain, StudentApp.classes);
 router.get('/:slug/student/timetable', ...studentChain, StudentApp.timetable);
+router.get('/:slug/student/contact',   ...studentChain, StudentApp.contact);
 router.get('/:slug/student/me',        ...studentChain, StudentApp.me);
 router.patch('/:slug/student/me',      ...studentChain, StudentApp.updateMe);
 

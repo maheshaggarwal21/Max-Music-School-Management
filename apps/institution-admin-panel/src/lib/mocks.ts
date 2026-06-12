@@ -211,7 +211,9 @@ export const MOCK_BATCHES: BatchRow[] = [
 
 // ── Students ──────────────────────────────────────────────────────────────────
 
-type StudentSeed = StudentRow & {
+// paymentStatus / remainingAmount are DERIVED from the seed's amounts (see
+// MOCK_STUDENTS / mockStudentDetail), so the raw seeds omit them.
+type StudentSeed = Omit<StudentRow, "paymentStatus" | "remainingAmount"> & {
   batchId: string | null;
   email: string | null;
   gender: string | null;
@@ -369,11 +371,23 @@ const STUDENT_SEEDS: StudentSeed[] = [
   },
 ];
 
-export const MOCK_STUDENTS: StudentRow[] = STUDENT_SEEDS.map(
-  ({ batchId: _b, email: _e, gender: _g, mode: _m, category: _c, validityStart: _vs,
-     validityDays: _vd, paidClasses: _pc, upcomingClasses: _uc, paidAmount: _pa,
-     upcomingAmount: _ua, createdAt: _ca, ...row }) => row
-);
+function mockPayStatus(feeTotal: number, paid: number): "unpaid" | "partial" | "paid" | "free" {
+  if (feeTotal <= 0) return "free";
+  if (paid <= 0) return "unpaid";
+  if (paid < feeTotal) return "partial";
+  return "paid";
+}
+
+export const MOCK_STUDENTS: StudentRow[] = STUDENT_SEEDS.map((s) => {
+  const feeTotal = s.upcomingAmount;
+  return {
+    _id: s._id, displayId: s.displayId, name: s.name, mobile: s.mobile,
+    instrument: s.instrument, classType: s.classType, schedule: s.schedule,
+    joinStatus: s.joinStatus, validityEnd: s.validityEnd, teacher: s.teacher,
+    paymentStatus: mockPayStatus(feeTotal, s.paidAmount),
+    remainingAmount: Math.max(0, feeTotal - s.paidAmount),
+  };
+});
 
 export function mockStudentDetail(studentId: string): StudentDetail | null {
   const seed = STUDENT_SEEDS.find((s) => s._id === studentId);
@@ -385,11 +399,17 @@ export function mockStudentDetail(studentId: string): StudentDetail | null {
     _id: seed._id, displayId: seed.displayId, name: seed.name, mobile: seed.mobile,
     instrument: seed.instrument, classType: seed.classType, schedule: seed.schedule,
     joinStatus: seed.joinStatus, validityEnd: seed.validityEnd, teacher: seed.teacher,
+    accountStatus: seed.joinStatus === "inactive" ? "inactive" : "active",
     email: seed.email, gender: seed.gender, mode: seed.mode,
     sessionType: seed.mode === "online" ? "live" : "all", category: seed.category,
     validityStart: seed.validityStart, validityDays: seed.validityDays,
     paidClasses: seed.paidClasses, upcomingClasses: seed.upcomingClasses,
     paidAmount: seed.paidAmount, upcomingAmount: seed.upcomingAmount,
+    feeTotal: seed.upcomingAmount,
+    remainingAmount: Math.max(0, seed.upcomingAmount - seed.paidAmount),
+    paymentStatus: mockPayStatus(seed.upcomingAmount, seed.paidAmount),
+    remarks: null,
+    classLevel: null,
     attendanceSummary: { total: Math.max(total, 0), present, absent: Math.max(total - present, 0) },
     batch: batch ? { _id: batch._id, name: batch.name } : null,
     assignedVideoChapterId: null,

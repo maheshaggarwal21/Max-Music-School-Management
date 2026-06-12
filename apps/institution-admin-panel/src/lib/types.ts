@@ -14,6 +14,28 @@ export type {
 
 // ── New Requests ──────────────────────────────────────────────────────────────
 
+// Proposed student config carried by the admin "Add Student" form into a request.
+export interface ProposedStudent {
+  classLevelId?: string;
+  teacherId?: string;
+  batchId?: string;
+  instrumentId?: string;
+  classType?: string;
+  mode?: string;
+  sessionType?: string;
+  joinStatus?: string;
+  category?: string;
+  gender?: string;
+  validityStart?: string;
+  validityEnd?: string;
+  validityDays?: number;
+  feeTotal?: number;
+  paidAmount?: number;
+  paidClasses?: number;
+  upcomingClasses?: number;
+  remarks?: string;
+}
+
 export interface RequestItem {
   _id: string;
   name: string;
@@ -22,12 +44,15 @@ export interface RequestItem {
   preferredDays: { _id: string; label: string } | null;
   preferredTime: { _id: string; label: string } | null;
   instrument: { _id: string; name: string } | null;
+  proposed?: ProposedStudent | null;
   status: "pending" | "approved" | "rejected";
   paymentStatus: "unpaid" | "paid";
   createdAt: string;
 }
 
 // ── Students ──────────────────────────────────────────────────────────────────
+
+export type PaymentStatus = "unpaid" | "partial" | "paid" | "free";
 
 export interface StudentRow {
   _id: string;
@@ -38,11 +63,14 @@ export interface StudentRow {
   classType: string | null;
   schedule: { days: string | null; time: string | null }; // from batch
   joinStatus: JoinStatus;
+  paymentStatus: PaymentStatus;
+  remainingAmount: number; // paise still owed (feeTotal − paid)
   validityEnd: string | null;
   teacher: { _id: string; name: string } | null;
 }
 
 export interface StudentDetail extends StudentRow {
+  accountStatus: "active" | "inactive" | "hold"; // account flag, distinct from joinStatus
   email: string | null;
   gender: string | null;
   mode: "online" | "offline";
@@ -53,7 +81,10 @@ export interface StudentDetail extends StudentRow {
   paidClasses: number;
   upcomingClasses: number;
   paidAmount: number;
-  upcomingAmount: number; // the fee
+  upcomingAmount: number; // legacy "upcoming" amount
+  feeTotal: number;       // total committed fee (paise)
+  remarks: string | null;
+  classLevel: { _id: string; name: string } | null;
   attendanceSummary: { total: number; present: number; absent: number };
   batch: { _id: string; name: string } | null;
   assignedVideoChapterId: string | null;
@@ -114,6 +145,17 @@ export interface TimeSlotItem {
   endTime: string;
   label: string;
   isOnline: boolean;
+}
+
+// Reusable class-level template (fee + duration) that pre-fills enrollment.
+// Amounts are in paise. upcomingAmount = total class fee.
+export interface ClassLevelItem {
+  _id: string;
+  name: string;
+  paidAmount: number;
+  upcomingAmount: number;
+  days: number;
+  isActive: boolean;
 }
 
 // ── Payment History ───────────────────────────────────────────────────────────

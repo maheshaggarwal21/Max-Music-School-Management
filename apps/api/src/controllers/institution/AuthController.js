@@ -74,7 +74,8 @@ exports.studentLogin = async (req, res, next) => {
 
     const valid = await compare(password, (student && student.passwordHash) ? student.passwordHash : DUMMY_HASH);
     if (!student || !student.passwordHash || !valid) return unauthorized(res, S.AUTH_INVALID);
-    if (student.status !== 'active') return forbidden(res, S.AUTH_PANEL_DENIED);
+    // 'hold' students may still log in — only 'inactive' is denied.
+    if (student.status === 'inactive') return forbidden(res, S.AUTH_PANEL_DENIED);
 
     issuePanelCookie(res, { panel: 'student', user: student, institution: inst, slug: inst.slug });
 
