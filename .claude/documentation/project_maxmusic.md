@@ -65,7 +65,7 @@ webhook feed is read-only reconciliation. Rent (autonomous) tracked via `RentInv
 (operator revenue). Fee amounts are visible on operator + admin panels.
 
 ## Non-Negotiables (summary — full list in CLAUDE.md)
-1. JWT in httpOnly cookies only; operator login requires 2FA.
+1. JWT in httpOnly cookies only; login = password OR mobile OTP (TOTP 2FA removed 2026-06-12).
 2. Two-level token invalidation: `Institution.tokenVersion` + `Teacher/Student.tokenVersion`.
 3. bcrypt for all passwords; never return password/hash/otp.
 4. `auditLog()` on every write, `w:0` — one immutable log powers Changes History + per-student feed.

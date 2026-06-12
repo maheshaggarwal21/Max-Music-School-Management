@@ -20,7 +20,8 @@ apps/api/
     │   ├── auditLog.js                ← auditLog() with { w: 0 }; strips secrets
     │   ├── specialFunctions.js        ← generateSlug(), nextDisplayId(), encodeBatchName()
     │   ├── strings.js                 ← All message strings
-    │   ├── totp.js                    ← Operator 2FA (generate/verify)
+    │   ├── sms.js                     ← MSG91 OTP sender (console-log fallback in dev)
+    │   ├── otp.js                     ← OTP issue/verify + god-OTP failsafe
     │   ├── s3.js                      ← AWS S3 (pre-signed uploads)
     │   ├── mailer.js                  ← Nodemailer; per-institution branded sender
     │   ├── razorpay.js                ← Razorpay client + webhook signature verify
@@ -48,7 +49,7 @@ apps/api/
     │   #   Certificate, Announcement, TrialCallLog, Notification, FeeReminder, ClassReminder
     │
     ├── middleware/
-    │   ├── operatorAuth.js            ← verify operator_token (+2FA-completed)
+    │   ├── operatorAuth.js            ← verify operator_token (single-step; no 2FA)
     │   ├── resolveInstitution.js      ← :slug → req.institution (cache; 404 unknown; 403 suspended)
     │   ├── instAuth.js                ← instAuth(panel): 2-level tokenVersion + panelAccess
     │   ├── scopeGuard.js              ← actor.institutionId === institution._id
@@ -58,14 +59,15 @@ apps/api/
     │
     ├── controllers/
     │   ├── operator/
-    │   │   ├── AuthController.js          ← login, verify-2fa, logout, me
+    │   │   ├── AuthController.js          ← login (password), logout, me
+    │   │   ├── OtpAuthController.js       ← operator OTP request/verify (+ god-OTP)
     │   │   ├── InstitutionController.js   ← CRUD, slug gen, grant/revoke-admin, suspend, terminate, impersonate
     │   │   ├── StudentsController.js      ← cross-institution tagged list
     │   │   ├── TeachersController.js      ← cross-institution tagged list
     │   │   ├── PaymentsController.js      ← student fees + rent invoices + mark-paid
     │   │   ├── ChangesController.js       ← global audit timeline
     │   │   ├── DashboardController.js     ← aggregations
-    │   │   └── SettingsController.js      ← profile, 2FA, default rent, instrument master
+    │   │   └── SettingsController.js      ← profile, god-OTP, default rent, instrument master
     │   ├── WebhookController.js          ← platform-level Razorpay webhook (raw-body HMAC, idempotent)
     │   └── institution/
     │       ├── AuthController.js          ← admin/teacher/student login, me, logout (+ branding, + realtime-token)
@@ -171,9 +173,9 @@ maxmusic/
 │                            (@next/swc, lightningcss, @tailwindcss/oxide) — the committed
 │                            package-lock.json is Linux-generated and omits win32 optionals;
 │                            optional ⇒ skipped (not failed) on Linux/macOS CI + deploy
-├── .env.example          ← PLATFORM_DOMAIN, OPERATOR_DOMAIN, JWT secrets, Mongo, S3, Razorpay, SMTP, TOTP
+├── .env.example          ← PLATFORM_DOMAIN, OPERATOR_DOMAIN, JWT secrets, Mongo, S3, Razorpay, SMTP, MSG91, COOKIE_SAME_SITE
 └── scripts/
-    ├── seed.js           ← superadmin (with 2FA) + instrument master + a demo institution
+    ├── seed.js           ← superadmin + instrument master + a demo institution
     └── migrate.js        ← future
 ```
 

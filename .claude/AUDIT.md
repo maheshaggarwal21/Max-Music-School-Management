@@ -80,6 +80,7 @@ Living board: `orchestrate/tasks.md` · Architecture: `ARCHITECTURE.md` · API: 
 
 ### D. Deploy (Phase 8)
 - [◑] **Local deploy** ✅ DONE (2026-06-11) — all 5 processes up on :4000 + :3000-3003 against live Mongo Atlas; all 4 logins verified. (VPS deploy below still pending.)
+- [✅] **Free-tier CLOUD deploy LIVE (2026-06-13)** — first PUBLIC deploy: API on Render + 4 panels on Vercel + Atlas; all 4 logins browser-verified end-to-end. Key fix = Render env `COOKIE_SAME_SITE=none` (cross-domain cookies onrender.com↔vercel.app) + `CORS_ORIGINS`×4 + Render build=`npm install` + Atlas `0.0.0.0/0` + Linux native binaries (`ac78ceb`). Free tier sleeps ~15min (cold start ~30-60s). god OTP live `88990011`. Guide: `documentation/DEPLOY.md §0`. Client testing guide (docx+pdf) generated. **VPS (below) remains the production target.**
 - [ ] **L11 — nginx + TLS** finalized for `PLATFORM_DOMAIN` + private `OPERATOR_DOMAIN`.
 - [ ] **L12 — PM2 ecosystem** final (5 processes) + production `.env` filled.
 - [ ] **L13 — `/ship` / `/land-and-deploy`** to the VPS, then `/canary` post-deploy. (`/ship` currently HELD by user decision.)
