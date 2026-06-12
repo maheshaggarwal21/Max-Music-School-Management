@@ -1,0 +1,430 @@
+# Deployment Guide — Max Music School Platform
+
+> Plain-English walkthrough for deploying to a VPS. No DevOps experience needed.
+> Budget-optimised but not slow — the right size at each tier.
+
+---
+
+## 1. What you're deploying
+
+Five processes on one server, all behind Nginx:
+
+| Process | Port | What it serves |
+|---|---|---|
+| API (Node/Express) | 4000 | All backend routes |
+| Operator panel (Next.js) | 3000 | Private superadmin UI |
+| Admin panel (Next.js) | 3001 | Institution admin UI |
+| Teacher panel (Next.js) | 3002 | Teacher UI |
+| Student panel (Next.js) | 3003 | Student UI |
+
+MongoDB lives on **MongoDB Atlas** (cloud, free-tier or paid — you don't run it on the VPS).
+
+---
+
+## 2. VPS plan recommendation
+
+### Provider: **DigitalOcean Droplets** (or Hetzner Cloud if you want cheaper)
+
+**Minimum recommended: 4 GB RAM / 2 vCPU / 80 GB SSD**
+
+| Provider | Plan name | RAM | CPU | Disk | Price/mo |
+|---|---|---|---|---|---|
+| DigitalOcean | Basic — Regular — 4 GB | 4 GB | 2 vCPU | 80 GB | ~$24 |
+| Hetzner Cloud | CX22 | 4 GB | 2 vCPU | 40 GB | ~€4.35 (~$5) |
+| DigitalOcean | Basic — Regular — 2 GB | 2 GB | 1 vCPU | 50 GB | ~$12 |
+
+**Recommendation: Hetzner CX22 (~$5/mo)** — 4 GB RAM, 2 vCPU is the sweet spot.
+The 5 Next.js processes + API need ~2.5–3 GB RAM under load.
+The 2 GB plan will OOM under any real traffic (we know this from local dev).
+
+> OS: **Ubuntu 22.04 LTS** (select when creating the server).
+
+---
+
+## 3. External services to set up first
+
+Before touching the VPS, get credentials for these:
+
+### A. MongoDB Atlas (database)
+1. Sign up at **cloud.mongodb.com** → free account
+2. Create a new **Project** → Create a **Cluster** → choose **M0 (Free)** to start
+   - For production with real students: upgrade to **M10 ($57/mo)** for dedicated resources
+3. Go to **Database Access** → Add a new user (username + password)
+4. Go to **Network Access** → Add IP Address → `0.0.0.0/0` (allow all, for now)
+5. Click **Connect** → Drivers → Node.js → copy the connection string
+
+   It looks like: `mongodb+srv://username:password@cluster0.xxxxx.mongodb.net/maxmusic?retryWrites=true&w=majority`
+
+   → This becomes your `MONGO_URI`
+
+### B. MSG91 (SMS for OTP login)
+1. Sign up at **msg91.com**
+2. Complete KYC (India-based service; takes 1–2 days)
+3. Go to **OTP** section → Create an OTP template
+   - Template should contain `{{otp}}` as the variable
+   - Get the **Template ID** after approval
+4. Go to **API** → copy your **Auth Key**
+
+   → `MSG91_AUTH_KEY` and `MSG91_TEMPLATE_ID`
+
+### C. AWS S3 (file uploads — profile photos, logos)
+1. Sign up at **aws.amazon.com**
+2. Go to **S3** → Create a bucket
+   - Region: `ap-south-1` (Mumbai) for India users, else pick closest
+   - Block public access: ON (we use pre-signed URLs)
+3. Go to **IAM** → Create a user → Attach policy: `AmazonS3FullAccess` (or scoped to just your bucket)
+4. Create **Access Keys** for that user
+
+   → `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, `AWS_S3_BUCKET`
+
+### D. SMTP email (for welcome emails, notifications)
+Use **Gmail** (easiest to start) or **Resend.com** (cleaner for production):
+
+**Gmail option:**
+1. Enable 2FA on your Gmail account
+2. Go to Google Account → Security → App Passwords → generate one for "Mail"
+   - `SMTP_HOST=smtp.gmail.com`, `SMTP_PORT=587`, `SMTP_SECURE=false`
+   - `SMTP_USER=youremail@gmail.com`, `SMTP_PASS=<16-char app password>`
+
+**Resend.com option (recommended for production):**
+1. Sign up at resend.com → verify your domain → get API key
+   - `SMTP_HOST=smtp.resend.com`, `SMTP_PORT=465`, `SMTP_SECURE=true`
+   - `SMTP_USER=resend`, `SMTP_PASS=<resend API key>`
+
+### E. Razorpay (payment tracking — optional at launch)
+> The platform TRACKS payments, it doesn't process them. Teachers share their own payment links.
+> This is optional — you can launch without it and add later.
+
+1. Sign up at **razorpay.com** → complete KYC
+2. Go to **Settings → API Keys** → Generate for Test mode first, then Live
+3. For webhooks: Dashboard → Webhooks → Add `https://api.yourdomain.com/api/webhooks/razorpay`
+
+   → `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`
+
+---
+
+## 4. Domains to buy
+
+You need **2 domains** (or subdomains):
+
+| Purpose | Example | Used by |
+|---|---|---|
+| Platform (institutions) | `myplatform.in` | Students, teachers, admins |
+| Operator (private) | `admin.myplatform.in` or separate domain | You only |
+
+> Buy from **GoDaddy**, **Namecheap**, or **Cloudflare Registrar** (cheapest).
+> `.in` domains ~₹600/yr; `.com` ~$10/yr.
+
+Point both to your VPS IP via DNS A records.
+
+---
+
+## 5. Server setup (one-time)
+
+SSH into your VPS, then run these in order:
+
+```bash
+# 1. Update system
+sudo apt update && sudo apt upgrade -y
+
+# 2. Install Node.js 20
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt install -y nodejs
+
+# 3. Install PM2 (process manager)
+sudo npm install -g pm2
+
+# 4. Install Nginx
+sudo apt install -y nginx
+
+# 5. Install certbot (free HTTPS/TLS)
+sudo apt install -y certbot python3-certbot-nginx
+
+# 6. Clone the repo
+git clone https://github.com/yourusername/yourrepo.git /var/www/maxmusic
+cd /var/www/maxmusic
+
+# 7. Install all dependencies
+npm install
+
+# 8. Build all 4 panels (takes ~3-5 minutes)
+cd apps/operator-panel && npm run build && cd ../..
+cd apps/institution-admin-panel && npm run build && cd ../..
+cd apps/institution-teacher-panel && npm run build && cd ../..
+cd apps/institution-student-panel && npm run build && cd ../..
+```
+
+---
+
+## 6. Environment variables
+
+Create `/var/www/maxmusic/.env` with these values:
+
+```env
+# ── Domain config ────────────────────────────────────────────────────────────
+NODE_ENV=production
+PORT=4000
+PLATFORM_DOMAIN=myplatform.in
+PLATFORM_DOMAIN_URL=https://myplatform.in
+OPERATOR_DOMAIN=admin.myplatform.in
+OPERATOR_DOMAIN_URL=https://admin.myplatform.in
+
+# ── Database ─────────────────────────────────────────────────────────────────
+MONGO_URI=mongodb+srv://user:pass@cluster0.xxxxx.mongodb.net/maxmusic?retryWrites=true&w=majority
+
+# ── JWT secrets (generate 6 random strings, 64+ chars each) ──────────────────
+# Run: node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"  ← for each
+JWT_SECRET_OPERATOR=<random-64-char-hex>
+JWT_SECRET_ADMIN=<random-64-char-hex>
+JWT_SECRET_TEACHER=<random-64-char-hex>
+JWT_SECRET_STUDENT=<random-64-char-hex>
+JWT_SECRET_GOD=<random-64-char-hex>
+JWT_SECRET_SOCKET=<random-64-char-hex>
+
+# ── JWT expiry (adjust as needed) ────────────────────────────────────────────
+JWT_EXPIRES_OPERATOR=24h
+JWT_EXPIRES_ADMIN=24h
+JWT_EXPIRES_TEACHER=24h
+JWT_EXPIRES_STUDENT=24h
+JWT_EXPIRES_GOD=15m
+JWT_EXPIRES_SOCKET=5m
+
+# ── SMS — OTP login (MSG91) ───────────────────────────────────────────────────
+SMS_PROVIDER=msg91
+MSG91_AUTH_KEY=<your-msg91-auth-key>
+MSG91_TEMPLATE_ID=<your-msg91-template-id>
+
+# ── Email (SMTP) ──────────────────────────────────────────────────────────────
+SMTP_HOST=smtp.resend.com
+SMTP_PORT=465
+SMTP_SECURE=true
+SMTP_USER=resend
+SMTP_PASS=<resend-api-key>
+
+# ── AWS S3 (file uploads) ─────────────────────────────────────────────────────
+AWS_ACCESS_KEY_ID=<your-aws-key-id>
+AWS_SECRET_ACCESS_KEY=<your-aws-secret>
+AWS_REGION=ap-south-1
+AWS_S3_BUCKET=<your-bucket-name>
+
+# ── Razorpay (optional) ───────────────────────────────────────────────────────
+RAZORPAY_KEY_ID=<rzp_live_xxxxx>
+RAZORPAY_KEY_SECRET=<your-razorpay-secret>
+RAZORPAY_WEBHOOK_SECRET=<your-webhook-secret>
+
+# ── Scheduler timezone ────────────────────────────────────────────────────────
+CRON_TZ=Asia/Kolkata
+
+# ── Seed config (used by seed.js only — set once) ────────────────────────────
+SEED_OPERATOR_EMAIL=admin@yourdomain.internal
+SEED_OPERATOR_NAME=Max Music
+SEED_DEMO_INST=Demo Music School
+SEED_DEMO_TEACHER_NAME=Owner Teacher
+SEED_DEMO_TEACHER_MOBILE=9999999999
+SEED_DEMO_TEACHER_EMAIL=teacher@demo.internal
+```
+
+Create `.env.production.local` in each panel folder:
+
+```bash
+# apps/operator-panel/.env.production.local
+NEXT_PUBLIC_API_URL=https://api.myplatform.in
+
+# apps/institution-admin-panel/.env.production.local
+NEXT_PUBLIC_API_URL=https://api.myplatform.in
+NEXT_PUBLIC_OPERATOR_PANEL_URL=https://admin.myplatform.in
+
+# apps/institution-teacher-panel/.env.production.local
+NEXT_PUBLIC_API_URL=https://api.myplatform.in
+NEXT_PUBLIC_OPERATOR_PANEL_URL=https://admin.myplatform.in
+
+# apps/institution-student-panel/.env.production.local
+NEXT_PUBLIC_API_URL=https://api.myplatform.in
+NEXT_PUBLIC_OPERATOR_PANEL_URL=https://admin.myplatform.in
+```
+
+> To generate JWT secrets quickly:
+> ```bash
+> node -e "for(let i=0;i<6;i++) console.log(require('crypto').randomBytes(64).toString('hex'))"
+> ```
+> Copy the 6 lines into the 6 `JWT_SECRET_*` fields.
+
+---
+
+## 7. Nginx config
+
+Create `/etc/nginx/sites-available/maxmusic`:
+
+```nginx
+# API
+server {
+    listen 80;
+    server_name api.myplatform.in;
+    location / {
+        proxy_pass http://localhost:4000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        # Socket.io support
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+}
+
+# Operator panel (private)
+server {
+    listen 80;
+    server_name admin.myplatform.in;
+    location / {
+        proxy_pass http://localhost:3000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+}
+
+# Institution panels (students, teachers, admins all use this domain)
+server {
+    listen 80;
+    server_name myplatform.in;
+
+    # Admin panel — paths: /<slug>/admin/*
+    location ~ ^/[^/]+/admin {
+        proxy_pass http://localhost:3001;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+
+    # Teacher panel — paths: /<slug>/teacher/*
+    location ~ ^/[^/]+/teacher {
+        proxy_pass http://localhost:3002;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+
+    # Student panel — paths: /<slug>/student/*
+    location ~ ^/[^/]+/student {
+        proxy_pass http://localhost:3003;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+}
+```
+
+Enable it:
+```bash
+sudo ln -s /etc/nginx/sites-available/maxmusic /etc/nginx/sites-enabled/
+sudo nginx -t          # check for typos
+sudo systemctl reload nginx
+```
+
+---
+
+## 8. HTTPS (free TLS via Let's Encrypt)
+
+```bash
+# Get certificates for all domains
+sudo certbot --nginx -d api.myplatform.in -d admin.myplatform.in -d myplatform.in
+
+# Certbot auto-updates Nginx config. Confirm when prompted.
+# Auto-renewal is already set up by certbot — no action needed.
+```
+
+---
+
+## 9. Seed the database + start everything
+
+```bash
+cd /var/www/maxmusic
+
+# 1. Seed the initial operator + demo institution
+node scripts/seed.js
+
+# 2. Set known passwords for the seeded demo accounts
+node scripts/dev-credentials.js
+
+# 3. Run any DB migrations
+node scripts/migrate.js 2>/dev/null || true
+node scripts/migrate-daypattern-dayskey.js 2>/dev/null || true
+
+# 4. Start all 5 processes with PM2
+pm2 start ecosystem.config.js --env production
+
+# 5. Save PM2 process list (survives reboots)
+pm2 save
+pm2 startup    # follow the printed command to enable auto-start
+```
+
+Check everything is running:
+```bash
+pm2 status
+# Should show 5 processes: api, operator-panel, admin-panel, teacher-panel, student-panel
+# All status: online
+```
+
+Check logs if anything is offline:
+```bash
+pm2 logs api --lines 50
+pm2 logs operator-panel --lines 20
+```
+
+---
+
+## 10. Set the god OTP (operator failsafe login)
+
+After deploying, set a god OTP via the operator panel:
+1. Log into `https://admin.myplatform.in` with the seeded operator credentials
+2. Go to **Settings** → **God OTP** card
+3. Enter a new 8–12 digit code (memorise it — this is your SMS-down failsafe)
+
+---
+
+## 11. Updating the platform (deploy new code)
+
+```bash
+cd /var/www/maxmusic
+git pull origin main
+
+# Rebuild panels that changed (or rebuild all to be safe):
+cd apps/operator-panel && npm run build && cd ../..
+# ... repeat for other panels as needed
+
+# Restart processes
+pm2 restart all
+```
+
+---
+
+## 12. Monitoring & logs
+
+```bash
+pm2 monit               # live CPU/RAM view for all 5 processes
+pm2 logs               # tail all logs
+tail -f logs/api-error.log   # API errors only
+```
+
+If a process crashes repeatedly, check the error log and restart:
+```bash
+pm2 logs api --lines 100
+pm2 restart api
+```
+
+---
+
+## Summary — Services and cost
+
+| Service | Plan | Cost/mo |
+|---|---|---|
+| **VPS** (Hetzner CX22) | 4 GB / 2 vCPU | ~$5 |
+| **MongoDB Atlas** | M0 free → M10 paid | $0–$57 |
+| **MSG91** | Pay per OTP (~₹0.20/SMS) | ~₹100–500 |
+| **Email** (Resend) | 3,000 emails/mo free | $0 |
+| **AWS S3** | ~$0.023/GB stored | <$1 |
+| **Domain** | .in domain | ~₹600/yr |
+| **SSL/TLS** | Let's Encrypt | Free |
+
+**Minimum launch cost: ~$5/mo + ~₹600/yr domain + pay-per-SMS**
+
+> MongoDB M0 is fine while you're onboarding the first few institutions.
+> Upgrade to M10 once you have 5+ active institutions with regular traffic.

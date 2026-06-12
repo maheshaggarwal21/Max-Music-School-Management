@@ -533,7 +533,8 @@ Phase 8 — Finish: live wiring + QA + deploy
                                            NOTE: ONE panel dev-server at a time (7.5GB RAM); KILL all
                                            listeners on 4000+3000–3003 before starting the stack.
   L9 /ship                               ⏸ HELD (user decision — not pushed)
-  L10–L13 nginx/TLS/PM2/VPS deploy       ← pending (local deploy done; VPS not)
+  L10–L13 nginx/TLS/PM2/VPS deploy       ← pending; guide: `.claude/documentation/DEPLOY.md`
+                                           (Hetzner CX22 ~$5/mo; Atlas+MSG91+Resend+S3+Razorpay)
   OPEN BUGS                              ONE P3/INFO left — god-token tokenVersion window (BUG-05).
                                            BUG-03 CLOSED 2026-06-12 by analysis (all ClassSession queries
                                            filter batchId; covered by {institutionId,batchId,targetDate}).
