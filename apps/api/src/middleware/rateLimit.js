@@ -57,4 +57,14 @@ const apiLimiter = rateLimit({
   handler: (req, res) => tooMany(res, S.AUTH_TOO_MANY),
 });
 
-module.exports = { loginLimiter, operatorLoginLimiter, otpRequestLimiter, apiLimiter };
+// Credential resets (operator/admin) — each hit re-checks the actor's own
+// password, so this also caps brute-forcing that re-entry.
+const passwordResetLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (req, res) => tooMany(res, S.AUTH_TOO_MANY),
+});
+
+module.exports = { loginLimiter, operatorLoginLimiter, otpRequestLimiter, apiLimiter, passwordResetLimiter };

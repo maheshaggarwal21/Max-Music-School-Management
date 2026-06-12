@@ -12,7 +12,7 @@ const resolveInstitution = require('../middleware/resolveInstitution');
 const instAuth   = require('../middleware/instAuth');
 const scopeGuard = require('../middleware/scopeGuard');
 const panelGuard = require('../middleware/panelGuard');
-const { loginLimiter, otpRequestLimiter } = require('../middleware/rateLimit');
+const { loginLimiter, otpRequestLimiter, passwordResetLimiter } = require('../middleware/rateLimit');
 
 const Auth       = require('../controllers/institution/AuthController');
 const OtpAuth    = require('../controllers/institution/OtpAuthController');
@@ -27,6 +27,7 @@ const Payment    = require('../controllers/institution/admin/PaymentController')
 const HolidayAdm = require('../controllers/institution/admin/HolidayController');
 const Session    = require('../controllers/institution/admin/SessionController');
 const Settings   = require('../controllers/institution/admin/SettingsController');
+const Credentials = require('../controllers/institution/admin/CredentialsController');
 const TeacherApp = require('../controllers/institution/teacher/TeacherAppController');
 const StudentApp = require('../controllers/institution/student/StudentAppController');
 
@@ -102,6 +103,11 @@ router.get('/:slug/admin/batches/:id/sessions',           ...adminChain, Session
 router.post('/:slug/admin/batches/:id/sessions',          ...adminChain, Session.launch);
 router.get('/:slug/admin/batches/:id',                    ...adminChain, Batch.get);
 router.patch('/:slug/admin/batches/:id',                  ...adminChain, Batch.patch);
+
+// Credential directory + password reset (own institution only; reset requires
+// the acting admin to re-enter HIS password — operator's when impersonating).
+router.get('/:slug/admin/credentials', ...adminChain, Credentials.list);
+router.post('/:slug/admin/credentials/:role/:id/reset-password', ...adminChain, passwordResetLimiter, Credentials.resetPassword);
 
 router.get('/:slug/admin/attendance',       ...adminChain, Attendance.grid);
 router.post('/:slug/admin/attendance/mark', ...adminChain, Attendance.mark);

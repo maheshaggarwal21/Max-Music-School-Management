@@ -12,6 +12,8 @@ const Payments    = require('../controllers/operator/PaymentsController');
 const Changes     = require('../controllers/operator/ChangesController');
 const Settings    = require('../controllers/operator/SettingsController');
 const SlugRequests = require('../controllers/operator/SlugRequestController');
+const Credentials = require('../controllers/operator/CredentialsController');
+const { passwordResetLimiter } = require('../middleware/rateLimit');
 
 // Gate the whole namespace.
 router.use(operatorAuth);
@@ -49,6 +51,11 @@ router.post('/rent-invoices/:id/mark-paid', Payments.markRentPaid);
 router.get('/slug-requests',              SlugRequests.list);
 router.post('/slug-requests/:id/approve', SlugRequests.approve);
 router.post('/slug-requests/:id/reject',  SlugRequests.reject);
+
+// Credential directory + hierarchical password reset (identifiers only; reset
+// requires the operator to re-enter his own password).
+router.get('/credentials', Credentials.list);
+router.post('/credentials/:role/:id/reset-password', passwordResetLimiter, Credentials.resetPassword);
 
 // Global audit timeline
 router.get('/changes', Changes.list);

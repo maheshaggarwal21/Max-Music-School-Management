@@ -27,6 +27,7 @@ module.exports = {
   GOD_OTP_UPDATED:       'Fail-safe OTP updated',
   GOD_OTP_FORMAT:        'Fail-safe OTP must be 8-12 digits',
   PASSWORD_INCORRECT:    'Incorrect password',
+  PASSWORD_RESET:        'Password reset — share the temporary password securely',
 
   INST_CREATED:          'Institution created',
   INST_UPDATED:          'Institution updated',
