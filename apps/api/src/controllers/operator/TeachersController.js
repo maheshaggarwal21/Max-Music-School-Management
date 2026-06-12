@@ -41,6 +41,10 @@ function serialize(t, batchCount) {
     name:      t.name,
     mobile:    t.mobile,
     email:     t.email,
+    altMobile: t.altMobile || null,
+    gender:    t.gender || null,
+    dob:       t.dob || null,
+    razorpayPaymentLink: t.razorpayPaymentLink || null,
     institution: inst ? { _id: String(inst._id), name: inst.name, slug: inst.slug } : null,
     role:           t.isOwner ? 'owner' : 'staff',
     employmentType: t.employmentType || 'salary',
@@ -123,10 +127,34 @@ exports.update = async (req, res, next) => {
       if (t.status === 'active' && b.status === 'inactive') t.tokenVersion += 1;
       t.status = b.status;
     }
+    // Profile extras (A7) — same field set the institution admin panel manages.
+    if (b.altMobile !== undefined) {
+      const v = String(b.altMobile || '').trim();
+      if (v && !/^\d{10}$/.test(v)) return badRequest(res, S.VALIDATION_FAILED);
+      t.altMobile = v || undefined;
+    }
+    if (b.gender !== undefined) {
+      if (b.gender !== null && b.gender !== '' && !['male', 'female'].includes(b.gender)) {
+        return badRequest(res, S.VALIDATION_FAILED);
+      }
+      t.gender = b.gender || undefined;
+    }
+    if (b.dob !== undefined) {
+      if (b.dob != null && b.dob !== '' && Number.isNaN(Date.parse(b.dob))) {
+        return badRequest(res, S.VALIDATION_FAILED);
+      }
+      t.dob = b.dob == null || b.dob === '' ? undefined : new Date(b.dob);
+    }
+    if (b.razorpayPaymentLink !== undefined) {
+      const v = String(b.razorpayPaymentLink || '').trim();
+      if (v && !/^https:\/\//i.test(v)) return badRequest(res, S.VALIDATION_FAILED);
+      t.razorpayPaymentLink = v || undefined;
+    }
 
     await t.save();
 
-    const changes = diff(before, t.toObject(), ['name', 'mobile', 'salaryAmount', 'status']);
+    const changes = diff(before, t.toObject(),
+      ['name', 'mobile', 'salaryAmount', 'status', 'altMobile', 'gender', 'dob', 'razorpayPaymentLink']);
     if (changes.length) {
       await auditLog({
         institutionId: t.institutionId,

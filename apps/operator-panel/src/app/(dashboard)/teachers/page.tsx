@@ -46,12 +46,29 @@ const TEACHER_EDIT_SECTIONS: EditSection[] = [
     fields: [
       { key: "name", label: "Full name", type: "text", required: true },
       { key: "mobile", label: "Mobile", type: "phone", required: true, placeholder: "98765 43210" },
+      { key: "altMobile", label: "Alt mobile", type: "phone", placeholder: "Backup number" },
+      {
+        key: "gender",
+        label: "Gender",
+        type: "select",
+        options: [
+          { value: "male", label: "Male" },
+          { value: "female", label: "Female" },
+        ],
+      },
+      { key: "dob", label: "Date of birth", type: "date" },
     ],
   },
   {
     title: "Status & Billing",
     fields: [
       { key: "salaryAmount", label: "Salary (₹ / month)", type: "currency" },
+      {
+        key: "razorpayPaymentLink",
+        label: "Payment link",
+        type: "text",
+        placeholder: "https://rzp.io/l/…",
+      },
       {
         key: "status",
         label: "Status",
@@ -206,6 +223,16 @@ export default function TeachersPage() {
     const rowPatch: Partial<OperatorTeacherRow> = {
       ...(patch.name !== undefined ? { name: String(patch.name) } : {}),
       ...(patch.mobile !== undefined ? { mobile: String(patch.mobile) } : {}),
+      ...(patch.altMobile !== undefined
+        ? { altMobile: patch.altMobile ? String(patch.altMobile) : null }
+        : {}),
+      ...(patch.gender !== undefined
+        ? { gender: (patch.gender || null) as OperatorTeacherRow["gender"] }
+        : {}),
+      ...(patch.dob !== undefined ? { dob: patch.dob ? String(patch.dob) : null } : {}),
+      ...(patch.razorpayPaymentLink !== undefined
+        ? { razorpayPaymentLink: patch.razorpayPaymentLink ? String(patch.razorpayPaymentLink) : null }
+        : {}),
       // form key salaryAmount (CONTRACTS field name) ↔ row key amount
       ...(patch.salaryAmount !== undefined
         ? { amount: patch.salaryAmount == null ? null : Number(patch.salaryAmount) }
@@ -300,6 +327,10 @@ export default function TeachersPage() {
           initialValues={{
             name: editing.name,
             mobile: editing.mobile,
+            altMobile: editing.altMobile,
+            gender: editing.gender,
+            dob: editing.dob,
+            razorpayPaymentLink: editing.razorpayPaymentLink,
             salaryAmount: editing.amount,
             status: editing.status,
           }}

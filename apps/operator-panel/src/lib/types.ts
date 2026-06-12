@@ -63,6 +63,10 @@ export interface OperatorTeacherRow {
   name: string;
   mobile: string;
   email: string;
+  altMobile: string | null;
+  gender: "male" | "female" | null;
+  dob: string | null;
+  razorpayPaymentLink: string | null;
   institution: { _id: string; name: string; slug: string }; // the TAG
   role: "owner" | "staff";
   employmentType: "salary" | "rent";
