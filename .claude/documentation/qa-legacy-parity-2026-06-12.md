@@ -38,9 +38,26 @@ Every login page has the `Mode = "password" | "otp"` toggle wired to `/otp/reque
 - **`?new=1` deep-link** — Add Student → `/requests?new=1` opens New Enrollment Request dialog with
   **Preferred days / Preferred time** (A4 confirmed).
 
-## Student panel (browser) — IN PROGRESS
-Booting on :3003; first-compile slow. Pending: My Plan card, live class balance, B1+ Join-class link.
-Test creds: data-rich student `6666666666` / `Student@123` (106002, untouched).
+## Student panel (browser) ✅
+Tested as data-rich student `6666666666` / `Student@123` (106002). Dashboard payload verified via API
+(`validity.days`=61, `upcomingClasses`=17, `paidClasses`=0; `upcomingClass.date`=2026-06-15, `meetingUrl`=null).
+- **My Plan card (A5)** ✅ — Registration ID 106002, Course start 11 Jun 2026, Valid until 10 Aug 2026,
+  Plan length "61-day plan", Total sessions, Upcoming classes 17. Renders clean.
+- **Live class balance** ✅ — "Classes Remaining —" + balance empty-state ("appears once your plan is active")
+  because this student's `paidClasses`=0 (LIVE value from payload — a mock build would have shown a number).
+- **B1+ Join-class link** ✅ (gating verified) — batch is ONLINE ("ON") but no ClassSession launched on the
+  next class date (15 Jun) → `meetingUrl` null → Join button correctly HIDDEN. Backend gating
+  (`{institutionId,batchId,targetDate}` covered query) + frontend conditional both confirmed; button only
+  renders when a live session populates `meetingUrl`.
+- **White-label** ✅ — only "Demo Music School" brand; clean console (sole entry = the documented INFO `ref`
+  redirect-boundary warning below).
+- Cleanup: student 106001 / 8888888888 password restored via `node scripts/dev-credentials.js`.
+
+## FINAL VERDICT — Legacy-parity round /qa ✅ COMPLETE
+All 4 panels verified in the browser + API smoke tests. **Zero new bugs found** — every new surface works on
+live data (mock-vs-live drift that plagued earlier rounds did not recur; these surfaces were built/verified
+against the live API from the start). Isolation, step-up gating, no-secret-leak, 400-not-401, white-label,
+OTP-toggle-presence all CLEAN. Only the non-blocking INFO `ref is not a prop` Next.js dev artifact remains.
 
 ## Observations (non-blocking)
 - **INFO — Next.js dev `ref is not a prop` warning** fires once per panel during the login→dashboard
