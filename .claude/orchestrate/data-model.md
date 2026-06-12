@@ -144,6 +144,7 @@ Indexes: `{institutionId, createdAt:-1}` · `{institutionId, status}` ·
 | gender? | enum(`male`,`female`) | |
 | profilePicUrl? | String | |
 | instrumentId? | ObjectId → Instrument | |
+| classLevelId? | ObjectId → ClassLevel | snapshotted at enrollment; pre-fills feeTotal + validityDays |
 | classType? | String | e.g. "Class 1" |
 | mode | enum(`online`,`offline`) | default `online` |
 | joinStatus* | enum(`trial`,`active_soon`,`active`,`inactive`) | lifecycle (cron-advanced) |
@@ -155,16 +156,20 @@ Indexes: `{institutionId, createdAt:-1}` · `{institutionId, status}` ·
 | upcomingClasses | Number | default 0 |
 | paidAmount | Number | default 0 — fee collected (visible to operator + admin) |
 | upcomingAmount | Number | default 0 — fee due next cycle |
+| feeTotal | Number | default 0 — total committed fee (paise), snapshot from ClassLevel at enrollment |
+| paymentStatus* | enum(`unpaid`,`partial`,`paid`,`free`) | default `unpaid`; **DERIVED** via `config/payments.derivePaymentStatus` on every write — never client-set. `remainingAmount` is computed in serializers, never stored |
+| remarks? | String | free-text admin note |
 | assignedVideoChapterId? | ObjectId | reserved (video deferred) |
 | requestId? | ObjectId → EnrollmentRequest | source request |
 | recoveryOtp? | String | `select:false` |
 | passwordHash? | String | `select:false`; student-panel login |
 | tokenVersion | Number | default 0 |
-| status* | enum(`active`,`inactive`) | default `active` |
+| status* | enum(`active`,`inactive`,`hold`) | default `active`. **`hold`** = manually paused (e.g. partial payment): still logs in (auth denies only `inactive`) and the validity-expiry cron skips it |
 
 Indexes: `{institutionId, createdAt:-1}` · `{institutionId, status}` ·
-`{institutionId, joinStatus}` · `{institutionId, teacherId}` · `{institutionId, batchId}` ·
-`{institutionId, validityEnd}` (cron expiry sweep) · `{institutionId, displayId}` unique.
+`{institutionId, joinStatus}` · `{institutionId, paymentStatus}` · `{institutionId, teacherId}` ·
+`{institutionId, batchId}` · `{institutionId, validityEnd}` (cron expiry sweep) ·
+`{institutionId, displayId}` unique.
 
 ---
 
@@ -180,6 +185,7 @@ Indexes: `{institutionId, createdAt:-1}` · `{institutionId, status}` ·
 | instrumentId? | ObjectId → Instrument | |
 | status* | enum(`pending`,`approved`,`rejected`) | default `pending` |
 | paymentStatus | enum(`unpaid`,`paid`) | default `unpaid` |
+| proposed? | sub-doc (no _id) | full Add-Student form config carried by a structured request; `approve()` consumes it as **defaults** (the approval form overrides). Fields: classLevelId, teacherId, batchId, instrumentId, classType, mode, sessionType, joinStatus, category, gender, validityStart/End/Days, feeTotal, paidAmount, paidClasses, upcomingClasses, remarks. All refs cleaned via refGuard at create (foreign/invalid dropped, never thrown). `paymentStatus` NOT carried — always re-derived at student creation |
 | approvedStudentId? | ObjectId → Student | set on approval |
 | handledBy? | { actorId, actorRole } | who approved/rejected |
 
@@ -232,8 +238,26 @@ Indexes: `{institutionId, isOnline}`. Unique: `{institutionId, startTime, endTim
 | institutionId* | ObjectId → Institution | seeded per institution from an operator master list |
 | name* | String | "Guitar", "Sitar"… |
 | isActive | Boolean | default true |
+| fromCatalog | Boolean | default false. **true** ⇒ materialized from the operator GLOBAL catalog (`PlatformSettings.instruments`). `GET /admin/instruments` self-heals these to mirror the catalog (create/reactivate when added, deactivate — never delete — when removed). `fromCatalog:false` (institution-specific/seeded) rows are never touched |
 
 Indexes: `{institutionId, name}` unique.
+
+---
+
+## ClassLevel  (reusable fee+duration template — admin "Class" tab)
+| field | type | notes |
+|---|---|---|
+| institutionId* | ObjectId → Institution | |
+| name* | String | e.g. "Beginner", "3-Month" |
+| paidAmount | Number | default 0 (paise) — default already-paid amount |
+| upcomingAmount* | Number | (paise) total class fee → pre-fills student `feeTotal` |
+| days* | Number | validity duration in days → pre-fills student `validityDays` |
+| isActive | Boolean | default true |
+
+Selecting a level on enrollment/approval pre-fills the student's feeTotal + validity (+ default paid).
+**Never hard-deleted while referenced** by a student (`CLASS_LEVEL_IN_USE` 400) — deactivate via isActive.
+Indexes: `{institutionId, name}` unique · `{institutionId, isActive}`.
+Audit actions: `CREATE_CLASS_LEVEL`, `UPDATE_CLASS_LEVEL` (delete also logged as UPDATE w/ `{deleted:true}`).
 
 ---
 

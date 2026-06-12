@@ -84,6 +84,11 @@ panels + the admin-renovation supporting APIs, merged via PR #2). We are now **o
 finishing the whole project** — backend, frontend, infra, QA, and deploy are all in scope.
 History of the old split is in `team-division.md` (reference only).
 
+> **Contributors:** the repo now also receives pushes from **kritgun-1907**
+> (`kritgunsingh1907@gmail.com`) — e.g. the 2026-06-12 class-levels / payment-engine / student-practice
+> feature round (`01707b6`). Treat pulled commits like any merge: review for isolation/audit/white-label,
+> `node --check` + route-graph + `tsc --noEmit`, then browser /qa the new surfaces before /ship.
+
 > **Full end-to-end audit (2026-06-10): ✅ PASS** — see `AUDIT.md` for the dimension-by-
 > dimension verdict and the **roadmap of what's left (L1–L13)** to finish the project. No
 > isolation/audit/white-label/compile errors were found across the whole codebase; the only
@@ -323,6 +328,38 @@ History of the old split is in `team-division.md` (reference only).
 > prop` warning fires once per panel on the login redirect — 100% Next-internal boundary stack, no
 > feature component, prod-build absent; distinct from fixed ISSUE-001. **Remaining: student panel
 > (My Plan card / live class balance / B1+ Join-class link) → restore student 106001 pwd → kill all procs.**
+
+> **MERGE: kritgun feature round (2026-06-12, `01707b6` ← merge `dd79a21`): ✅ PULLED + REVIEWED + COMPILES;
+> browser /qa PENDING.** Second contributor **kritgun-1907** pushed a large changeset (52 files, ~4k
+> insertions). Reviewed on pull: backend isolation/refGuard/audit/white-label all CLEAN; `node --check`
+> + route-graph load PASS on all 20 changed API files; `tsc --noEmit` PASS on the 3 changed panels
+> (student/admin/operator). **No errors found; no code changed.** What landed:
+> (1) **Class Levels** — new `ClassLevel` model (institution-scoped fee+duration template) + admin
+> `ClassLevelController` (list/create/update/remove, `CLASS_LEVEL_IN_USE` guard) + `/admin/class-levels`
+> CRUD + admin "Class" page. refGuard now validates `classLevelId`; `CREATE_/UPDATE_CLASS_LEVEL` audits.
+> Selecting a level pre-fills student `feeTotal`+`validityDays`+default paid at enrollment/approval.
+> (2) **Payment-status engine** — `config/payments.js` `derivePaymentStatus` (unpaid/partial/paid/free) +
+> `remainingAmount`; recomputed SERVER-SIDE on every write path (student create/patch, request approve,
+> PaymentController, operator god create/update) — never client-trusted. Student gains `feeTotal`,
+> `paymentStatus` (indexed), `remarks`.
+> (3) **`hold` student status** — partial-payment pause: still logs in (AuthController/OtpAuthController/
+> instAuth now deny ONLY `inactive`, not `!== 'active'`) and the validity-expiry cron skips it.
+> (4) **EnrollmentRequest `proposed` sub-doc** — Add-Student form's full config carried on the request;
+> `approve()` consumes it as defaults (approval-form body overrides). Refs cleaned via refGuard at create.
+> (5) **Operator god-mode student mgmt** — `GET /operator/students/:id/catalog` (own-institution catalog
+> for the edit form) + richer audited create/update through the payment engine + refGuard (scoped to the
+> student's own institutionId); operator panel student-edit-modal/add-student/schedule-calc.
+> (6) **Instrument `fromCatalog` flag** — `GET /admin/instruments` self-heals catalog-sourced rows to mirror
+> `PlatformSettings.instruments` (create/reactivate/deactivate; never deletes; leaves seeded rows alone).
+> (7) **Student practice tools** — new tabs **Metronome** (Web Audio scheduler), **Guitar Chords**
+> (`lib/chords.ts` + SVG `chord-diagram`), **Contact Us** (white-label-safe `GET /student/contact` = own
+> teacher + institution support email only); dashboard renovated (2-col; fetches `/timetable` directly
+> since `/dashboard` omits it); shared `lib/audio.ts`; nav grouped My School / Practice Tools / Support.
+> **OBSERVATION (non-blocking, note for /cso):** `ScheduleController.listInstruments` now does an idempotent
+> `bulkWrite` catalog-sync on a GET (unaudited, but institutionId-scoped + system-level) — acceptable.
+> **NEXT: browser /qa the new surfaces** (class-levels CRUD, proposed-config approve, hold status, payment
+> engine, operator god-edit, student practice tabs + contact) before /ship — mock-vs-live drift lesson
+> means live click-through is required. CONTRACTS.md + data-model.md updated for all of the above.
 
 **H1 + H2 complete** — scaffold + 16 models + `packages/types` ready. **P1-R /plan-eng-review ✅** (5 model fixes). **P2-R /cso ✅** — 5 checkpoint Qs clean; .gitignore + lockfile + nodemailer@8 + node-cron@4 fixed. **Phase 3 (Operator APIs) ✅** — 9 controllers + 29 routes behind `operatorAuth`. **P3-R /review ✅** — 5 fixes (existingTeacher isolation guard, grant/revoke idempotency = no mass-logout, impersonate targetUserId required, audit accuracy). **Phase 4 (Institution APIs) ✅** — 10 controllers + 46 routes under `/api/inst/:slug/*`; every login JWT embeds `instVersion`+`userVersion`; brandingPublic-only (white-label). **P4-R /cso ✅** — 1 HIGH fixed (`config/refGuard.studentRefsValid` rejects cross-institution teacher/batch/instrument refs in student create/patch + request approve — they leaked foreign labels via populate); other 4 checkpoint Qs clean. **BACKEND COMPLETE (Phases 0-4).** **Frontend integration (current session) ✅** — Dev B's 4-panel frontend merged (PR #1). Dev A pass over it: (1) **H2 type migration** — all 4 apps now import the shared contract (`ApiResponse`/`Paginated`/`BrandingPublic` + enums) from `@maxmusic/types` instead of local mirrors (drift eliminated); (2) **`[slug]` routing fix** — the 3 institution panels were flat route-groups (`/dashboard`) that 404 behind nginx; restructured to real `app/[slug]/<panel>/(auth|dashboard)/*` with slug-aware nav, validated by `next build` ×4; (3) **multi-tenant slug fixes** — 401-redirect now `/<slug>/<panel>/login` (was hardcoded `/login`), teacher panel now derives slug from the URL (was a build-time `NEXT_PUBLIC_INSTITUTION_SLUG` env var = one-slug-per-build); (4) **new public `GET /api/inst/:slug/branding`** endpoint (controller + route + CONTRACTS) wired into all 3 login pages — clears the teacher TODO(H5) + student BLOCKED notes. **Phase 7 backend (current session) ✅** — (1) **Socket.io** (`config/socket.js`) shares the HTTP server, rooms keyed by institutionId; auth via a short-lived `JWT_SECRET_SOCKET` token minted by `GET /:slug/{admin,teacher}/realtime-token` (panel cookies are path-scoped so they can't reach `/socket.io`); room derives from the VERIFIED token only; `emitToInstitution` (already called by teacher `markAttendance`) now live → unblocks teacher `TODO(H3)` backend-side. (2) **Daily cron** (`config/cron.js`, 00:05 `CRON_TZ`) advances `active_soon→active`, expires validity→inactive (both audited per-student as the `system` actor), and flags overdue rent. (3) **Razorpay webhook** (`POST /api/webhooks/razorpay`, `WebhookController`) mounted pre-json with `express.raw`; timing-safe HMAC verify (fails closed), idempotent by paymentId+eventType, tenant from payload `notes`; read-only RazorpayWebhookEvent feed only. (4) **Branded mailer** (`config/mailer.js`) lazy transport, From-name = institution `branding.schoolName` (never "Max Music"), fails soft. All smoke-tested. Next: H4/H5 live wiring (`NEXT_PUBLIC_API_URL` + `/qa`); Dev B wires `TODO(H3)` client to realtime-token + Socket.io; then Phase 8 (QA + deploy).
 

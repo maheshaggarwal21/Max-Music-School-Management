@@ -229,6 +229,10 @@ interface InstitutionDetail extends InstitutionListItem {
 ```
 
 ### GET /students   → Paginated<OperatorStudentRow>   (CROSS-INSTITUTION)
+### POST  /students                 → god-mode enrol into ANY institution { institutionId, name, mobile, ...CREATE_FIELDS }
+### GET   /students/:id             → full OperatorStudentDetail (parity with admin StudentDetail)
+### GET   /students/:id/catalog     → that student's OWN-institution catalog { instruments, teachers, batches, dayPatterns, classLevels } for the edit form
+### PATCH /students/:id             → god-mode edit; refs refGuard'd to the student's own institution; audited per-diff
 ```typescript
 // query: ?search=&institutionId=&status=&joinStatus=&instrumentId=&teacherId=
 interface OperatorStudentRow {
@@ -237,11 +241,16 @@ interface OperatorStudentRow {
   teacher: { _id: string; name: string } | null;              // the TAG
   batch: { _id: string; name: string } | null;
   instrument: string | null;
+  classLevel: { _id: string; name: string } | null;
   joinStatus: 'trial'|'active_soon'|'active'|'inactive';
-  paidAmount: number; upcomingAmount: number;                 // fee visible to operator
+  paymentStatus: 'unpaid'|'partial'|'paid'|'free';            // DERIVED
+  paidAmount: number; upcomingAmount: number; feeTotal: number;  // fee visible to operator
+  remainingAmount: number; remarks: string | null;
   validityEnd: string | null;
   createdAt: string;
 }
+// CREATE/EDIT fields mirror the admin set (incl. classLevelId, feeTotal, remarks, status active|inactive|hold).
+// paymentStatus DERIVED server-side; foreign teacher/batch/instrument/classLevel refs → 400 STUDENT_BAD_REFS.
 ```
 
 ### GET /teachers   → Paginated<OperatorTeacherRow>   (CROSS-INSTITUTION)
@@ -340,8 +349,15 @@ accepted from the client — it comes from the resolved institution.
 ### New Requests
 ```
 GET    /requests                 → Paginated<RequestItem>   ?status=pending|approved|rejected|all
-POST   /requests                 { name, mobile, email?, preferredDayPatternId?, preferredTimeSlotId?, instrumentId? }
-POST   /requests/:id/approve     { teacherId?, batchId?, instrumentId?, classType?, validityDays?, paidAmount?, paymentStatus? }
+POST   /requests                 { name, mobile, email?, preferredDayPatternId?, preferredTimeSlotId?, instrumentId?,
+                                   proposed? }   // proposed = structured Add-Student form config (see below)
+POST   /requests/:id/approve     { teacherId?, batchId?, instrumentId?, classLevelId?, classType?, gender?, category?,
+                                   mode?, sessionType?, joinStatus?, validityStart?, validityEnd?, validityDays?,
+                                   feeTotal?, paidAmount?, upcomingAmount?, paidClasses?, upcomingClasses?,
+                                   remarks?, paymentStatus? }
+                                   // body WINS; request.proposed supplies defaults. classLevelId pre-fills
+                                   //   feeTotal/validityDays/paidAmount when omitted. paymentStatus is DERIVED
+                                   //   (derivePaymentStatus; paymentStatus:'free' forces free) — never client-trusted.
                                    → creates Student (displayId issued), links request. audit: APPROVE_REQUEST
                                    → data: { student:{_id,displayId,name}, tempPassword }  // tempPassword surfaced ONCE (Phase 7 emails it)
 POST   /requests/:id/reject      { reason? }
@@ -351,7 +367,11 @@ interface RequestItem { _id: string; name: string; mobile: string; email: string
   preferredDays: { _id: string; label: string } | null;
   preferredTime: { _id: string; label: string } | null;
   instrument: { _id: string; name: string } | null;
+  proposed: ProposedConfig | null;   // serialized: ObjectId refs → string, Dates → ISO
   status: 'pending'|'approved'|'rejected'; paymentStatus: 'unpaid'|'paid'; createdAt: string }
+// ProposedConfig: { classLevelId?, teacherId?, batchId?, instrumentId?, classType?, mode?, sessionType?,
+//   joinStatus?, category?, gender?, validityStart?, validityEnd?, validityDays?, feeTotal?, paidAmount?,
+//   paidClasses?, upcomingClasses?, remarks? } — refs validated against the institution at create-time.
 ```
 
 ### Students
@@ -367,21 +387,42 @@ interface StudentRow { _id: string; displayId: string; name: string; mobile: str
   instrument: string|null; classType: string|null;
   schedule: { days: string|null; time: string|null };          // from batch
   joinStatus: 'trial'|'active_soon'|'active'|'inactive';
+  paymentStatus: 'unpaid'|'partial'|'paid'|'free';             // DERIVED
+  remainingAmount: number;                                     // feeTotal − paidAmount, clamped ≥0 (computed)
   validityEnd: string|null; teacher: { _id: string; name: string } | null }
 
 interface StudentDetail extends StudentRow {
+  accountStatus: 'active'|'inactive'|'hold';                   // status (distinct from joinStatus)
   email: string|null; gender: string|null; mode: 'online'|'offline';
   sessionType: 'live'|'all'; category: 'regular'|'trial';
   validityStart: string|null; validityDays: number|null;
   paidClasses: number; upcomingClasses: number;
   paidAmount: number; upcomingAmount: number;                  // the fee
+  feeTotal: number; remarks: string|null;
+  classLevel: { _id: string; name: string } | null;
   attendanceSummary: { total: number; present: number; absent: number };
   batch: { _id: string; name: string } | null;
   assignedVideoChapterId: string | null;
 }
-// PATCH editable: teacherId, batchId, instrumentId, classType, mode, joinStatus, sessionType,
-//   category, validityStart/End/Days, paidClasses, upcomingClasses, paidAmount, upcomingAmount, status
+// PATCH editable: teacherId, batchId, instrumentId, classLevelId, gender, classType, mode, joinStatus,
+//   sessionType, category, validityStart/End/Days, paidClasses, upcomingClasses, paidAmount,
+//   upcomingAmount, feeTotal, remarks, status(active|inactive|hold)
+// paymentStatus is DERIVED server-side (derivePaymentStatus) after any feeTotal/paidAmount change —
+//   never client-assigned, but IS audited (UPDATE_PAID_AMOUNT when paidAmount/paymentStatus flips).
+//   classLevelId is refGuard-validated; foreign ref → 400 STUDENT_BAD_REFS.
 // NEVER returns: passwordHash, recoveryOtp
+```
+
+### Class Levels   (reusable fee+duration templates — admin "Class" tab)
+```
+GET    /class-levels        → { classLevels: ClassLevelItem[] }   ?active=1 (active only)
+POST   /class-levels        { name, upcomingAmount, days, paidAmount? }   → 201 { classLevel }
+PATCH  /class-levels/:id    { name?, upcomingAmount?, days?, paidAmount?, isActive? }
+DELETE /class-levels/:id    → 400 CLASS_LEVEL_IN_USE if any student references it (deactivate instead)
+```
+```typescript
+interface ClassLevelItem { _id: string; name: string; paidAmount: number; upcomingAmount: number;
+  days: number; isActive: boolean }   // amounts in paise. audit: CREATE_/UPDATE_CLASS_LEVEL
 ```
 
 ### Teachers
@@ -511,8 +552,11 @@ GET   /dashboard   → { upcomingClass, holidayNotice, attendance: { percent, pr
                      // set ONLY for online batches with a ClassSession launched on that date.
 GET   /classes     → Paginated<ClassItem>          // attendance history
 GET   /timetable   → ClassItem[]
+GET   /contact     → { teacher: { name, mobile } | null, support: { schoolName, email: string|null } }
+                     // WHITE-LABEL: ONLY the student's own teacher + the institution's own
+                     // contact (branding.schoolName + contactEmail). NO Max Music identifiers.
 GET   /me          → { student: StudentSelf, institution: BrandingPublic }
-PATCH /me          → limited profile fields
+PATCH /me          → limited profile fields (email, guardianName, guardianMobile)
 ```
 ```typescript
 interface ClassItem { date: string; batchName: string; time: string;
