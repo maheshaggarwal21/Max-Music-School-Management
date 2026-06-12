@@ -7,6 +7,13 @@
 
 ## WORKING PRACTICES
 
+- **COMPULSORY — per-todo discipline (2026-06-12):** After completing EACH todo/phase, (1) update the
+  relevant `.claude/` files and memory **first**, then (2) run `/compact`, THEN move to the next todo.
+  Never batch documentation to the end and never advance to the next todo before the doc+compact step.
+- **COMPULSORY — clean up processes (2026-06-12):** When the work is complete (or a task that started
+  servers/background jobs ends), KILL every terminal process and background task you launched —
+  dev servers (ports 4000 + 3000–3003), `run_in_background` Bash tasks, watchers. Leftover next-dev
+  zombies serve hung responses and OOM the 7.5 GB box. Verify nothing is left listening before ending.
 - **Context compaction:** After any heavy task (full QA pass, multi-file fix session, long doc update) — update `.claude/` files and memory **first**, then run `/compact`, then continue. Never let `/compact` fire before the documentation step or the work is lost to the next session.
 
 ---
