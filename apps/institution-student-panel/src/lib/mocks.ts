@@ -9,6 +9,7 @@
 import type {
   BrandingPublic,
   ClassItem,
+  ContactInfo,
   Paginated,
   StudentDashboard,
   StudentSelf,
@@ -223,6 +224,13 @@ export interface StudentProfileExtras {
   guardianName: string | null;
   guardianMobile: string | null;
 }
+
+// ── Contact (GET /contact) ───────────────────────────────────────────────────
+
+export const MOCK_CONTACT: ContactInfo = {
+  teacher: { name: "Rohan Mehta", mobile: "9876512345" },
+  support: { schoolName: MOCK_BRANDING.schoolName, email: "hello@sunrise-music.example" },
+};
 
 export const MOCK_PROFILE_EXTRAS: StudentProfileExtras = {
   email: "aarav.sharma@example.com",

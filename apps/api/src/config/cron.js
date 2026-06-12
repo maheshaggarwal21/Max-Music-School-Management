@@ -51,6 +51,7 @@ async function expireValidity() {
   const expired = await Student.find({
     validityEnd: { $lt: today, $ne: null },
     joinStatus: { $ne: 'inactive' },
+    status: { $ne: 'hold' }, // held students (e.g. partial payment) are not auto-expired
   }).select('institutionId name joinStatus').lean();
 
   for (const s of expired) {

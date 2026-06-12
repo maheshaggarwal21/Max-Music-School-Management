@@ -4,20 +4,26 @@ const mongoose    = require('mongoose');
 const Student     = require('../../models/Student');
 const Institution = require('../../models/Institution');
 const Batch       = require('../../models/Batch');
+const Attendance  = require('../../models/Attendance');
+const Teacher     = require('../../models/Teacher');
+const Instrument  = require('../../models/Instrument');
+const DayPattern  = require('../../models/DayPattern');
+const ClassLevel  = require('../../models/ClassLevel');
 const { nextDisplayId } = require('../../config/specialFunctions');
 const { studentRefsValid } = require('../../config/refGuard');
 const { hash, randomTempPassword } = require('../../config/password');
 const { ok, created, badRequest, notFound, paginated } = require('../../config/helper');
 const { auditLog, diff, actorFromReq } = require('../../config/auditLog');
+const { derivePaymentStatus, remainingAmount } = require('../../config/payments');
 const S = require('../../config/strings');
 
 const JOIN_STATUSES = ['trial', 'active_soon', 'active', 'inactive'];
 
 // Fields the operator may set on a new student (same set the admin create accepts).
 const CREATE_FIELDS = [
-  'teacherId', 'batchId', 'instrumentId', 'gender', 'classType', 'mode', 'joinStatus',
+  'teacherId', 'batchId', 'instrumentId', 'classLevelId', 'gender', 'classType', 'mode', 'joinStatus',
   'sessionType', 'category', 'validityStart', 'validityEnd', 'validityDays',
-  'paidClasses', 'upcomingClasses', 'paidAmount', 'upcomingAmount', 'status',
+  'paidClasses', 'upcomingClasses', 'paidAmount', 'upcomingAmount', 'feeTotal', 'remarks', 'status',
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -34,6 +40,7 @@ const POPULATE = [
   { path: 'teacherId',     select: 'name' },
   { path: 'batchId',       select: 'name' },
   { path: 'instrumentId',  select: 'name' },
+  { path: 'classLevelId',  select: 'name' },
 ];
 
 function serialize(s) {
@@ -49,11 +56,51 @@ function serialize(s) {
     teacher: s.teacherId ? { _id: String(s.teacherId._id), name: s.teacherId.name } : null,
     batch:   s.batchId ? { _id: String(s.batchId._id), name: s.batchId.name } : null,
     instrument: s.instrumentId ? s.instrumentId.name : null,
+    classLevel: s.classLevelId ? { _id: String(s.classLevelId._id), name: s.classLevelId.name } : null,
     joinStatus:     s.joinStatus,
+    paymentStatus:  s.paymentStatus || 'unpaid',
     paidAmount:     s.paidAmount || 0,
     upcomingAmount: s.upcomingAmount || 0,
+    feeTotal:       s.feeTotal || 0,
+    remainingAmount: remainingAmount(s.feeTotal, s.paidAmount),
+    remarks:        s.remarks || null,
     validityEnd:    s.validityEnd || null,
     createdAt:      s.createdAt,
+  };
+}
+
+// Detail populate (adds the batch's day-pattern + time-slot for the schedule).
+const DETAIL_POPULATE = [
+  { path: 'institutionId', select: 'name slug' },
+  { path: 'teacherId',     select: 'name' },
+  { path: 'batchId',       select: 'name dayPatternId timeSlotId', populate: [
+    { path: 'dayPatternId', select: 'label' },
+    { path: 'timeSlotId',   select: 'label' },
+  ] },
+  { path: 'instrumentId',  select: 'name' },
+  { path: 'classLevelId',  select: 'name' },
+];
+
+// Full detail (parity with the institution admin StudentDetail) — powers the
+// operator's student view + edit form.
+function detailOf(s, att) {
+  return {
+    ...serialize(s),
+    gender:          s.gender || null,
+    classType:       s.classType || null,
+    mode:            s.mode,
+    sessionType:     s.sessionType,
+    category:        s.category,
+    validityStart:   s.validityStart || null,
+    validityDays:    s.validityDays || null,
+    paidClasses:     s.paidClasses || 0,
+    upcomingClasses: s.upcomingClasses || 0,
+    attendanceSummary: att || { total: 0, present: 0, absent: 0 },
+    schedule: {
+      days: (s.batchId && s.batchId.dayPatternId) ? s.batchId.dayPatternId.label : null,
+      time: (s.batchId && s.batchId.timeSlotId)   ? s.batchId.timeSlotId.label   : null,
+    },
+    assignedVideoChapterId: s.assignedVideoChapterId ? String(s.assignedVideoChapterId) : null,
   };
 }
 
@@ -116,6 +163,7 @@ exports.create = async (req, res, next) => {
     };
     if (req.body.email) doc.email = String(req.body.email).toLowerCase().trim();
     for (const f of CREATE_FIELDS) if (req.body[f] !== undefined) doc[f] = req.body[f];
+    doc.paymentStatus = derivePaymentStatus(doc.feeTotal, doc.paidAmount, { forceFree: req.body.paymentStatus === 'free' });
 
     const student = await Student.create(doc);
     if (student.batchId) {
@@ -141,22 +189,73 @@ exports.create = async (req, res, next) => {
   }
 };
 
+async function attendanceSummaryOf(s) {
+  const agg = await Attendance.aggregate([
+    { $match: { institutionId: s.institutionId, studentId: s._id } },
+    { $group: { _id: '$status', c: { $sum: 1 } } },
+  ]);
+  const m = new Map(agg.map(x => [x._id, x.c]));
+  const present = m.get('present') || 0;
+  const absent  = m.get('absent') || 0;
+  return { total: agg.reduce((n, x) => n + x.c, 0), present, absent };
+}
+
 exports.get = async (req, res, next) => {
   try {
-    const s = await Student.findById(req.params.id).populate(POPULATE).lean();
+    const s = await Student.findById(req.params.id).populate(DETAIL_POPULATE).lean();
     if (!s) return notFound(res, S.STUDENT_NOT_FOUND);
-    return ok(res, S.OK, { student: serialize(s) });
+    const att = await attendanceSummaryOf(s);
+    return ok(res, S.OK, detailOf(s, att));
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Per-institution catalog for the student edit form — instruments, active
+// teachers, batches, day-patterns, class-levels of the student's OWN institution.
+exports.catalog = async (req, res, next) => {
+  try {
+    const s = await Student.findById(req.params.id).select('institutionId').lean();
+    if (!s) return notFound(res, S.STUDENT_NOT_FOUND);
+    const inst = s.institutionId;
+    const [instruments, teachers, batches, dayPatterns, classLevels] = await Promise.all([
+      Instrument.find({ institutionId: inst, isActive: true }).select('name').sort({ name: 1 }).lean(),
+      Teacher.find({ institutionId: inst, status: 'active' }).select('name').sort({ name: 1 }).lean(),
+      Batch.find({ institutionId: inst, status: { $in: ['setting', 'active'] } })
+        .select('name dayPatternId timeSlotId status')
+        .populate([{ path: 'dayPatternId', select: 'label' }, { path: 'timeSlotId', select: 'label' }])
+        .sort({ createdAt: -1 }).lean(),
+      DayPattern.find({ institutionId: inst, isActive: true }).select('days label isActive').lean(),
+      ClassLevel.find({ institutionId: inst, isActive: true }).select('name upcomingAmount days').lean(),
+    ]);
+    return ok(res, S.OK, {
+      instruments: instruments.map(i => ({ _id: String(i._id), name: i.name })),
+      teachers:    teachers.map(t => ({ _id: String(t._id), name: t.name })),
+      batches:     batches.map(b => ({
+        _id: String(b._id), name: b.name, status: b.status,
+        dayPattern: b.dayPatternId ? { _id: String(b.dayPatternId._id), label: b.dayPatternId.label } : null,
+        timeSlot:   b.timeSlotId ? { _id: String(b.timeSlotId._id), label: b.timeSlotId.label } : null,
+      })),
+      dayPatterns: dayPatterns.map(d => ({ _id: String(d._id), days: d.days, label: d.label, isActive: d.isActive })),
+      classLevels: classLevels.map(c => ({ _id: String(c._id), name: c.name, upcomingAmount: c.upcomingAmount || 0, days: c.days || 0 })),
+    });
   } catch (err) {
     next(err);
   }
 };
 
 // ── GOD-MODE EDIT ──────────────────────────────────────────────────────────────
-// Operator can patch a student's profile + fee fields from any institution. Each
-// change is audited per-diff, scoped to the student's OWN institutionId (so it
-// surfaces in that institution's activity feed). Enrollment-structural fields
-// (teacher/batch/instrument) are managed inside the institution admin panel, not here.
-const FEE_FIELDS = ['paidAmount', 'upcomingAmount', 'paidClasses', 'validityEnd'];
+// Operator can patch a student from any institution — full parity with the
+// institution admin edit (incl. structural teacher/batch/instrument/class-level).
+// Foreign refs are rejected via refGuard scoped to the student's OWN institutionId
+// (cross-institution refs would leak another tenant's data through populate). Each
+// change is audited per-diff into that institution's activity feed.
+const FEE_FIELDS = ['paidAmount', 'upcomingAmount', 'paidClasses', 'validityEnd', 'feeTotal', 'paymentStatus'];
+const EDITABLE = [
+  'teacherId', 'batchId', 'instrumentId', 'classLevelId', 'gender', 'classType', 'mode', 'joinStatus',
+  'sessionType', 'category', 'validityStart', 'validityEnd', 'validityDays',
+  'paidClasses', 'upcomingClasses', 'paidAmount', 'upcomingAmount', 'feeTotal', 'remarks', 'status',
+];
 
 exports.update = async (req, res, next) => {
   try {
@@ -164,37 +263,62 @@ exports.update = async (req, res, next) => {
     if (!s) return notFound(res, S.STUDENT_NOT_FOUND);
 
     const b = req.body || {};
-    const before = s.toObject();
 
-    if (typeof b.name === 'string' && b.name.trim())   s.name = b.name.trim();
+    // GOLDEN RULE: structural refs must belong to the student's OWN institution.
+    if (!(await studentRefsValid(s.institutionId, b))) return badRequest(res, S.STUDENT_BAD_REFS);
+
+    const before = s.toObject();
+    const prevBatch = before.batchId ? String(before.batchId) : null;
+
+    // Profile
+    if (typeof b.name === 'string' && b.name.trim()) s.name = b.name.trim();
     if (typeof b.mobile === 'string' && b.mobile.trim()) {
       if (!/^\d{10}$/.test(b.mobile.trim())) return badRequest(res, S.VALIDATION_FAILED);
-      // A changed mobile is an unproven number — OTP login must re-verify it.
-      if (s.mobile !== b.mobile.trim()) s.mobileVerified = false;
+      if (s.mobile !== b.mobile.trim()) s.mobileVerified = false; // changed number → OTP must re-verify
       s.mobile = b.mobile.trim();
     }
-    if (b.joinStatus !== undefined) {
-      if (!JOIN_STATUSES.includes(b.joinStatus)) return badRequest(res, S.VALIDATION_FAILED);
-      s.joinStatus = b.joinStatus;
-    }
-    if (b.validityEnd !== undefined) {
-      if (b.validityEnd != null && b.validityEnd !== '' && Number.isNaN(Date.parse(b.validityEnd))) {
+    if (b.joinStatus !== undefined && !JOIN_STATUSES.includes(b.joinStatus)) return badRequest(res, S.VALIDATION_FAILED);
+    for (const d of ['validityStart', 'validityEnd']) {
+      if (b[d] !== undefined && b[d] != null && b[d] !== '' && Number.isNaN(Date.parse(b[d]))) {
         return badRequest(res, S.VALIDATION_FAILED);
       }
-      s.validityEnd = b.validityEnd == null || b.validityEnd === '' ? undefined : new Date(b.validityEnd);
     }
-    for (const f of ['paidAmount', 'upcomingAmount', 'paidClasses']) {
-      if (b[f] !== undefined) {
-        const n = Number(b[f]);
-        if (!Number.isFinite(n) || n < 0) return badRequest(res, S.VALIDATION_FAILED);
-        s[f] = Math.round(n);
+    for (const n of ['paidAmount', 'upcomingAmount', 'paidClasses', 'upcomingClasses', 'feeTotal', 'validityDays']) {
+      if (b[n] !== undefined && b[n] !== null && b[n] !== '') {
+        const v = Number(b[n]);
+        if (!Number.isFinite(v) || v < 0) return badRequest(res, S.VALIDATION_FAILED);
       }
     }
+
+    // Apply the whitelisted set (parity with the admin edit).
+    for (const f of EDITABLE) {
+      if (b[f] === undefined) continue;
+      if (f === 'validityStart' || f === 'validityEnd') {
+        s[f] = b[f] == null || b[f] === '' ? undefined : new Date(b[f]);
+      } else if (['paidAmount', 'upcomingAmount', 'paidClasses', 'upcomingClasses', 'feeTotal', 'validityDays'].includes(f)) {
+        s[f] = b[f] == null || b[f] === '' ? undefined : Math.round(Number(b[f]));
+      } else if (f === 'remarks') {
+        if (typeof b.remarks === 'string') s.remarks = b.remarks.trim() || undefined;
+      } else if (['teacherId', 'batchId', 'instrumentId', 'classLevelId'].includes(f)) {
+        s[f] = b[f] || undefined; // '' / null clears the ref
+      } else {
+        s[f] = b[f];
+      }
+    }
+
+    // paymentStatus is derived — re-evaluate after any feeTotal/paidAmount change.
+    s.paymentStatus = derivePaymentStatus(s.feeTotal, s.paidAmount, { forceFree: b.paymentStatus === 'free' });
 
     await s.save();
 
-    const changes = diff(before, s.toObject(),
-      ['name', 'mobile', 'joinStatus', 'validityEnd', 'paidAmount', 'upcomingAmount', 'paidClasses']);
+    // Keep batch studentCount consistent on (re)assignment.
+    const newBatch = s.batchId ? String(s.batchId) : null;
+    if (prevBatch !== newBatch) {
+      if (prevBatch) await Batch.updateOne({ _id: prevBatch, institutionId: s.institutionId }, { $inc: { studentCount: -1 } });
+      if (newBatch)  await Batch.updateOne({ _id: newBatch, institutionId: s.institutionId }, { $inc: { studentCount: 1 } });
+    }
+
+    const changes = diff(before, s.toObject(), [...EDITABLE, 'paymentStatus']);
     if (changes.length) {
       const onlyFees = changes.every(c => FEE_FIELDS.includes(c.field));
       await auditLog({
@@ -209,8 +333,9 @@ exports.update = async (req, res, next) => {
       });
     }
 
-    const fresh = await Student.findById(s._id).populate(POPULATE).lean();
-    return ok(res, S.STUDENT_UPDATED, { student: serialize(fresh) });
+    const fresh = await Student.findById(s._id).populate(DETAIL_POPULATE).lean();
+    const att = await attendanceSummaryOf(fresh);
+    return ok(res, S.STUDENT_UPDATED, detailOf(fresh, att));
   } catch (err) {
     next(err);
   }

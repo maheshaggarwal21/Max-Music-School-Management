@@ -3,14 +3,24 @@ import { useEffect, useMemo, useState } from "react";
 import { Loader2, Save } from "lucide-react";
 import { toast } from "sonner";
 import { Button, Input, Modal, Select } from "@maxmusic/ui";
+import { formatCurrency } from "@maxmusic/utils";
 import { api, adminPath, mockable } from "@/lib/api";
 import { calcDaysAndClasses } from "@/lib/schedule-calc";
+import { RemarksField } from "@/components/remarks-field";
 import {
   MOCK_BATCHES, MOCK_DAY_PATTERNS, MOCK_INSTRUMENTS, MOCK_TEACHERS, ok, paginate,
 } from "@/lib/mocks";
 import type {
-  ApiResponse, BatchRow, DayPatternItem, Paginated, RequestItem, TeacherRow,
+  ApiResponse, BatchRow, ClassLevelItem, DayPatternItem, Paginated, RequestItem, TeacherRow,
 } from "@/lib/types";
+
+// Derived payment status preview (mirrors backend config/payments).
+function derivePaymentStatus(feeTotal: number, paid: number): "unpaid" | "partial" | "paid" | "free" {
+  if (feeTotal <= 0) return "free";
+  if (paid <= 0) return "unpaid";
+  if (paid < feeTotal) return "partial";
+  return "paid";
+}
 
 // "Request Details" approval form — approving a request is an EDIT step, not a
 // one-click action: the admin completes the student's enrollment details and
@@ -49,6 +59,7 @@ const CLASS_TYPE_OPTIONS = [
 const PAYMENT_OPTIONS = [
   { value: "unpaid", label: "Pending" },
   { value: "paid", label: "Paid" },
+  { value: "free", label: "Free" },
 ];
 
 function isoDate(d: Date): string {
@@ -61,8 +72,10 @@ export function ApproveRequestModal({ request, onClose, onApproved }: ApproveReq
   const [teachers, setTeachers] = useState<TeacherRow[]>([]);
   const [dayPatterns, setDayPatterns] = useState<DayPatternItem[]>([]);
   const [instruments, setInstruments] = useState<{ _id: string; name: string }[]>([]);
+  const [classLevels, setClassLevels] = useState<ClassLevelItem[]>([]);
 
   // Form state.
+  const [classLevelId, setClassLevelId] = useState<string | null>(null);
   const [instrumentId, setInstrumentId] = useState<string | null>(null);
   const [mode, setMode] = useState<string | null>("online");
   const [sessionType, setSessionType] = useState<string | null>("live");
@@ -73,24 +86,32 @@ export function ApproveRequestModal({ request, onClose, onApproved }: ApproveReq
   const [batchId, setBatchId] = useState<string | null>(null);
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
-  const [feeRupees, setFeeRupees] = useState("");
+  const [totalFeeRupees, setTotalFeeRupees] = useState("");
+  const [paidRupees, setPaidRupees] = useState("");
+  const [remarks, setRemarks] = useState("");
   const [saving, setSaving] = useState(false);
 
-  // Reset + prefill from the request each time the modal opens.
+  // Reset + prefill from the request (and its proposed config) each time it opens.
   useEffect(() => {
     if (!request) return;
-    setInstrumentId(request.instrument?._id ?? null);
-    setMode("online");
-    setSessionType("live");
-    setJoinStatus("trial");
-    setClassType(null);
+    const p = request.proposed ?? {};
+    setClassLevelId(p.classLevelId ?? null);
+    setInstrumentId(p.instrumentId ?? request.instrument?._id ?? null);
+    setMode(p.mode ?? "online");
+    setSessionType(p.sessionType ?? "live");
+    setJoinStatus(p.joinStatus ?? "trial");
+    setClassType(p.classType ?? null);
     setPaymentStatus(request.paymentStatus);
-    setTeacherId(null);
-    setBatchId(null);
+    setTeacherId(p.teacherId ?? null);
+    setBatchId(p.batchId ?? null);
     const today = new Date();
-    setStartDate(isoDate(today));
-    setEndDate(isoDate(new Date(today.getTime() + 60 * 24 * 60 * 60 * 1000)));
-    setFeeRupees("");
+    setStartDate(p.validityStart ? p.validityStart.slice(0, 10) : isoDate(today));
+    setEndDate(
+      p.validityEnd ? p.validityEnd.slice(0, 10) : isoDate(new Date(today.getTime() + 60 * 24 * 60 * 60 * 1000))
+    );
+    setTotalFeeRupees(p.feeTotal ? String(Math.round(p.feeTotal / 100)) : "");
+    setPaidRupees(p.paidAmount ? String(Math.round(p.paidAmount / 100)) : "");
+    setRemarks(p.remarks ?? "");
   }, [request]);
 
   useEffect(() => {
@@ -115,13 +136,18 @@ export function ApproveRequestModal({ request, onClose, onApproved }: ApproveReq
         () => api.get<ApiResponse<{ instruments: { _id: string; name: string }[] }>>(adminPath("/instruments")),
         ok({ instruments: MOCK_INSTRUMENTS })
       ),
-    ]).then(([b, t, d, i]) => {
+      mockable(
+        () => api.get<ApiResponse<{ classLevels: ClassLevelItem[] }>>(adminPath("/class-levels?active=1")),
+        ok({ classLevels: [] as ClassLevelItem[] })
+      ),
+    ]).then(([b, t, d, i, c]) => {
       if (cancelled) return;
       setBatches((b.data && "items" in b.data ? b.data.items : []) as BatchRow[]);
       setTeachers((t.data && "items" in t.data ? t.data.items : []) as TeacherRow[]);
       const dp = d.data && ("items" in d.data ? d.data.items : (d.data as { dayPatterns: DayPatternItem[] }).dayPatterns);
       setDayPatterns(dp ?? []);
       setInstruments((i.data as { instruments: { _id: string; name: string }[] })?.instruments ?? []);
+      setClassLevels((c.data as { classLevels: ClassLevelItem[] })?.classLevels ?? []);
     });
     return () => {
       cancelled = true;
@@ -145,6 +171,26 @@ export function ApproveRequestModal({ request, onClose, onApproved }: ApproveReq
     [startDate, endDate, patternDays]
   );
 
+  // Picking a class level pre-fills the total fee + validity window.
+  const onClass = (id: string | null) => {
+    setClassLevelId(id);
+    const c = classLevels.find((x) => x._id === id);
+    if (!c) return;
+    setTotalFeeRupees(String(Math.round(c.upcomingAmount / 100)));
+    if (c.paidAmount > 0) setPaidRupees(String(Math.round(c.paidAmount / 100)));
+    const start = startDate || isoDate(new Date());
+    setStartDate(start);
+    const end = new Date(start);
+    end.setDate(end.getDate() + c.days);
+    setEndDate(isoDate(end));
+  };
+
+  const totalPaise = totalFeeRupees ? Math.round(Number(totalFeeRupees) * 100) : 0;
+  const paidPaise = paidRupees ? Math.round(Number(paidRupees) * 100) : 0;
+  const previewStatus =
+    paymentStatus === "free" ? "free" : derivePaymentStatus(totalPaise, paidPaise);
+  const remainingPaise = Math.max(0, totalPaise - paidPaise);
+
   const submit = async () => {
     if (!request) return;
     if (!instrumentId) {
@@ -162,6 +208,7 @@ export function ApproveRequestModal({ request, onClose, onApproved }: ApproveReq
     setSaving(true);
     try {
       const body = {
+        classLevelId: classLevelId ?? undefined,
         instrumentId,
         mode: mode ?? undefined,
         sessionType: sessionType ?? undefined,
@@ -174,7 +221,9 @@ export function ApproveRequestModal({ request, onClose, onApproved }: ApproveReq
         validityEnd: endDate,
         validityDays: calc.days,
         upcomingClasses: calc.classes,
-        paidAmount: feeRupees ? Math.round(Number(feeRupees) * 100) : undefined,
+        feeTotal: totalPaise || undefined,
+        paidAmount: paidPaise || undefined,
+        remarks: remarks.trim() || undefined,
       };
       const res = await mockable(
         () =>
@@ -222,7 +271,7 @@ export function ApproveRequestModal({ request, onClose, onApproved }: ApproveReq
         </>
       }
     >
-      <div className="flex max-h-[60vh] flex-col gap-3 overflow-y-auto pr-1">
+      <div className="flex flex-col gap-3">
         {request && (
           <div className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
             <span className="font-semibold text-foreground">{request.name}</span> · {request.mobile}
@@ -232,6 +281,13 @@ export function ApproveRequestModal({ request, onClose, onApproved }: ApproveReq
           </div>
         )}
 
+        <Select
+          label="Class level (auto-fills fee + validity)"
+          placeholder={classLevels.length ? "Select a class" : "No class levels configured"}
+          options={classLevels.map((c) => ({ value: c._id, label: `${c.name} · ₹${Math.round(c.upcomingAmount / 100)} · ${c.days}d` }))}
+          value={classLevelId}
+          onChange={onClass}
+        />
         <Select
           label="Instrument"
           required
@@ -254,16 +310,31 @@ export function ApproveRequestModal({ request, onClose, onApproved }: ApproveReq
             onChange={setClassType}
           />
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          <Select label="Payment Status" required options={PAYMENT_OPTIONS} value={paymentStatus} onChange={setPaymentStatus} />
+        <div className="grid grid-cols-3 gap-3">
           <Input
-            label="Fee (₹)"
+            label="Total Fee (₹)"
             type="number"
             min={0}
-            placeholder="e.g. 6000"
-            value={feeRupees}
-            onChange={(e) => setFeeRupees(e.target.value)}
+            placeholder="e.g. 8997"
+            value={totalFeeRupees}
+            onChange={(e) => setTotalFeeRupees(e.target.value)}
           />
+          <Input
+            label="Paid now (₹)"
+            type="number"
+            min={0}
+            placeholder="e.g. 4000"
+            value={paidRupees}
+            onChange={(e) => setPaidRupees(e.target.value)}
+          />
+          <Select label="Payment" required options={PAYMENT_OPTIONS} value={paymentStatus} onChange={setPaymentStatus} />
+        </div>
+        <div className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-xs">
+          Status will be{" "}
+          <span className="font-semibold uppercase tracking-wide text-foreground">{previewStatus}</span>
+          {previewStatus === "partial" && (
+            <> · <span className="font-semibold text-amber-600 dark:text-amber-500">{formatCurrency(remainingPaise)} left</span></>
+          )}
         </div>
         <Select
           label="Teacher"
@@ -309,6 +380,7 @@ export function ApproveRequestModal({ request, onClose, onApproved }: ApproveReq
           <Input label="Days (Calculated)" readOnly value={String(calc.days)} className="bg-muted/50" />
           <Input label="Classes (Calculated)" readOnly value={String(calc.classes)} className="bg-muted/50" />
         </div>
+        <RemarksField value={remarks} onChange={setRemarks} placeholder="Internal notes / observations…" />
       </div>
     </Modal>
   );

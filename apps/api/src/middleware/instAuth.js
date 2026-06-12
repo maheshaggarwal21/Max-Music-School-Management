@@ -125,7 +125,8 @@ function instAuth(panel) {
       }
 
       // ── 7. Status check ────────────────────────────────────────────────────
-      if (user.status && user.status !== 'active') {
+      // Only 'inactive' is denied — 'hold' (e.g. partial payment) keeps access.
+      if (user.status === 'inactive') {
         return forbidden(res, S.AUTH_PANEL_DENIED);
       }
 

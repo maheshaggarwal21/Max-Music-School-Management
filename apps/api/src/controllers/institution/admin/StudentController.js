@@ -9,6 +9,7 @@ const { studentRefsValid } = require('../../../config/refGuard');
 const { hash, randomTempPassword } = require('../../../config/password');
 const { auditLog, actorFromReq, diff } = require('../../../config/auditLog');
 const { ok, created, badRequest, notFound, paginated } = require('../../../config/helper');
+const { derivePaymentStatus, remainingAmount } = require('../../../config/payments');
 const S = require('../../../config/strings');
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -21,10 +22,13 @@ const S = require('../../../config/strings');
 function escapeRegex(s) { return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 
 const EDITABLE = [
-  'teacherId', 'batchId', 'instrumentId', 'gender', 'classType', 'mode', 'joinStatus',
+  'teacherId', 'batchId', 'instrumentId', 'classLevelId', 'gender', 'classType', 'mode', 'joinStatus',
   'sessionType', 'category', 'validityStart', 'validityEnd', 'validityDays',
-  'paidClasses', 'upcomingClasses', 'paidAmount', 'upcomingAmount', 'status',
+  'paidClasses', 'upcomingClasses', 'paidAmount', 'upcomingAmount', 'feeTotal', 'remarks', 'status',
 ];
+// paymentStatus is DERIVED (never client-assigned) but IS audited so its flip
+// surfaces in the activity feed.
+const AUDITED = [...EDITABLE, 'paymentStatus'];
 
 const ROW_POPULATE = [
   { path: 'batchId', select: 'name dayPatternId timeSlotId', populate: [
@@ -33,6 +37,7 @@ const ROW_POPULATE = [
   ] },
   { path: 'teacherId',    select: 'name' },
   { path: 'instrumentId', select: 'name' },
+  { path: 'classLevelId', select: 'name upcomingAmount days' },
 ];
 
 function rowOf(s) {
@@ -48,6 +53,8 @@ function rowOf(s) {
       time: (s.batchId && s.batchId.timeSlotId)   ? s.batchId.timeSlotId.label   : null,
     },
     joinStatus:  s.joinStatus,
+    paymentStatus: s.paymentStatus || 'unpaid',
+    remainingAmount: remainingAmount(s.feeTotal, s.paidAmount),
     validityEnd: s.validityEnd || null,
     teacher: s.teacherId ? { _id: String(s.teacherId._id), name: s.teacherId.name } : null,
   };
@@ -97,6 +104,7 @@ exports.get = async (req, res, next) => {
 
     const detail = {
       ...rowOf(s),
+      accountStatus: s.status, // account active/inactive (distinct from joinStatus)
       email:  s.email || null,
       gender: s.gender || null,
       mode:   s.mode,
@@ -108,6 +116,11 @@ exports.get = async (req, res, next) => {
       upcomingClasses: s.upcomingClasses || 0,
       paidAmount:      s.paidAmount || 0,
       upcomingAmount:  s.upcomingAmount || 0,
+      feeTotal:        s.feeTotal || 0,
+      remainingAmount: remainingAmount(s.feeTotal, s.paidAmount),
+      remarks:         s.remarks || null,
+      classLevel: s.classLevelId
+        ? { _id: String(s.classLevelId._id), name: s.classLevelId.name } : null,
       attendanceSummary: { total, present, absent },
       batch: s.batchId ? { _id: String(s.batchId._id), name: s.batchId.name } : null,
       assignedVideoChapterId: s.assignedVideoChapterId ? String(s.assignedVideoChapterId) : null,
@@ -135,6 +148,7 @@ exports.create = async (req, res, next) => {
     const doc = { institutionId: inst, displayId, name: String(name).trim(), mobile: String(mobile).trim(), passwordHash };
     if (req.body.email) doc.email = String(req.body.email).toLowerCase().trim();
     for (const f of EDITABLE) if (req.body[f] !== undefined) doc[f] = req.body[f];
+    doc.paymentStatus = derivePaymentStatus(doc.feeTotal, doc.paidAmount, { forceFree: req.body.paymentStatus === 'free' });
 
     const student = await Student.create(doc);
     if (student.batchId) {
@@ -176,6 +190,8 @@ exports.patch = async (req, res, next) => {
     for (const f of EDITABLE) {
       if (req.body[f] !== undefined) student[f] = req.body[f];
     }
+    // paymentStatus is derived — re-evaluate after any feeTotal/paidAmount change.
+    student.paymentStatus = derivePaymentStatus(student.feeTotal, student.paidAmount, { forceFree: req.body.paymentStatus === 'free' });
     // A changed mobile is an unproven number — OTP login must re-verify it.
     if (String(before.mobile) !== String(student.mobile)) student.mobileVerified = false;
     await student.save();
@@ -187,8 +203,8 @@ exports.patch = async (req, res, next) => {
       if (newBatch)  await Batch.updateOne({ _id: newBatch, institutionId: inst }, { $inc: { studentCount: 1 } });
     }
 
-    const changes = diff(before, student.toObject(), EDITABLE);
-    const action = changes.some(c => c.field === 'paidAmount') ? 'UPDATE_PAID_AMOUNT' : 'UPDATE_STUDENT';
+    const changes = diff(before, student.toObject(), AUDITED);
+    const action = changes.some(c => c.field === 'paidAmount' || c.field === 'paymentStatus') ? 'UPDATE_PAID_AMOUNT' : 'UPDATE_STUDENT';
     await auditLog({
       institutionId: inst,
       ...actorFromReq(req),

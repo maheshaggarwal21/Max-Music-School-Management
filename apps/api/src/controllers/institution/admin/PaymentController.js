@@ -6,6 +6,7 @@ const Student = require('../../../models/Student');
 const RazorpayWebhookEvent = require('../../../models/RazorpayWebhookEvent');
 const { auditLog, actorFromReq } = require('../../../config/auditLog');
 const { ok, created, badRequest, notFound, paginated } = require('../../../config/helper');
+const { derivePaymentStatus } = require('../../../config/payments');
 const S = require('../../../config/strings');
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -63,7 +64,8 @@ exports.createPayment = async (req, res, next) => {
     }
     if (!['paid', 'overdue', 'partial', 'free'].includes(status)) return badRequest(res, S.VALIDATION_FAILED);
 
-    const student = await Student.findOne({ _id: studentId, institutionId: inst }).select('name teacherId paidAmount');
+    const student = await Student.findOne({ _id: studentId, institutionId: inst })
+      .select('name teacherId paidAmount feeTotal paymentStatus');
     if (!student) return notFound(res, S.STUDENT_NOT_FOUND);
 
     const payment = await Payment.create({
@@ -79,9 +81,31 @@ exports.createPayment = async (req, res, next) => {
       recordedBy: { actorId: String(req.actor._id), actorRole: req.actor.role },
     });
 
-    // A paid fee advances the student's running total (the ledger is the source).
-    if (status === 'paid' && type === 'fee') {
-      await Student.updateOne({ _id: student._id, institutionId: inst }, { $inc: { paidAmount: amount } });
+    // A fee payment (paid OR partial) advances the running total (ledger = source).
+    // Recompute the derived paymentStatus and surface the change on the STUDENT's
+    // activity feed so "PAID AMOUNT changed…" / "PAYMENT STATUS changed…" show.
+    if (type === 'fee' && (status === 'paid' || status === 'partial') && amount > 0) {
+      const beforePaid   = student.paidAmount || 0;
+      const beforeStatus = student.paymentStatus;
+      const newPaid      = beforePaid + amount; // overpay kept; remaining clamps to 0
+      const newStatus    = derivePaymentStatus(student.feeTotal, newPaid);
+      await Student.updateOne(
+        { _id: student._id, institutionId: inst },
+        { $set: { paidAmount: newPaid, paymentStatus: newStatus } }
+      );
+
+      const changes = [{ field: 'paidAmount', from: beforePaid, to: newPaid }];
+      if (newStatus !== beforeStatus) changes.push({ field: 'paymentStatus', from: beforeStatus, to: newStatus });
+      await auditLog({
+        institutionId: inst,
+        ...actorFromReq(req),
+        action: 'UPDATE_PAID_AMOUNT',
+        entityType: 'Student',
+        entityId: student._id,
+        entityLabel: `Student: ${student.name}`,
+        changes,
+        ip: req.ip,
+      });
     }
 
     await auditLog({

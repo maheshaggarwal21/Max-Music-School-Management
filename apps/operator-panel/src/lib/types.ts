@@ -50,9 +50,14 @@ export interface OperatorStudentRow {
   teacher: { _id: string; name: string } | null;            // the TAG
   batch: { _id: string; name: string } | null;
   instrument: string | null;
+  classLevel: { _id: string; name: string } | null;
   joinStatus: JoinStatus;
+  paymentStatus: "unpaid" | "partial" | "paid" | "free";
   paidAmount: number;
   upcomingAmount: number; // fee visible to operator
+  feeTotal: number;       // total committed fee (paise)
+  remainingAmount: number; // paise still owed
+  remarks: string | null;
   validityEnd: string | null;
   createdAt: string;
 }
@@ -146,6 +151,7 @@ export interface StudentRow {
 
 export interface StudentDetail extends StudentRow {
   email: string | null;
+  institution: { _id: string; name: string; slug: string } | null;
   gender: string | null;
   mode: "online" | "offline";
   sessionType: "live" | "all";
@@ -155,10 +161,28 @@ export interface StudentDetail extends StudentRow {
   paidClasses: number;
   upcomingClasses: number;
   paidAmount: number;
-  upcomingAmount: number; // the fee
+  upcomingAmount: number; // legacy "upcoming" amount
+  feeTotal: number;       // total committed fee (paise)
+  remainingAmount: number;
+  paymentStatus: "unpaid" | "partial" | "paid" | "free";
+  remarks: string | null;
+  classLevel: { _id: string; name: string } | null;
   attendanceSummary: { total: number; present: number; absent: number };
   batch: { _id: string; name: string } | null;
   assignedVideoChapterId: string | null;
+}
+
+// GET /api/operator/students/:id/catalog → data (the student's institution catalog)
+export interface OperatorStudentCatalog {
+  instruments: { _id: string; name: string }[];
+  teachers: { _id: string; name: string }[];
+  batches: {
+    _id: string; name: string; status: BatchStatus;
+    dayPattern: { _id: string; label: string } | null;
+    timeSlot: { _id: string; label: string } | null;
+  }[];
+  dayPatterns: DayPatternItem[];
+  classLevels: { _id: string; name: string; upcomingAmount: number; days: number }[];
 }
 
 export interface TeacherRow {

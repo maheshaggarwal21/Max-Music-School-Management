@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { useParams, usePathname, useRouter } from "next/navigation";
 import {
-  CalendarCheck, CalendarDays, Clock, Inbox, KeyRound, Layers, LayoutDashboard, Loader2,
+  BookOpen, CalendarCheck, CalendarDays, Clock, Inbox, KeyRound, Layers, LayoutDashboard, Loader2,
   Settings, Users, Wallet, GraduationCap,
 } from "lucide-react";
 import {
@@ -35,6 +35,7 @@ const NAV_SECTIONS: SidebarSection[] = [
   {
     label: "Operations",
     items: [
+      { label: "Class", href: "/class", icon: BookOpen },
       { label: "Attendance", href: "/attendance", icon: CalendarCheck },
       { label: "Payments", href: "/payments", icon: Wallet },
     ],

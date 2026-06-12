@@ -66,6 +66,12 @@ module.exports = {
   TIME_SLOT_DUPLICATE:   'That time slot already exists',
   TIME_SLOT_RANGE_INVALID: 'End time must be after start time',
 
+  CLASS_LEVEL_CREATED:   'Class level created',
+  CLASS_LEVEL_UPDATED:   'Class level updated',
+  CLASS_LEVEL_DUPLICATE: 'That class level already exists',
+  CLASS_LEVEL_NOT_FOUND: 'Class level not found',
+  CLASS_LEVEL_IN_USE:    'This class level is assigned to students and cannot be deleted',
+
   HOLIDAY_DECLARED:      'Holiday declared',
   SESSION_LAUNCHED:      'Session launched',
   SESSION_NOT_FOUND:     'Session not found',
@@ -107,6 +113,8 @@ module.exports = {
     UPDATE_DAY_PATTERN:    'UPDATE_DAY_PATTERN',
     CREATE_TIME_SLOT:      'CREATE_TIME_SLOT',
     UPDATE_TIME_SLOT:      'UPDATE_TIME_SLOT',
+    CREATE_CLASS_LEVEL:    'CREATE_CLASS_LEVEL',
+    UPDATE_CLASS_LEVEL:    'UPDATE_CLASS_LEVEL',
     CREATE_HOLIDAY:        'CREATE_HOLIDAY',
     DELETE_HOLIDAY:        'DELETE_HOLIDAY',
     LAUNCH_SESSION:        'LAUNCH_SESSION',

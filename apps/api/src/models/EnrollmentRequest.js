@@ -11,6 +11,33 @@ const HandledBySchema = new mongoose.Schema(
   { _id: false }
 );
 
+// Proposed student config carried by the admin "Add Student" big form. The
+// request is reviewed in New Requests, then approve() consumes these as DEFAULTS
+// (the approval form overrides). All optional → a minimal lead request omits it.
+const ProposedSchema = new mongoose.Schema(
+  {
+    classLevelId:    { type: mongoose.Schema.Types.ObjectId, ref: 'ClassLevel' },
+    teacherId:       { type: mongoose.Schema.Types.ObjectId, ref: 'Teacher' },
+    batchId:         { type: mongoose.Schema.Types.ObjectId, ref: 'Batch' },
+    instrumentId:    { type: mongoose.Schema.Types.ObjectId, ref: 'Instrument' },
+    classType:       { type: String, trim: true },
+    mode:            { type: String, enum: ['online', 'offline'] },
+    sessionType:     { type: String, enum: ['live', 'all'] },
+    joinStatus:      { type: String, enum: ['trial', 'active_soon', 'active', 'inactive'] },
+    category:        { type: String, enum: ['regular', 'trial'] },
+    gender:          { type: String, enum: ['male', 'female'] },
+    validityStart:   { type: Date },
+    validityEnd:     { type: Date },
+    validityDays:    { type: Number, min: 0 },
+    feeTotal:        { type: Number, min: 0 },   // paise
+    paidAmount:      { type: Number, min: 0 },   // paise
+    paidClasses:     { type: Number, min: 0 },
+    upcomingClasses: { type: Number, min: 0 },
+    remarks:         { type: String, trim: true },
+  },
+  { _id: false }
+);
+
 const EnrollmentRequestSchema = new mongoose.Schema(
   {
     institutionId:          { type: mongoose.Schema.Types.ObjectId, ref: 'Institution', required: true, index: true },
@@ -26,6 +53,7 @@ const EnrollmentRequestSchema = new mongoose.Schema(
     handledBy:              { type: HandledBySchema },
     handledAt:              { type: Date },
     rejectionReason:        { type: String, trim: true },
+    proposed:               { type: ProposedSchema },
   },
   { timestamps: true }
 );

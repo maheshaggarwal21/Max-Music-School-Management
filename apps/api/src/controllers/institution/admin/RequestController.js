@@ -3,12 +3,15 @@
 const mongoose = require('mongoose');
 const EnrollmentRequest = require('../../../models/EnrollmentRequest');
 const Student = require('../../../models/Student');
+const Teacher = require('../../../models/Teacher');
 const Batch   = require('../../../models/Batch');
 const DayPattern = require('../../../models/DayPattern');
 const TimeSlot   = require('../../../models/TimeSlot');
 const Instrument = require('../../../models/Instrument');
+const ClassLevel = require('../../../models/ClassLevel');
 const { nextDisplayId } = require('../../../config/specialFunctions');
 const { studentRefsValid } = require('../../../config/refGuard');
+const { derivePaymentStatus } = require('../../../config/payments');
 
 // Resolve an optional client-supplied ref: keep it only if it is a valid
 // ObjectId that belongs to THIS institution (golden rule). A bad/foreign id is
@@ -18,6 +21,43 @@ async function resolveOwnedRef(model, inst, id) {
   if (!id || !mongoose.isValidObjectId(id)) return undefined;
   const found = await model.exists({ _id: id, institutionId: inst });
   return found ? id : undefined;
+}
+
+// Clean + validate the admin Add-Student form's "proposed" student config carried
+// on a request. Foreign/invalid refs and out-of-range values are dropped (never
+// thrown) so a stale proposal can't 500 or leak another tenant's row. paymentStatus
+// is intentionally NOT carried — it is always derived at student creation.
+const PROPOSED_ENUMS = {
+  mode:        ['online', 'offline'],
+  sessionType: ['live', 'all'],
+  joinStatus:  ['trial', 'active_soon', 'active', 'inactive'],
+  category:    ['regular', 'trial'],
+  gender:      ['male', 'female'],
+};
+async function buildProposed(inst, p) {
+  if (!p || typeof p !== 'object') return undefined;
+  const out = {};
+  const [tch, bat, instr, cls] = await Promise.all([
+    resolveOwnedRef(Teacher, inst, p.teacherId),
+    resolveOwnedRef(Batch, inst, p.batchId),
+    resolveOwnedRef(Instrument, inst, p.instrumentId),
+    resolveOwnedRef(ClassLevel, inst, p.classLevelId),
+  ]);
+  if (tch) out.teacherId = tch;
+  if (bat) out.batchId = bat;
+  if (instr) out.instrumentId = instr;
+  if (cls) out.classLevelId = cls;
+  for (const [k, vals] of Object.entries(PROPOSED_ENUMS)) if (vals.includes(p[k])) out[k] = p[k];
+  if (typeof p.classType === 'string' && p.classType.trim()) out.classType = p.classType.trim();
+  if (typeof p.remarks === 'string' && p.remarks.trim()) out.remarks = p.remarks.trim();
+  for (const k of ['validityStart', 'validityEnd']) {
+    if (p[k] && !Number.isNaN(new Date(p[k]).getTime())) out[k] = new Date(p[k]);
+  }
+  for (const k of ['validityDays', 'feeTotal', 'paidAmount', 'paidClasses', 'upcomingClasses']) {
+    const n = Number(p[k]);
+    if (p[k] !== undefined && p[k] !== null && p[k] !== '' && Number.isFinite(n) && n >= 0) out[k] = n;
+  }
+  return Object.keys(out).length ? out : undefined;
 }
 const { hash, randomTempPassword } = require('../../../config/password');
 const { auditLog, actorFromReq } = require('../../../config/auditLog');
@@ -38,6 +78,19 @@ const POPULATE = [
   { path: 'instrumentId',          select: 'name' },
 ];
 
+const ID_KEYS = ['classLevelId', 'teacherId', 'batchId', 'instrumentId'];
+function serializeProposed(p) {
+  if (!p) return null;
+  const out = {};
+  for (const [k, v] of Object.entries(p)) {
+    if (v === undefined || v === null) continue;
+    if (ID_KEYS.includes(k)) out[k] = String(v);
+    else if (v instanceof Date) out[k] = v.toISOString();
+    else out[k] = v;
+  }
+  return out;
+}
+
 function serialize(r) {
   return {
     _id:    String(r._id),
@@ -50,6 +103,7 @@ function serialize(r) {
       ? { _id: String(r.preferredTimeSlotId._id), label: r.preferredTimeSlotId.label } : null,
     instrument: r.instrumentId
       ? { _id: String(r.instrumentId._id), name: r.instrumentId.name } : null,
+    proposed:      serializeProposed(r.proposed),
     status:        r.status,
     paymentStatus: r.paymentStatus,
     createdAt:     r.createdAt,
@@ -86,10 +140,11 @@ exports.create = async (req, res, next) => {
     if (!name || !mobile) return badRequest(res, S.VALIDATION_FAILED);
 
     // Validate optional preference refs belong to this institution (drop if not).
-    const [dayId, timeId, instrId] = await Promise.all([
+    const [dayId, timeId, instrId, proposed] = await Promise.all([
       resolveOwnedRef(DayPattern, inst, preferredDayPatternId),
       resolveOwnedRef(TimeSlot,   inst, preferredTimeSlotId),
       resolveOwnedRef(Instrument, inst, instrumentId),
+      buildProposed(inst, req.body.proposed),
     ]);
 
     const reqDoc = await EnrollmentRequest.create({
@@ -99,7 +154,9 @@ exports.create = async (req, res, next) => {
       email: email ? String(email).toLowerCase().trim() : undefined,
       preferredDayPatternId: dayId,
       preferredTimeSlotId:   timeId,
-      instrumentId:          instrId,
+      // the structured Add-Student form may also send a full instrument in `proposed`
+      instrumentId:          instrId || (proposed && proposed.instrumentId) || undefined,
+      proposed,
       status: 'pending',
       paymentStatus: 'unpaid',
     });
@@ -128,17 +185,45 @@ exports.approve = async (req, res, next) => {
     if (!reqDoc) return notFound(res, S.REQUEST_NOT_FOUND);
     if (reqDoc.status !== 'pending') return badRequest(res, S.REQUEST_NOT_PENDING);
 
-    const {
-      teacherId, batchId, instrumentId, classType,
-      validityDays, paidAmount, paymentStatus,
-      mode, sessionType, joinStatus,
-      validityStart: bodyStart, validityEnd: bodyEnd,
-      paidClasses, upcomingClasses, upcomingAmount,
-    } = req.body || {};
+    // The approval form (body) wins; the request's `proposed` config supplies defaults.
+    const p = reqDoc.proposed || {};
+    const pick = (k) => (req.body[k] !== undefined ? req.body[k] : p[k]);
+    const numOr = (v) => (v !== undefined && v !== null && v !== '' && Number.isFinite(Number(v)) ? Number(v) : undefined);
 
-    // GOLDEN RULE: reject foreign teacher/batch/instrument refs before creating the Student.
-    if (!(await studentRefsValid(inst, { teacherId, batchId, instrumentId }))) {
+    let teacherId    = pick('teacherId');
+    let batchId      = pick('batchId');
+    let instrumentId = pick('instrumentId');
+    let classLevelId = pick('classLevelId');
+    const classType    = pick('classType');
+    let validityDays   = pick('validityDays');
+    let paidAmount     = pick('paidAmount');
+    let feeTotal       = pick('feeTotal');
+    const paymentStatus = pick('paymentStatus'); // form intent: 'paid' | 'unpaid' | 'free'
+    const mode         = pick('mode');
+    const sessionType  = pick('sessionType');
+    const joinStatus   = pick('joinStatus');
+    const gender       = pick('gender');
+    const category     = pick('category');
+    const remarks      = pick('remarks');
+    const bodyStart    = pick('validityStart');
+    const bodyEnd      = pick('validityEnd');
+    const paidClasses     = pick('paidClasses');
+    const upcomingClasses = pick('upcomingClasses');
+    const upcomingAmount  = pick('upcomingAmount');
+
+    // GOLDEN RULE: reject foreign teacher/batch/instrument/classLevel refs (post-merge).
+    if (!(await studentRefsValid(inst, { teacherId, batchId, instrumentId, classLevelId }))) {
       return badRequest(res, S.STUDENT_BAD_REFS);
+    }
+
+    // Selecting a class level pre-fills total fee + duration (+ default paid) when not given.
+    if (classLevelId) {
+      const level = await ClassLevel.findOne({ _id: classLevelId, institutionId: inst }).lean();
+      if (level) {
+        if (feeTotal === undefined || feeTotal === null || feeTotal === '') feeTotal = level.upcomingAmount;
+        if (validityDays === undefined || validityDays === null || validityDays === '') validityDays = level.days;
+        if (paidAmount === undefined || paidAmount === null || paidAmount === '') paidAmount = level.paidAmount || 0;
+      }
     }
 
     const displayId = await nextDisplayId(inst, 'student');
@@ -158,6 +243,10 @@ exports.approve = async (req, res, next) => {
       effectiveDays = Number(validityDays);
     }
 
+    const numFee  = numOr(feeTotal) || 0;
+    const numPaid = numOr(paidAmount) || 0;
+    const computedPaymentStatus = derivePaymentStatus(numFee, numPaid, { forceFree: paymentStatus === 'free' });
+
     const student = await Student.create({
       institutionId: inst,
       displayId,
@@ -167,17 +256,22 @@ exports.approve = async (req, res, next) => {
       teacherId:    teacherId || undefined,
       batchId:      batchId || undefined,
       instrumentId: instrumentId || reqDoc.instrumentId || undefined,
+      classLevelId: classLevelId || undefined,
       classType:    classType || undefined,
+      gender:       gender || undefined,
       mode:         mode || undefined,
       sessionType:  sessionType || undefined,
       joinStatus:   joinStatus || 'trial',
-      category:     paymentStatus === 'paid' ? 'regular' : 'trial',
+      category:     category || (paymentStatus === 'paid' ? 'regular' : 'trial'),
       validityStart, validityEnd,
       validityDays: effectiveDays,
-      paidClasses:     typeof paidClasses === 'number' ? paidClasses : undefined,
-      upcomingClasses: typeof upcomingClasses === 'number' ? upcomingClasses : undefined,
-      paidAmount:   typeof paidAmount === 'number' ? paidAmount : 0,
-      upcomingAmount: typeof upcomingAmount === 'number' ? upcomingAmount : undefined,
+      paidClasses:     numOr(paidClasses),
+      upcomingClasses: numOr(upcomingClasses),
+      paidAmount:   numPaid,
+      upcomingAmount: numOr(upcomingAmount) !== undefined ? numOr(upcomingAmount) : (numFee || undefined),
+      feeTotal:     numFee,
+      paymentStatus: computedPaymentStatus,
+      remarks:      remarks || undefined,
       requestId:    reqDoc._id,
       passwordHash,
       status: 'active',
@@ -188,7 +282,7 @@ exports.approve = async (req, res, next) => {
     }
 
     reqDoc.status = 'approved';
-    reqDoc.paymentStatus = paymentStatus === 'paid' ? 'paid' : reqDoc.paymentStatus;
+    reqDoc.paymentStatus = computedPaymentStatus === 'paid' ? 'paid' : reqDoc.paymentStatus;
     reqDoc.approvedStudentId = student._id;
     reqDoc.handledBy = actorStamp(req);
     reqDoc.handledAt = now;
@@ -201,7 +295,11 @@ exports.approve = async (req, res, next) => {
       entityType: 'Student',
       entityId: student._id,
       entityLabel: `Student: ${student.name}`,
-      after: { displayId: student.displayId, joinStatus: student.joinStatus, paidAmount: student.paidAmount },
+      after: {
+        displayId: student.displayId, joinStatus: student.joinStatus,
+        paidAmount: student.paidAmount, feeTotal: student.feeTotal,
+        paymentStatus: student.paymentStatus,
+      },
       ip: req.ip,
     });
 

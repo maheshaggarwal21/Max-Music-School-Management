@@ -46,3 +46,12 @@ export interface StudentDashboard {
   };
   timetable: ClassItem[];
 }
+
+// ── Contact (GET /contact) ──────────────────────────────────────────────────
+// The student's own teacher + the institution's support contact. WHITE-LABEL:
+// only the institution's own identity is ever returned here.
+
+export interface ContactInfo {
+  teacher: { name: string; mobile: string } | null;
+  support: { schoolName: string; email: string | null };
+}

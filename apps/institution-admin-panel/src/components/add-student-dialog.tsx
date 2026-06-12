@@ -1,8 +1,9 @@
 "use client";
-// Admin "Add Student" — directly enrols a student into THIS institution,
-// bypassing the two-step enrollment-request flow. POSTs to /:slug/admin/students.
-// Instrument / teacher / batch lists are fetched live for the institution.
-// Amounts are entered in rupees and sent as paise (the stored unit).
+// Admin "Add Student" — creates an enrollment REQUEST carrying the proposed
+// student config (class / fee / batch / validity / remarks). The request lands in
+// New Requests for cross-check; approval (pre-filled, editable) creates the student.
+// Selecting a Class level pre-fills the total fee + validity window. Amounts are
+// entered in rupees and sent as paise (the stored unit).
 
 import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
@@ -10,7 +11,8 @@ import { toast } from "sonner";
 import { Button, Input, Modal, Select } from "@maxmusic/ui";
 import { api, adminPath, mockable } from "@/lib/api";
 import { MOCK_BATCHES, MOCK_INSTRUMENTS, MOCK_TEACHERS, ok, paginate } from "@/lib/mocks";
-import type { ApiResponse, Paginated } from "@/lib/types";
+import type { ApiResponse, ClassLevelItem, Paginated } from "@/lib/types";
+import { RemarksField } from "@/components/remarks-field";
 
 const GENDER = [
   { value: "male", label: "Male" },
@@ -40,6 +42,7 @@ const EMPTY = {
   mobile: "",
   email: "",
   gender: null as string | null,
+  classLevelId: null as string | null,
   instrumentId: null as string | null,
   teacherId: null as string | null,
   batchId: null as string | null,
@@ -49,12 +52,29 @@ const EMPTY = {
   category: "regular" as string | null,
   validityStart: "",
   validityEnd: "",
+  feeRupees: "",
   paidRupees: "",
-  upcomingRupees: "",
   paidClasses: "",
+  remarks: "",
 };
 
 type Named = { _id: string; name: string };
+
+function todayISO() {
+  return new Date().toISOString().slice(0, 10);
+}
+function addDaysISO(startISO: string, days: number) {
+  const d = new Date(startISO);
+  if (Number.isNaN(d.getTime())) return "";
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+function daysBetween(a: string, b: string) {
+  const s = new Date(a).getTime();
+  const e = new Date(b).getTime();
+  if (Number.isNaN(s) || Number.isNaN(e)) return undefined;
+  return Math.max(0, Math.round((e - s) / 86400000));
+}
 
 export function AddStudentDialog({
   open,
@@ -70,6 +90,7 @@ export function AddStudentDialog({
   const [instruments, setInstruments] = useState<Named[]>([]);
   const [teachers, setTeachers] = useState<Named[]>([]);
   const [batches, setBatches] = useState<Named[]>([]);
+  const [classLevels, setClassLevels] = useState<ClassLevelItem[]>([]);
 
   const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) =>
     setForm((f) => ({ ...f, [k]: v }));
@@ -91,7 +112,11 @@ export function AddStudentDialog({
         () => api.get<ApiResponse<Paginated<{ _id: string; name: string; status: string }>>>(adminPath("/batches?page=1&limit=100")),
         ok(paginate(MOCK_BATCHES))
       ),
-    ]).then(([ins, tch, bat]) => {
+      mockable(
+        () => api.get<ApiResponse<{ classLevels: ClassLevelItem[] }>>(adminPath("/class-levels?active=1")),
+        ok({ classLevels: [] as ClassLevelItem[] })
+      ),
+    ]).then(([ins, tch, bat, cls]) => {
       if (!alive) return;
       setInstruments((ins.data?.instruments ?? []).map((i) => ({ _id: i._id, name: i.name })));
       setTeachers(
@@ -103,11 +128,29 @@ export function AddStudentDialog({
         ((bat.data as Paginated<{ _id: string; name: string; status: string }>)?.items ?? [])
           .map((b) => ({ _id: b._id, name: b.name }))
       );
+      setClassLevels((cls.data as { classLevels: ClassLevelItem[] })?.classLevels ?? []);
     });
     return () => {
       alive = false;
     };
   }, [open]);
+
+  // Picking a class level pre-fills the total fee, default paid, and validity window.
+  const onClass = (id: string | null) => {
+    const c = classLevels.find((x) => x._id === id);
+    setForm((f) => {
+      if (!c) return { ...f, classLevelId: id };
+      const start = f.validityStart || todayISO();
+      return {
+        ...f,
+        classLevelId: id,
+        feeRupees: String(Math.round(c.upcomingAmount / 100)),
+        paidRupees: c.paidAmount > 0 ? String(Math.round(c.paidAmount / 100)) : f.paidRupees,
+        validityStart: start,
+        validityEnd: addDaysISO(start, c.days),
+      };
+    });
+  };
 
   const submit = async () => {
     if (!form.name.trim()) return toast.error("Student name is required");
@@ -115,42 +158,44 @@ export function AddStudentDialog({
 
     const toPaise = (r: string) => (r === "" ? undefined : Math.round(Number(r) * 100));
     const num = (n: string) => (n === "" ? undefined : Number(n));
+    const validityDays =
+      form.validityStart && form.validityEnd ? daysBetween(form.validityStart, form.validityEnd) : undefined;
 
     const body = {
       name: form.name.trim(),
       mobile: form.mobile.trim(),
       email: form.email.trim() || undefined,
-      gender: form.gender ?? undefined,
-      instrumentId: form.instrumentId ?? undefined,
-      teacherId: form.teacherId ?? undefined,
-      batchId: form.batchId ?? undefined,
-      mode: form.mode ?? undefined,
-      sessionType: form.sessionType ?? undefined,
-      joinStatus: form.joinStatus ?? undefined,
-      category: form.category ?? undefined,
-      validityStart: form.validityStart || undefined,
-      validityEnd: form.validityEnd || undefined,
-      paidAmount: toPaise(form.paidRupees),
-      upcomingAmount: toPaise(form.upcomingRupees),
-      paidClasses: num(form.paidClasses),
+      proposed: {
+        classLevelId: form.classLevelId ?? undefined,
+        teacherId: form.teacherId ?? undefined,
+        batchId: form.batchId ?? undefined,
+        instrumentId: form.instrumentId ?? undefined,
+        gender: form.gender ?? undefined,
+        mode: form.mode ?? undefined,
+        sessionType: form.sessionType ?? undefined,
+        joinStatus: form.joinStatus ?? undefined,
+        category: form.category ?? undefined,
+        validityStart: form.validityStart || undefined,
+        validityEnd: form.validityEnd || undefined,
+        validityDays,
+        feeTotal: toPaise(form.feeRupees),
+        paidAmount: toPaise(form.paidRupees),
+        paidClasses: num(form.paidClasses),
+        remarks: form.remarks.trim() || undefined,
+      },
     };
 
     setSaving(true);
     try {
-      const res = await mockable(
-        () =>
-          api.post<ApiResponse<{ student: { _id: string; displayId: string; name: string }; tempPassword: string }>>(
-            adminPath("/students"),
-            body
-          ),
-        ok({ student: { _id: `stu_local_${Date.now()}`, displayId: "—", name: body.name }, tempPassword: "mock-temp" })
+      await mockable(
+        () => api.post<ApiResponse<{ request: { _id: string } }>>(adminPath("/requests"), body),
+        ok({ request: { _id: `req_local_${Date.now()}` } })
       );
-      const tp = res.data?.tempPassword;
-      toast.success(`${body.name} enrolled` + (tp ? ` · temp password: ${tp}` : ""));
+      toast.success(`${body.name} sent to New Requests for review`);
       onCreated();
       onClose();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to add student");
+      toast.error(err instanceof Error ? err.message : "Failed to create request");
     } finally {
       setSaving(false);
     }
@@ -161,7 +206,7 @@ export function AddStudentDialog({
       open={open}
       onClose={() => !saving && onClose()}
       title="Add Student"
-      subtitle="Enrol a student directly (skips the enrollment request)"
+      subtitle="Creates a request for review in New Requests, then approve to enrol"
       footer={
         <>
           <Button variant="ghost" onClick={onClose} disabled={saving}>
@@ -169,7 +214,7 @@ export function AddStudentDialog({
           </Button>
           <Button variant="brand" onClick={submit} disabled={saving}>
             {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-            Add student
+            Send to requests
           </Button>
         </>
       }
@@ -183,6 +228,14 @@ export function AddStudentDialog({
           <Input label="Email" type="email" value={form.email} onChange={(e) => set("email", e.target.value)} />
           <Select label="Gender" placeholder="—" options={GENDER} value={form.gender} onChange={(v) => set("gender", v)} />
         </div>
+
+        <Select
+          label="Class level (auto-fills fee + validity)"
+          placeholder={classLevels.length ? "Select a class" : "No class levels — add them under Operations → Class"}
+          options={classLevels.map((c) => ({ value: c._id, label: `${c.name} · ₹${Math.round(c.upcomingAmount / 100)} · ${c.days}d` }))}
+          value={form.classLevelId}
+          onChange={onClass}
+        />
 
         <div className="grid grid-cols-2 gap-3">
           <Select
@@ -222,10 +275,16 @@ export function AddStudentDialog({
           <Input label="Validity end" type="date" value={form.validityEnd} onChange={(e) => set("validityEnd", e.target.value)} />
         </div>
         <div className="grid grid-cols-3 gap-3">
-          <Input label="Paid (₹)" type="number" min={0} value={form.paidRupees} onChange={(e) => set("paidRupees", e.target.value)} />
-          <Input label="Upcoming (₹)" type="number" min={0} value={form.upcomingRupees} onChange={(e) => set("upcomingRupees", e.target.value)} />
+          <Input label="Total fee (₹)" type="number" min={0} value={form.feeRupees} onChange={(e) => set("feeRupees", e.target.value)} />
+          <Input label="Paid now (₹)" type="number" min={0} value={form.paidRupees} onChange={(e) => set("paidRupees", e.target.value)} />
           <Input label="Paid classes" type="number" min={0} value={form.paidClasses} onChange={(e) => set("paidClasses", e.target.value)} />
         </div>
+
+        <RemarksField
+          value={form.remarks}
+          onChange={(v) => set("remarks", v)}
+          placeholder="Internal notes about this student…"
+        />
       </div>
     </Modal>
   );

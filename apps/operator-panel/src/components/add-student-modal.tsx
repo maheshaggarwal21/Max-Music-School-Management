@@ -54,9 +54,11 @@ const EMPTY = {
   category: "regular" as string | null,
   validityStart: "",
   validityEnd: "",
+  feeRupees: "",
   paidRupees: "",
   upcomingRupees: "",
   paidClasses: "",
+  remarks: "",
 };
 
 export function AddStudentModal({
@@ -147,9 +149,11 @@ export function AddStudentModal({
       category: form.category ?? undefined,
       validityStart: form.validityStart || undefined,
       validityEnd: form.validityEnd || undefined,
+      feeTotal: toPaise(form.feeRupees),
       paidAmount: toPaise(form.paidRupees),
       upcomingAmount: toPaise(form.upcomingRupees),
       paidClasses: num(form.paidClasses),
+      remarks: form.remarks.trim() || undefined,
     };
 
     setSaving(true);
@@ -176,9 +180,18 @@ export function AddStudentModal({
               teacher: form.teacherId ? { _id: form.teacherId, name: teachers.find((t) => t._id === form.teacherId)?.name ?? "" } : null,
               batch: null,
               instrument: instruments.find((i) => i._id === form.instrumentId)?.name ?? null,
+              classLevel: null,
               joinStatus: (form.joinStatus ?? "trial") as OperatorStudentRow["joinStatus"],
+              paymentStatus: (() => {
+                const fee = body.feeTotal ?? 0;
+                const paid = body.paidAmount ?? 0;
+                return fee <= 0 ? "free" : paid <= 0 ? "unpaid" : paid < fee ? "partial" : "paid";
+              })(),
               paidAmount: body.paidAmount ?? 0,
               upcomingAmount: body.upcomingAmount ?? 0,
+              feeTotal: body.feeTotal ?? 0,
+              remainingAmount: Math.max(0, (body.feeTotal ?? 0) - (body.paidAmount ?? 0)),
+              remarks: body.remarks ?? null,
               validityEnd: body.validityEnd ?? null,
               createdAt: new Date().toISOString(),
             },
@@ -272,10 +285,22 @@ export function AddStudentModal({
           <Input label="Validity end" type="date" value={form.validityEnd} onChange={(e) => set("validityEnd", e.target.value)} />
         </div>
         <div className="grid grid-cols-3 gap-3">
+          <Input label="Total fee (₹)" type="number" min={0} value={form.feeRupees} onChange={(e) => set("feeRupees", e.target.value)} />
           <Input label="Paid (₹)" type="number" min={0} value={form.paidRupees} onChange={(e) => set("paidRupees", e.target.value)} />
           <Input label="Upcoming (₹)" type="number" min={0} value={form.upcomingRupees} onChange={(e) => set("upcomingRupees", e.target.value)} />
-          <Input label="Paid classes" type="number" min={0} value={form.paidClasses} onChange={(e) => set("paidClasses", e.target.value)} />
         </div>
+        <Input label="Paid classes" type="number" min={0} value={form.paidClasses} onChange={(e) => set("paidClasses", e.target.value)} />
+
+        <label className="flex w-full flex-col gap-1.5">
+          <span className="text-xs font-medium text-foreground">Remarks / Observations</span>
+          <textarea
+            rows={2}
+            placeholder="Internal notes about this student…"
+            value={form.remarks}
+            onChange={(e) => set("remarks", e.target.value)}
+            className="w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none transition-all placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+          />
+        </label>
       </div>
     </Modal>
   );

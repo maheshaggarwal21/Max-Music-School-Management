@@ -18,10 +18,12 @@ import type {
   OperatorPaymentRow,
   OperatorProfile,
   OperatorSettingsData,
+  OperatorStudentCatalog,
   OperatorStudentRow,
   OperatorTeacherRow,
   RentInvoiceItem,
   SlugChangeRequestRow,
+  StudentDetail,
 } from "./types";
 
 // ── Envelope helpers ──────────────────────────────────────────────────────────
@@ -328,9 +330,14 @@ export const MOCK_STUDENTS: OperatorStudentRow[] = STUDENT_SEEDS.map(
       ? { _id: `batch_${instId}_${i % 4}`, name: `${(instrument ?? "MUS").slice(0, 3).toUpperCase()}-MWF-${5 + (i % 3)}PM` }
       : null,
     instrument,
+    classLevel: null,
     joinStatus,
+    paymentStatus: upcomingAmount <= 0 ? "free" : paidAmount <= 0 ? "unpaid" : paidAmount < upcomingAmount ? "partial" : "paid",
     paidAmount,
     upcomingAmount,
+    feeTotal: upcomingAmount,
+    remainingAmount: Math.max(0, upcomingAmount - paidAmount),
+    remarks: null,
     validityEnd,
     createdAt: `2026-0${1 + (i % 5)}-${String(2 + (i % 26)).padStart(2, "0")}T10:00:00.000Z`,
   })
@@ -1150,4 +1157,65 @@ export function mockSlugRequestHandled(
     }
   }
   return ok(null, status === "approved" ? "Slug change approved" : "Slug change rejected");
+}
+
+// ── Student detail + institution catalog (operator edit form) ─────────────────
+
+export function mockStudentDetail(row: OperatorStudentRow): ApiResponse<StudentDetail> {
+  const paidClasses = getMockStudentPaidClasses(row._id);
+  return ok({
+    _id: row._id,
+    displayId: row.displayId,
+    name: row.name,
+    mobile: row.mobile,
+    email: row.email,
+    institution: row.institution,
+    instrument: row.instrument,
+    classType: "Group",
+    schedule: { days: null, time: null },
+    joinStatus: row.joinStatus,
+    validityEnd: row.validityEnd,
+    teacher: row.teacher,
+    gender: null,
+    mode: "online",
+    sessionType: "all",
+    category: "regular",
+    validityStart: null,
+    validityDays: null,
+    paidClasses,
+    upcomingClasses: 0,
+    paidAmount: row.paidAmount,
+    upcomingAmount: row.upcomingAmount,
+    feeTotal: row.feeTotal,
+    remainingAmount: row.remainingAmount,
+    paymentStatus: row.paymentStatus,
+    remarks: row.remarks,
+    classLevel: row.classLevel,
+    attendanceSummary: { total: 0, present: 0, absent: 0 },
+    batch: row.batch,
+    assignedVideoChapterId: null,
+  });
+}
+
+export function mockStudentCatalog(): ApiResponse<OperatorStudentCatalog> {
+  return ok({
+    instruments: [
+      { _id: "ins-gtr", name: "Guitar" },
+      { _id: "ins-pno", name: "Piano" },
+      { _id: "ins-voc", name: "Vocals" },
+    ],
+    teachers: [
+      { _id: "tch-1", name: "Aarav Mehta" },
+      { _id: "tch-2", name: "Nirmal Rana" },
+    ],
+    batches: [
+      { _id: "bat-1", name: "GTR-MWF-5PM", status: "active", dayPattern: { _id: "dp-mwf", label: "Mon-Wed-Fri" }, timeSlot: { _id: "ts-17", label: "17:00 - 18:00" } },
+      { _id: "bat-2", name: "PNO-TT-6PM", status: "active", dayPattern: { _id: "dp-tt", label: "Tue-Thu" }, timeSlot: { _id: "ts-18", label: "18:00 - 19:00" } },
+    ],
+    dayPatterns: [
+      { _id: "dp-mwf", days: ["mon", "wed", "fri"], label: "Mon-Wed-Fri", isActive: true },
+      { _id: "dp-tt", days: ["tue", "thu"], label: "Tue-Thu", isActive: true },
+    ],
+    classLevels: [],
+  });
 }
