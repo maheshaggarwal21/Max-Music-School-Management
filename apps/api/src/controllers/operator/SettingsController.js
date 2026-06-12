@@ -123,8 +123,10 @@ exports.updateGodOtp = async (req, res, next) => {
 
     const op = await Operator.findById(req.operator._id).select('+passwordHash');
     if (!op) return notFound(res, S.NOT_FOUND);
+    // 400, not 401 — the SESSION is valid; only the re-entered password is wrong.
+    // A 401 here would trip the panel's global session-expired redirect.
     if (!(await compare(password, op.passwordHash))) {
-      return unauthorized(res, S.PASSWORD_INCORRECT);
+      return badRequest(res, S.PASSWORD_INCORRECT);
     }
 
     const ps = await PlatformSettings.getSingleton();

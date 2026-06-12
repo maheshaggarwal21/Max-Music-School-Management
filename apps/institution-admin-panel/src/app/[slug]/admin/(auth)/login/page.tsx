@@ -108,8 +108,8 @@ export default function LoginPage() {
 
   const submitOtp = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (code.length !== 6) {
-      toast.error("Enter the 6-digit code");
+    if (code.length < 6) {
+      toast.error("Enter the code you received");
       return;
     }
     setSubmitting(true);
@@ -272,7 +272,7 @@ export default function LoginPage() {
                       autoComplete="one-time-code"
                       placeholder="6-digit code"
                       value={code}
-                      onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                      onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 12))}
                       className="text-center tracking-[0.4em]"
                       required
                     />
@@ -280,7 +280,7 @@ export default function LoginPage() {
                       type="submit"
                       variant="brand"
                       size="lg"
-                      disabled={submitting || code.length !== 6}
+                      disabled={submitting || code.length < 6}
                       className="mt-1 h-11 rounded-full transition-all duration-300"
                     >
                       {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Verify & sign in"}

@@ -75,8 +75,10 @@ async function main() {
   line('operator wrong password → 401', o3.status === 401, `HTTP ${o3.status}`);
 
   // ── 2. God OTP management ──────────────────────────────────────────────────
+  // 400 (not 401): the session is valid, only the re-entered password is wrong —
+  // a 401 would trip the panel's global session-expired redirect.
   const g1 = await req('PATCH', '/api/operator/settings/god-otp', { newOtp: GOD_OTP, password: 'WrongPass@1' }, opCookie);
-  line('god OTP set w/ wrong password → 401', g1.status === 401, `HTTP ${g1.status}`);
+  line('god OTP set w/ wrong password → 400', g1.status === 400, `HTTP ${g1.status}`);
   const g2 = await req('PATCH', '/api/operator/settings/god-otp', { newOtp: '123', password: OP.password }, opCookie);
   line('god OTP bad format (3 digits) → 400', g2.status === 400, `HTTP ${g2.status}`);
   const g3 = await req('PATCH', '/api/operator/settings/god-otp', { newOtp: GOD_OTP, password: OP.password }, opCookie);

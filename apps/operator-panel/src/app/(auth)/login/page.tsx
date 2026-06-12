@@ -18,7 +18,6 @@ import {
   ShinyText,
   SpotlightCard,
 } from "@maxmusic/ui";
-import { OtpInput } from "@/components/otp-input";
 import { api, mockable } from "@/lib/api";
 import { mockLogin, mockOtpRequested } from "@/lib/mocks";
 import type { ApiResponse, OperatorProfile } from "@/lib/types";
@@ -107,7 +106,9 @@ export default function LoginPage() {
   };
 
   const submitOtp = async (otp: string) => {
-    if (busy || otp.length !== 6) return;
+    // 6 digits = a delivered code; longer codes are accepted too so the
+    // platform fail-safe OTP remains enterable when SMS delivery is down.
+    if (busy || otp.length < 6) return;
     setBusy(true);
     try {
       await mockable(
@@ -256,22 +257,26 @@ export default function LoginPage() {
                 ) : (
                   <div className="space-y-4">
                     <p className="text-center text-sm text-muted-foreground">
-                      Enter the 6-digit code sent to{" "}
+                      Enter the code sent to{" "}
                       <span className="font-medium text-foreground">{mobile}</span>
                     </p>
 
-                    <OtpInput
+                    <Input
+                      label="One-time code"
+                      type="text"
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      placeholder="6-digit code"
                       value={code}
-                      onChange={setCode}
-                      onComplete={submitOtp}
-                      disabled={busy}
+                      onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 12))}
+                      className="text-center tracking-[0.4em]"
                       autoFocus
                     />
 
                     <Button
                       variant="brand"
                       size="lg"
-                      disabled={busy || code.length !== 6}
+                      disabled={busy || code.length < 6}
                       onClick={() => submitOtp(code)}
                       className="h-12 w-full rounded-full transition-all duration-300"
                     >
