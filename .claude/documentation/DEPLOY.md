@@ -2,6 +2,87 @@
 
 > Plain-English walkthrough for deploying to a VPS. No DevOps experience needed.
 > Budget-optimised but not slow — the right size at each tier.
+> **§0 below = the FREE-TIER cloud path (Render + Vercel) that is ALREADY LIVE.** The VPS
+> sections (§1+) remain the production target (custom domains, no cold-start sleep).
+
+---
+
+## 0. FREE-TIER CLOUD DEPLOY (Render + Vercel) — ✅ LIVE since 2026-06-13
+
+The fastest zero-cost way to get a public, shareable demo. No server to manage.
+
+**Topology:** API on **Render** (one free Web Service) · the 4 panels on **Vercel** (4 separate
+projects) · DB on **MongoDB Atlas** (same cluster as dev).
+
+**Live URLs (current demo):**
+| Piece | URL |
+|---|---|
+| API | `https://maxmusic-api.onrender.com` |
+| Operator panel | `https://maxmusic-operator.vercel.app` |
+| Admin panel | `https://maxmusic-admin.vercel.app/<slug>/admin/login` |
+| Teacher panel | `https://maxmusic-teacher.vercel.app/<slug>/teacher/login` |
+| Student panel | `https://maxmusic-student.vercel.app/<slug>/student/login` |
+
+(demo `<slug>` = `demo-music-academy`.)
+
+### 0.1 Render (API)
+1. New → **Web Service** → connect the GitHub repo.
+2. **Root Directory:** `apps/api`  ·  **Build Command:** `npm install`  ·  **Start Command:** `npm start`.
+   - ⚠️ Do NOT let the build command be `npm install; npm run build` — the API has no build step,
+     so `npm run build` fails with `Missing script: "build"`.
+3. **Environment** — set these (the cookie one is mandatory, see 0.3):
+   ```
+   NODE_ENV=production
+   MONGO_URI=<your Atlas SRV string>
+   JWT_SECRET_OPERATOR / _ADMIN / _TEACHER / _STUDENT / _SOCKET / _GOD   (6 secrets)
+   COOKIE_SAME_SITE=none                ← REQUIRED for cross-domain login (0.3)
+   CORS_ORIGINS=https://maxmusic-operator.vercel.app,https://maxmusic-admin.vercel.app,https://maxmusic-teacher.vercel.app,https://maxmusic-student.vercel.app
+   CRON_TZ=Asia/Kolkata
+   MSG91_AUTH_KEY= / MSG91_TEMPLATE_ID=   (blank in demo → OTP not texted; use god-OTP)
+   ```
+4. **MongoDB Atlas → Network Access → `0.0.0.0/0`** (Render free tier has no static IP, so you
+   can't whitelist a single address). Without this the API can't reach Atlas → `MongooseServerSelectionError`.
+
+### 0.2 Vercel (the 4 panels — one project EACH)
+For each of `operator-panel`, `institution-admin-panel`, `institution-teacher-panel`,
+`institution-student-panel`:
+1. New Project → same repo → set **Root Directory** to that app's folder (Vercel auto-detects Turborepo
+   and runs `npm install` at the repo root).
+2. **Env var:** `NEXT_PUBLIC_API_URL=https://maxmusic-api.onrender.com`.
+3. Deploy. Each gets its own `*.vercel.app` URL — collect all 4 and put them in Render's `CORS_ORIGINS`.
+
+**Linux native-binary gotcha (already fixed in repo, commit `ac78ceb`):** the lockfile was generated on
+Windows and only listed Windows `.node` binaries. Vercel (Linux) builds then die on
+`Cannot find module '../lightningcss.linux-x64-gnu.node'`. Fix already applied: root `package.json`
+`optionalDependencies` lists BOTH OS variants for `@next/swc`, `@tailwindcss/oxide`, and `lightningcss`,
+and the lockfile was regenerated. Keep both variants when bumping these.
+
+### 0.3 ⚠️ THE cross-domain cookie fix (the one thing that blocks login)
+The API (`onrender.com`) and panels (`vercel.app`) are **different domains**, so login cookies are
+**cross-site**. Browsers silently DROP any cross-site cookie that is not `SameSite=None; Secure`.
+- **Symptom:** login POST returns `200`, but the browser stores zero cookies and the panel immediately
+  bounces back to `/login` (the follow-up `/me` is unauthenticated).
+- **Fix:** set **`COOKIE_SAME_SITE=none`** in Render env. The code honours it
+  (`apps/api/src/config/jwt.js` → `cookieOptions`) and then emits `Secure; SameSite=None`.
+- `NODE_ENV=production` **alone does not fix it** — prod defaults `sameSite=strict`, which is also
+  cross-site-blocked. You need `COOKIE_SAME_SITE=none` regardless of `NODE_ENV`.
+
+This is purely a same-domain-vs-cross-domain issue. On the VPS (§1+) all panels + API share ONE domain,
+so the default `strict` works and you do NOT set `COOKIE_SAME_SITE`.
+
+### 0.4 OTP / SMS on the free tier
+MSG91 is not configured in the demo, so normal OTP codes are not texted. Use the **god-OTP** (the
+SMS-outage failsafe) on any panel's OTP tab — current demo value **`88990011`**, set via Operator →
+Settings → god-OTP (requires operator password). god-OTP works against verified mobiles only
+(`mobileVerified`); it bypasses the code, not the identity. Change it before real launch and wire MSG91.
+
+### 0.5 Known limitation — cold start
+Render's free Web Service **sleeps after ~15 min idle**. The first request after a pause takes ~30–60s
+to wake; refresh once and it's fast. A paid Render tier (or the VPS) removes this.
+
+### 0.6 Client handoff
+A ready-to-send testing guide (links + password AND OTP credentials for all 4 panels, feature tour, FAQ)
+is generated by `scripts/make-client-testing-guide.py` → `Desktop/MaxMusic-Client-Testing-Guide.{docx,pdf}`.
 
 ---
 

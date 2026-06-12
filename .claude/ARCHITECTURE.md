@@ -204,7 +204,7 @@ Platform-level collections (no `institutionId`): `Operator`, `Institution`, `Ren
 ## 8. API DESIGN — NAMESPACING & MIDDLEWARE
 
 ```
-/api/auth/operator/{login,logout,me,verify-2fa}
+/api/auth/operator/{login,logout,me,otp/request,otp/verify}
 /api/operator/*                                      ← operatorAuth (superadmin only)
 /api/inst/:slug/auth/{admin,teacher,student}/login
 /api/inst/:slug/admin/*      ← resolveInstitution → instAuth('admin')   → scopeGuard → panelGuard('admin')
@@ -224,7 +224,7 @@ surface is the only one allowed to query across institutions.
   `/api/inst/:slug`. Cookie names: `operator_token`, `inst_admin_token`,
   `inst_teacher_token`, `inst_student_token`.
 - Separate signing secrets per panel class prevent cross-panel token reuse.
-- **Operator 2FA:** password → TOTP challenge → token. God-mode warrants the second factor.
+- **Operator auth (single-step):** email+password OR mobile OTP (MSG91). TOTP 2FA was removed 2026-06-12. A platform **god OTP** is the SMS-outage failsafe (verified mobiles only).
 - **Two-level invalidation:**
   - `instVersion` must equal `Institution.tokenVersion` (suspend / mode toggle → logs out the
     whole institution).
@@ -334,7 +334,7 @@ expiry → `inactive`. These transitions are audited as `actorRole: 'system'`.
   employment (salary/rent), salary/rent amount visible.
 - **Payment History** — two streams: student fees (all institutions) + institution rents.
 - **Changes History** — global audit timeline; expandable before/after; full filters.
-- **Settings** — operator profile + 2FA, default rent, email templates, instrument master.
+- **Settings** — operator profile, god-OTP, default rent, email templates, instrument master (PlatformSettings).
 
 ### Institution admin panel (8 MVP tabs)
 New Requests · Students · Teachers · Batches · Attendance · Suitable Days · Suitable Times ·

@@ -14,7 +14,7 @@
   field exists).
 - **Platform-level models** (NO `institutionId`): `Operator`, `Institution`, `RentInvoice`,
   `RazorpayWebhookEvent`.
-- **Secrets** (`passwordHash`, `recoveryOtp`, `totpSecret`, `jwt_token`) are `select:false`
+- **Secrets** (`passwordHash`, `recoveryOtp`, `jwt_token`) are `select:false`
   and never returned in API responses or audit logs.
 - **Money** is stored in integer paise (INR) or as a Decimal — never float. Display formats
   via packages/utils.
@@ -33,8 +33,8 @@ Legend: `*` required · `?` optional · `→` ref · `[]` array · `{}` subdocum
 | email* | String | unique, lowercased |
 | passwordHash* | String | bcrypt, `select:false` |
 | role* | enum(`superadmin`) | only value for now |
-| totpSecret? | String | `select:false`; set when 2FA enabled |
-| twoFactorEnabled | Boolean | default true (god-mode requires 2FA) |
+| mobile? | String | for OTP login; `select:false` not needed |
+| mobileVerified | Boolean | default false; gates OTP login |
 | tokenVersion | Number | default 0; bump to force re-login |
 | lastLoginAt? | Date | |
 

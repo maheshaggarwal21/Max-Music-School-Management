@@ -15,6 +15,14 @@
   dev servers (ports 4000 + 3000–3003), `run_in_background` Bash tasks, watchers. Leftover next-dev
   zombies serve hung responses and OOM the 7.5 GB box. Verify nothing is left listening before ending.
 - **Context compaction:** After any heavy task (full QA pass, multi-file fix session, long doc update) — update `.claude/` files and memory **first**, then run `/compact`, then continue. Never let `/compact` fire before the documentation step or the work is lost to the next session.
+- **COMPULSORY — Read before Edit (2026-06-13, user rule):** ALWAYS `Read` the exact file (the relevant
+  section is enough) IMMEDIATELY before every `Edit`/`Write`. The Edit tool matches against a tracked
+  in-memory snapshot that can go STALE — after several edits, a `/compact`, or a system event (e.g. a
+  date-change notice mid-turn) it returns `String not found` on text that is verifiably present (confirmed
+  via grep/Read). A fresh Read right before the Edit re-syncs the snapshot. If an Edit still fails on a
+  verbatim string you just Read, fall back to a Python byte-level `replace` (read→replace→write utf-8) —
+  do NOT keep retrying the same Edit. Also note: the Edit tool short-circuits with "old_string and new_string
+  are exactly the same" BEFORE checking presence, so an identical-string test never proves a match exists.
 
 ---
 
@@ -383,6 +391,52 @@ History of the old split is in `team-division.md` (reference only).
 > CSS/layout — no API/contract changes, so the mock-vs-live drift lesson does not apply. Verify by
 > redeploy (user tests on Vercel) or hard-refresh of a running panel; full mobile browser /qa still TODO.
 
+> **CLOUD DEPLOY — LIVE & LOGIN-VERIFIED (2026-06-13): ✅ free-tier production up on Render + Vercel.**
+> First public deployment. API on **Render** (free Web Service), each of the 4 panels on **Vercel** (separate
+> projects), DB on the same **Mongo Atlas** cluster as dev. Live URLs: API `maxmusic-api.onrender.com`;
+> operator `maxmusic-operator.vercel.app`; admin/teacher/student `maxmusic-{admin,teacher,student}.vercel.app`
+> (institution panels at `/<slug>/<panel>/login`, demo slug `demo-music-academy`). **All 4 panels log in and
+> hold session end-to-end — browser-verified (`/me` + dashboard 200, white-label clean).**
+> **THE deploy blocker + fix (cross-domain cookies):** API (`onrender.com`) and panels (`vercel.app`) are
+> DIFFERENT domains → login cookies are cross-site, and the browser silently DROPS any cookie that isn't
+> `SameSite=None; Secure`. Symptom: login POST returns 200 but devtools shows zero cookies, panel bounces
+> back to /login. **Fix = set env `COOKIE_SAME_SITE=none` on Render** (code already reads it:
+> `apps/api/src/config/jwt.js` `cookieOptions`). Setting `NODE_ENV=production` alone does NOT fix it (prod
+> defaults sameSite=`strict`, also cross-site-blocked) — `COOKIE_SAME_SITE=none` is required regardless.
+> Render env also needs all 4 vercel URLs in `CORS_ORIGINS` (comma-separated; server.js multi-origin allow-list
+> + `credentials:true`) — verified present for all 4. **Other deploy fixes already in repo:** (a) Render Build
+> Command = just `npm install` (API has NO build step — `npm run build` errors "Missing script: build");
+> (b) Atlas Network Access must allow `0.0.0.0/0` (Render free tier has no static IP); (c) Vercel needs LINUX
+> native binaries — root `package.json` optionalDependencies gained `@next/swc-linux-x64-gnu` /
+> `@tailwindcss/oxide-linux-x64-gnu` / `lightningcss-linux-x64-gnu` + lockfile regenerated (`ac78ceb`), else
+> Vercel build dies on `Cannot find module '../lightningcss.linux-x64-gnu.node'`. **Render free tier SLEEPS
+> after ~15min idle** → first request after a pause takes ~30–60s to wake (expected, not a bug; a paid tier
+> removes it). **god-OTP verified working WITHOUT MSG91** (its exact purpose — SMS-outage failsafe): checked
+> against `PlatformSettings.godOtp.hash`, no pending request needed, but identity still enforced
+> (`mobileVerified` required — god-OTP bypasses the CODE, not the IDENTITY). **god OTP re-set on the LIVE DB to
+> `88990011`** (was `99887766`); live-tested operator (mobile 9000000001) + teacher/admin/student panels → 200;
+> wrong/unverified → 401. **CLIENT TESTING GUIDE produced** for handoff:
+> `Desktop/MaxMusic-Client-Testing-Guide.{docx,pdf}` (generator `scripts/make-client-testing-guide.py`,
+> python-docx → Word→PDF via docx2pdf) — links + password AND OTP creds for all 4 panels (data-rich accounts:
+> teacher 7777777777, student 6666666666), feature tour, FAQ, white-label/sleep/demo-code explanations.
+> **Before real launch:** change god-OTP off `88990011`, configure MSG91 (so normal users get real codes), set
+> fresh passwords. Memory: `project_render_vercel_deploy`. **/ship (L9) is still HELD — this deploy was done by
+> the user from the existing branch; we pushed no new code.**
+
+> **DOC AUDIT + RECONCILE (2026-06-13, commit `39ac221`):** full pass over every `.claude/` + root
+> doc. Fixed TOTP-removal drift — TOTP 2FA was deleted 2026-06-12 but `ARCHITECTURE.md`,
+> `orchestrate/data-model.md` (Operator model), `orchestrate/codebase.md` (claimed `config/totp.js` +
+> `verify-2fa` still exist), `documentation/project_maxmusic.md`, and `feature-inventory/README.md` still
+> described it as current → all corrected to single-step **password|OTP + god-OTP**. Rewrote stale
+> `README.md` ("implementation not started" → built+deployed) and `TESTING-CREDENTIALS.md` (removed TOTP
+> §, added OTP/god-OTP, slug `demo-music-academy`, live cloud URLs). Deleted 6 untracked runtime `*.log`
+> files. **The canonical docs are trustworthy as of `39ac221`.** **Cleanup: `GSTACK_README.md` REMOVED
+> per user (44 KB tracked gstack readme, unreferenced, dup of `GSTACK.md`).** **Still KEPT by user choice
+> (do NOT remove): `max music screenshots/`** (7.2 MB untracked legacy source, captured in
+> `feature-inventory/legacy-maxmusic-screenshot-inventory.md`) **and the `.claude/documentation/` memory
+> trio** (`MEMORY.md`+`project_maxmusic.md`+`reference_gstack.md`, redundant in-repo index). Memory:
+> `project_render_vercel_deploy`.
+
 **H1 + H2 complete** — scaffold + 16 models + `packages/types` ready. **P1-R /plan-eng-review ✅** (5 model fixes). **P2-R /cso ✅** — 5 checkpoint Qs clean; .gitignore + lockfile + nodemailer@8 + node-cron@4 fixed. **Phase 3 (Operator APIs) ✅** — 9 controllers + 29 routes behind `operatorAuth`. **P3-R /review ✅** — 5 fixes (existingTeacher isolation guard, grant/revoke idempotency = no mass-logout, impersonate targetUserId required, audit accuracy). **Phase 4 (Institution APIs) ✅** — 10 controllers + 46 routes under `/api/inst/:slug/*`; every login JWT embeds `instVersion`+`userVersion`; brandingPublic-only (white-label). **P4-R /cso ✅** — 1 HIGH fixed (`config/refGuard.studentRefsValid` rejects cross-institution teacher/batch/instrument refs in student create/patch + request approve — they leaked foreign labels via populate); other 4 checkpoint Qs clean. **BACKEND COMPLETE (Phases 0-4).** **Frontend integration (current session) ✅** — Dev B's 4-panel frontend merged (PR #1). Dev A pass over it: (1) **H2 type migration** — all 4 apps now import the shared contract (`ApiResponse`/`Paginated`/`BrandingPublic` + enums) from `@maxmusic/types` instead of local mirrors (drift eliminated); (2) **`[slug]` routing fix** — the 3 institution panels were flat route-groups (`/dashboard`) that 404 behind nginx; restructured to real `app/[slug]/<panel>/(auth|dashboard)/*` with slug-aware nav, validated by `next build` ×4; (3) **multi-tenant slug fixes** — 401-redirect now `/<slug>/<panel>/login` (was hardcoded `/login`), teacher panel now derives slug from the URL (was a build-time `NEXT_PUBLIC_INSTITUTION_SLUG` env var = one-slug-per-build); (4) **new public `GET /api/inst/:slug/branding`** endpoint (controller + route + CONTRACTS) wired into all 3 login pages — clears the teacher TODO(H5) + student BLOCKED notes. **Phase 7 backend (current session) ✅** — (1) **Socket.io** (`config/socket.js`) shares the HTTP server, rooms keyed by institutionId; auth via a short-lived `JWT_SECRET_SOCKET` token minted by `GET /:slug/{admin,teacher}/realtime-token` (panel cookies are path-scoped so they can't reach `/socket.io`); room derives from the VERIFIED token only; `emitToInstitution` (already called by teacher `markAttendance`) now live → unblocks teacher `TODO(H3)` backend-side. (2) **Daily cron** (`config/cron.js`, 00:05 `CRON_TZ`) advances `active_soon→active`, expires validity→inactive (both audited per-student as the `system` actor), and flags overdue rent. (3) **Razorpay webhook** (`POST /api/webhooks/razorpay`, `WebhookController`) mounted pre-json with `express.raw`; timing-safe HMAC verify (fails closed), idempotent by paymentId+eventType, tenant from payload `notes`; read-only RazorpayWebhookEvent feed only. (4) **Branded mailer** (`config/mailer.js`) lazy transport, From-name = institution `branding.schoolName` (never "Max Music"), fails soft. All smoke-tested. Next: H4/H5 live wiring (`NEXT_PUBLIC_API_URL` + `/qa`); Dev B wires `TODO(H3)` client to realtime-token + Socket.io; then Phase 8 (QA + deploy).
 
 > **Isolation lesson (P4-R):** scoping the `:id` lookup by `institutionId` is NOT enough — client-supplied foreign-key refs (`teacherId`/`batchId`/`instrumentId`) in create/patch bodies must ALSO be verified to belong to the institution before persist, or a foreign id leaks the other tenant's data through Mongoose `populate` (which has no tenant filter). Always run refs through `config/refGuard`.
@@ -592,7 +646,13 @@ Phase 8 — Finish: live wiring + QA + deploy
                                            NOTE: ONE panel dev-server at a time (7.5GB RAM); KILL all
                                            listeners on 4000+3000–3003 before starting the stack.
   L9 /ship                               ⏸ HELD (user decision — not pushed)
-  L10–L13 nginx/TLS/PM2/VPS deploy       ← pending; guide: `.claude/documentation/DEPLOY.md`
+  CLOUD DEPLOY (free tier)               ✅ LIVE (2026-06-13) — Render(API)+Vercel(4 panels)+Atlas;
+                                           all 4 logins browser-verified; fix = COOKIE_SAME_SITE=none
+                                           (cross-domain cookies) + CORS_ORIGINS×4 + Linux swc/oxide/
+                                           lightningcss binaries (ac78ceb). god OTP live = 88990011.
+                                           Client testing guide: Desktop/MaxMusic-Client-Testing-Guide.{docx,pdf}
+  L10–L13 nginx/TLS/PM2/VPS deploy       ← still the PRODUCTION target (custom domains, no sleep);
+                                           guide: `.claude/documentation/DEPLOY.md` §0 (free tier) + full VPS
                                            (Hetzner CX22 ~$5/mo; Atlas+MSG91+Resend+S3+Razorpay)
   OPEN BUGS                              ONE P3/INFO left — god-token tokenVersion window (BUG-05).
                                            BUG-03 CLOSED 2026-06-12 by analysis (all ClassSession queries

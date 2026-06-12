@@ -7,19 +7,19 @@
 ## Panels & local URLs
 | Panel | URL | Login |
 |---|---|---|
-| Operator | http://localhost:3000/login | `admin@maxmusic.internal` / `Operator@123` + TOTP `HQWBOILHHMGEO7TA` |
-| Admin | http://localhost:3001/demo-music-school/admin/login | `teacher@demo.internal` / `Teacher@123` |
-| Teacher | http://localhost:3002/demo-music-school/teacher/login | mobile `9999999999` / `Teacher@123` |
-| Student | http://localhost:3003/demo-music-school/student/login | mobile `8888888888` / `Student@123` |
+| Operator | http://localhost:3000/login | `admin@maxmusic.internal` / `Operator@123` (or mobile OTP; TOTP removed) |
+| Admin | http://localhost:3001/demo-music-academy/admin/login | `teacher@demo.internal` / `Teacher@123` |
+| Teacher | http://localhost:3002/demo-music-academy/teacher/login | mobile `9999999999` / `Teacher@123` |
+| Student | http://localhost:3003/demo-music-academy/student/login | mobile `8888888888` / `Student@123` |
 
 ## Tab map (all panels)
 - **Operator (9 tabs):** Dashboard · Institutions (+detail: Overview/Actions/Rent) · Slug Requests · Students · Teachers · Payments (Fees/Rent) · Changes History · Settings
 - **Admin (10 tabs):** Dashboard · New Requests · Students · Teachers · Batches (+detail: Overview/Holiday/Attendance/Students) · Attendance · Payments (History/Reconciliation) · Suitable Days · Suitable Times · Settings
-- **Teacher (5 tabs):** Dashboard · My Batches (+detail) · Attendance · Holidays · Profile
-- **Student (5 tabs):** Dashboard · My Classes · Timetable · Payments · Profile
+- **Teacher (5 tabs):** Dashboard · My Batches (+detail, holidays folded in) · Attendance · Teachers · Profile
+- **Student (8 tabs):** Dashboard · My Classes · Timetable · Payments · Profile · Metronome · Guitar Chords · Contact Us
 
 ## Cross-panel E2E workflows (the QA spine)
-1. **Operator login + TOTP 2FA** → dashboard.
+1. **Operator login (password or OTP)** → dashboard.
 2. **Create institution** (operator) — managed AND autonomous variants.
 3. **Grant Admin Access** (scenario 3: managed → autonomous, owner gains admin panel; revoke = reverse).
 4. **Configure school** (admin): suitable-days pattern → suitable-time window → **create batch** (auto-named; with/without teacher = active/setting).
