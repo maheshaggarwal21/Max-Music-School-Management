@@ -147,6 +147,8 @@ exports.patch = async (req, res, next) => {
       if (req.body[f] !== undefined) teacher[f] = req.body[f];
     }
     if (typeof teacher.email === 'string') teacher.email = teacher.email.toLowerCase().trim();
+    // A changed mobile is an unproven number — OTP login must re-verify it.
+    if (String(before.mobile) !== String(teacher.mobile)) teacher.mobileVerified = false;
     await teacher.save();
 
     const changes = diff(before, teacher.toObject(), EDITABLE);

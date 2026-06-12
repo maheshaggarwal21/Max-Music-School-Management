@@ -259,14 +259,9 @@ export interface StudentSelf {
 }
 
 // ── Operator auth (mirrors CONTRACTS.md "AUTH") ───────────────────────────────
+// Single step (TOTP 2FA removed 2026-06-12): POST /login (email+password) or
+// POST /otp/request + /otp/verify (mobile) → data.operator + operator_token cookie.
 
-/** POST /api/auth/operator/login → data (when 2FA is required; no cookie yet). */
-export interface OperatorLoginChallenge {
-  twoFactorRequired: true;
-  challengeToken: string;
-}
-
-/** POST /api/auth/operator/verify-2fa → data.operator (cookie operator_token set). */
 export interface OperatorProfile {
   _id: string;
   name: string;
@@ -300,8 +295,14 @@ export interface InstrumentMasterItem {
 }
 
 export interface OperatorSettingsData {
-  profile: { name: string; email: string };
-  twoFactorEnabled: boolean;
+  profile: {
+    name: string;
+    email: string;
+    mobile: string | null;
+    mobileVerified: boolean;
+  };
+  /** Fail-safe master OTP status — the value itself is never returned. */
+  godOtp: { isSet: boolean; updatedAt: string | null; lastUsedAt: string | null };
   defaultRent: { amount: number; billingCycle: "monthly" };
   /** Platform master catalog (PlatformSettings singleton) — offered to every institution. */
   instruments: InstrumentMasterItem[];

@@ -176,6 +176,8 @@ exports.patch = async (req, res, next) => {
     for (const f of EDITABLE) {
       if (req.body[f] !== undefined) student[f] = req.body[f];
     }
+    // A changed mobile is an unproven number — OTP login must re-verify it.
+    if (String(before.mobile) !== String(student.mobile)) student.mobileVerified = false;
     await student.save();
 
     // Keep batch studentCount consistent on reassignment.

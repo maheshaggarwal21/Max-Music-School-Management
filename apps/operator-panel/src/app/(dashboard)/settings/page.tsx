@@ -1,15 +1,16 @@
 "use client";
-// P5-09 — Settings: profile card, 2FA enable flow (mock QR + verify code),
-// default rent, instruments chip manager. All via mockable().
+// Settings: profile card, mobile-for-OTP-login card, fail-safe master OTP card,
+// default rent, instruments chip manager. TOTP 2FA was removed (2026-06-12) —
+// operator login is single-step: email+password OR mobile OTP.
 
 import { useEffect, useState } from "react";
 import {
   IndianRupee,
+  KeySquare,
   Loader2,
   Music2,
   Plus,
-  QrCode,
-  ShieldCheck,
+  Smartphone,
   UserRound,
   X,
 } from "lucide-react";
@@ -29,50 +30,13 @@ import { Skeleton } from "@/components/skeleton";
 import { Tag } from "@/components/tag";
 import { api, mockable } from "@/lib/api";
 import {
-  mock2faEnableStart,
-  mock2faVerified,
+  mockGodOtpSaved,
+  mockMobileSet,
+  mockMobileVerified,
   mockSettings,
   mockSettingsSaved,
 } from "@/lib/mocks";
 import type { ApiResponse, OperatorSettingsData } from "@/lib/types";
-
-/** Deterministic mock QR placeholder — a pseudo-random 21×21 module grid. */
-function MockQr({ seed }: { seed: string }) {
-  const cells: boolean[] = [];
-  let h = 2166136261;
-  for (let i = 0; i < seed.length; i++) {
-    h ^= seed.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  for (let i = 0; i < 21 * 21; i++) {
-    h ^= h << 13;
-    h ^= h >>> 17;
-    h ^= h << 5;
-    cells.push((h & 4) === 0);
-  }
-  const isFinder = (r: number, c: number) =>
-    (r < 7 && c < 7) || (r < 7 && c > 13) || (r > 13 && c < 7);
-  return (
-    <div
-      className="grid aspect-square w-40 gap-px rounded-lg border border-border bg-background p-2"
-      style={{ gridTemplateColumns: "repeat(21, 1fr)" }}
-      aria-label="Mock QR code"
-    >
-      {cells.map((on, i) => {
-        const r = Math.floor(i / 21);
-        const c = i % 21;
-        const finderRing =
-          isFinder(r, c) &&
-          (r === 0 || r === 6 || c === 0 || c === 6 || r === 14 || r === 20 || c === 14 || c === 20 ||
-            (r >= 2 && r <= 4 && c >= 2 && c <= 4) ||
-            (r >= 2 && r <= 4 && c >= 16 && c <= 18) ||
-            (r >= 16 && r <= 18 && c >= 2 && c <= 4));
-        const filled = isFinder(r, c) ? finderRing : on;
-        return <span key={i} className={cn("aspect-square", filled ? "bg-foreground" : "bg-transparent")} />;
-      })}
-    </div>
-  );
-}
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState<OperatorSettingsData | null>(null);
@@ -83,11 +47,17 @@ export default function SettingsPage() {
   const [email, setEmail] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
 
-  // 2fa
-  const [enrolling, setEnrolling] = useState(false);
-  const [qrSecret, setQrSecret] = useState<string | null>(null);
-  const [verifyCode, setVerifyCode] = useState("");
-  const [verifying, setVerifying] = useState(false);
+  // mobile (for OTP login)
+  const [mobileInput, setMobileInput] = useState("");
+  const [mobileOtpSent, setMobileOtpSent] = useState(false);
+  const [mobileCode, setMobileCode] = useState("");
+  const [mobileBusy, setMobileBusy] = useState(false);
+
+  // fail-safe master OTP
+  const [godOtp, setGodOtp] = useState("");
+  const [godOtpConfirm, setGodOtpConfirm] = useState("");
+  const [godPassword, setGodPassword] = useState("");
+  const [savingGodOtp, setSavingGodOtp] = useState(false);
 
   // defaults
   const [rentRupees, setRentRupees] = useState("");
@@ -108,6 +78,7 @@ export default function SettingsPage() {
         setSettings(res.data);
         setName(res.data.profile.name);
         setEmail(res.data.profile.email);
+        setMobileInput(res.data.profile.mobile || "");
         setRentRupees(String(Math.round(res.data.defaultRent.amount / 100)));
       })
       .catch((err) => toast.error(err instanceof Error ? err.message : "Failed to load settings"))
@@ -135,7 +106,7 @@ export default function SettingsPage() {
     setSavingProfile(true);
     try {
       await patchSettings(
-        { ...settings, profile: { name: name.trim(), email: email.trim() } },
+        { ...settings, profile: { ...settings.profile, name: name.trim(), email: email.trim() } },
         "Profile saved"
       );
     } catch (err) {
@@ -145,46 +116,98 @@ export default function SettingsPage() {
     }
   };
 
-  const startEnroll = async () => {
-    setEnrolling(true);
+  // ── Mobile for OTP login: set (sends verification code) → confirm ──────────
+  const setMobile = async () => {
+    if (!settings) return;
+    if (!/^\d{10}$/.test(mobileInput)) {
+      toast.error("Enter a valid 10-digit mobile number");
+      return;
+    }
+    setMobileBusy(true);
     try {
       const res = await mockable(
         () =>
-          api.post<ApiResponse<{ otpauthUrl: string; secret: string }>>(
-            "/api/operator/settings/2fa/enable",
-            {}
+          api.post<ApiResponse<{ mobile: string; mobileVerified: boolean }>>(
+            "/api/operator/settings/mobile",
+            { mobile: mobileInput }
           ),
-        mock2faEnableStart()
+        mockMobileSet()
       );
-      if (res.data) setQrSecret(res.data.secret);
+      setSettings({
+        ...settings,
+        profile: { ...settings.profile, mobile: mobileInput, mobileVerified: false },
+      });
+      setMobileOtpSent(true);
+      setMobileCode("");
+      toast.info(res.message || "Verification code sent");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not start 2FA setup");
+      toast.error(err instanceof Error ? err.message : "Could not send verification code");
     } finally {
-      setEnrolling(false);
+      setMobileBusy(false);
     }
   };
 
-  const verifyEnroll = async (code: string) => {
-    if (!settings || verifying) return;
-    setVerifying(true);
+  const confirmMobile = async (code: string) => {
+    if (!settings || mobileBusy || code.length !== 6) return;
+    setMobileBusy(true);
     try {
       await mockable(
         () =>
-          api.post<ApiResponse<{ twoFactorEnabled: boolean }>>(
-            "/api/operator/settings/2fa/verify",
-            { code }
+          api.post<ApiResponse<{ mobile: string; mobileVerified: boolean }>>(
+            "/api/operator/settings/mobile/verify",
+            { otp: code }
           ),
-        mock2faVerified()
+        mockMobileVerified()
       );
-      setSettings({ ...settings, twoFactorEnabled: true });
-      setQrSecret(null);
-      setVerifyCode("");
-      toast.success("Two-factor authentication enabled");
+      setSettings({
+        ...settings,
+        profile: { ...settings.profile, mobileVerified: true },
+      });
+      setMobileOtpSent(false);
+      setMobileCode("");
+      toast.success("Mobile number verified — OTP login is now enabled");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Invalid code");
-      setVerifyCode("");
+      toast.error(err instanceof Error ? err.message : "Invalid or expired code");
+      setMobileCode("");
     } finally {
-      setVerifying(false);
+      setMobileBusy(false);
+    }
+  };
+
+  // ── Fail-safe master OTP (password-confirmed) ───────────────────────────────
+  const saveGodOtp = async () => {
+    if (!settings) return;
+    if (!/^\d{8,12}$/.test(godOtp)) {
+      toast.error("The fail-safe OTP must be 8–12 digits");
+      return;
+    }
+    if (godOtp !== godOtpConfirm) {
+      toast.error("The two OTP entries do not match");
+      return;
+    }
+    if (!godPassword) {
+      toast.error("Enter your password to confirm");
+      return;
+    }
+    setSavingGodOtp(true);
+    try {
+      const res = await mockable(
+        () =>
+          api.patch<ApiResponse<{ godOtp: OperatorSettingsData["godOtp"] }>>(
+            "/api/operator/settings/god-otp",
+            { newOtp: godOtp, password: godPassword }
+          ),
+        mockGodOtpSaved()
+      );
+      if (res.data) setSettings({ ...settings, godOtp: res.data.godOtp });
+      setGodOtp("");
+      setGodOtpConfirm("");
+      setGodPassword("");
+      toast.success("Fail-safe OTP updated");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update fail-safe OTP");
+    } finally {
+      setSavingGodOtp(false);
     }
   };
 
@@ -258,11 +281,13 @@ export default function SettingsPage() {
     );
   }
 
+  const mobileVerified = settings.profile.mobileVerified;
+
   return (
     <div className="relative flex flex-col gap-6 p-6">
       <PageHeader
         title="Settings"
-        subtitle="Operator profile · security · platform defaults"
+        subtitle="Operator profile · sign-in options · platform defaults"
       />
 
       <div className="grid items-start gap-6 lg:grid-cols-2">
@@ -295,78 +320,137 @@ export default function SettingsPage() {
           </div>
         </BlurFade>
 
-        {/* 2FA */}
+        {/* Mobile for OTP login */}
         <BlurFade delay={0.15}>
           <div className="relative overflow-hidden rounded-xl border border-border bg-card p-6 shadow-sm">
             <BorderBeam size={50} duration={10} delay={2} />
             <div className="flex items-start justify-between">
               <div>
                 <h2 className="flex items-center gap-2 text-sm font-semibold">
-                  <ShieldCheck className="h-4 w-4 text-brand" /> Two-factor authentication
+                  <Smartphone className="h-4 w-4 text-brand" /> Mobile number
                 </h2>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  TOTP is mandatory for operator logins.
+                  Used for OTP sign-in. Codes are sent only to a verified number.
                 </p>
               </div>
-              {settings.twoFactorEnabled ? <Tag>enabled</Tag> : <Tag tone="amber">disabled</Tag>}
+              {mobileVerified ? <Tag>verified</Tag> : <Tag tone="amber">unverified</Tag>}
             </div>
 
-            <div className="mt-5">
-              {settings.twoFactorEnabled && !qrSecret ? (
-                <div className="space-y-3">
-                  <p className="text-xs text-muted-foreground">
-                    Your authenticator is configured. 2FA is mandatory for operators and
-                    cannot be turned off — you can re-enroll a new device below.
-                  </p>
-                  <Button
-                    variant="outline"
-                    className="rounded-full"
-                    onClick={startEnroll}
-                    disabled={enrolling}
-                  >
-                    {enrolling ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
-                    Re-configure device
-                  </Button>
-                </div>
-              ) : qrSecret ? (
-                <div className="space-y-4">
-                  <div className="flex flex-wrap items-center gap-5">
-                    <MockQr seed={qrSecret} />
-                    <div className="space-y-2 text-xs text-muted-foreground">
-                      <p className="flex items-center gap-1.5 font-medium text-foreground">
-                        <QrCode className="h-3.5 w-3.5 text-brand" /> Scan with your authenticator
-                      </p>
-                      <p>Or enter the secret manually:</p>
-                      <p className="rounded-md bg-muted px-2.5 py-1.5 font-mono text-foreground">
-                        {qrSecret}
-                      </p>
-                    </div>
-                  </div>
-                  <div>
-                    <p className="mb-2 text-xs font-medium">Enter the 6-digit code to confirm</p>
-                    <OtpInput
-                      value={verifyCode}
-                      onChange={setVerifyCode}
-                      onComplete={verifyEnroll}
-                      disabled={verifying}
-                      className="justify-start"
-                    />
-                  </div>
-                </div>
-              ) : (
-                <Button variant="brand" className="rounded-full" onClick={startEnroll} disabled={enrolling}>
-                  {enrolling ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
-                  Enable 2FA
+            <div className="mt-5 space-y-4">
+              <div className="flex items-end gap-3">
+                <Input
+                  label="Mobile (10 digits)"
+                  type="tel"
+                  inputMode="numeric"
+                  placeholder="98765 43210"
+                  value={mobileInput}
+                  onChange={(e) => setMobileInput(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                  className="max-w-[220px]"
+                />
+                <Button
+                  variant={mobileVerified ? "outline" : "brand"}
+                  className="rounded-full"
+                  onClick={setMobile}
+                  disabled={mobileBusy}
+                >
+                  {mobileBusy && !mobileOtpSent ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : mobileVerified && mobileInput === (settings.profile.mobile || "") ? (
+                    "Re-verify"
+                  ) : (
+                    "Save & send code"
+                  )}
                 </Button>
+              </div>
+
+              {mobileOtpSent && (
+                <div>
+                  <p className="mb-2 text-xs font-medium">
+                    Enter the 6-digit code sent to {settings.profile.mobile}
+                  </p>
+                  <OtpInput
+                    value={mobileCode}
+                    onChange={setMobileCode}
+                    onComplete={confirmMobile}
+                    disabled={mobileBusy}
+                    className="justify-start"
+                  />
+                </div>
               )}
             </div>
           </div>
         </BlurFade>
 
-        {/* Default rent */}
+        {/* Fail-safe master OTP */}
         <BlurFade delay={0.2}>
           <div className="relative overflow-hidden rounded-xl border border-border bg-card p-6 shadow-sm">
             <BorderBeam size={50} duration={10} delay={4} />
+            <div className="flex items-start justify-between">
+              <div>
+                <h2 className="flex items-center gap-2 text-sm font-semibold">
+                  <KeySquare className="h-4 w-4 text-brand" /> Fail-safe master OTP
+                </h2>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  If SMS delivery is down, any user can sign into their own account
+                  with their mobile + this code. Stored hashed — it can be replaced
+                  but never viewed.
+                </p>
+              </div>
+              {settings.godOtp.isSet ? <Tag>set</Tag> : <Tag tone="amber">not set</Tag>}
+            </div>
+
+            {(settings.godOtp.updatedAt || settings.godOtp.lastUsedAt) && (
+              <p className="mt-2 text-[11px] text-muted-foreground">
+                {settings.godOtp.updatedAt &&
+                  `Last changed ${new Date(settings.godOtp.updatedAt).toLocaleString()}`}
+                {settings.godOtp.lastUsedAt &&
+                  ` · Last used ${new Date(settings.godOtp.lastUsedAt).toLocaleString()}`}
+              </p>
+            )}
+
+            <div className="mt-5 space-y-4">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Input
+                  label="New OTP (8–12 digits)"
+                  type="password"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  placeholder="••••••••"
+                  value={godOtp}
+                  onChange={(e) => setGodOtp(e.target.value.replace(/\D/g, "").slice(0, 12))}
+                />
+                <Input
+                  label="Confirm new OTP"
+                  type="password"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  placeholder="••••••••"
+                  value={godOtpConfirm}
+                  onChange={(e) => setGodOtpConfirm(e.target.value.replace(/\D/g, "").slice(0, 12))}
+                />
+              </div>
+              <Input
+                label="Your password (required to confirm)"
+                type="password"
+                autoComplete="current-password"
+                placeholder="••••••••"
+                value={godPassword}
+                onChange={(e) => setGodPassword(e.target.value)}
+              />
+              <div className="flex justify-end">
+                <Button variant="brand" onClick={saveGodOtp} disabled={savingGodOtp}>
+                  {savingGodOtp && <Loader2 className="h-4 w-4 animate-spin" />}
+                  {settings.godOtp.isSet ? "Replace fail-safe OTP" : "Set fail-safe OTP"}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </BlurFade>
+
+        {/* Default rent */}
+        <BlurFade delay={0.25}>
+          <div className="relative overflow-hidden rounded-xl border border-border bg-card p-6 shadow-sm">
+            <BorderBeam size={50} duration={10} delay={6} />
             <h2 className="flex items-center gap-2 text-sm font-semibold">
               <IndianRupee className="h-4 w-4 text-brand" /> Default rent
             </h2>
@@ -402,9 +486,9 @@ export default function SettingsPage() {
         </BlurFade>
 
         {/* Instruments */}
-        <BlurFade delay={0.25}>
+        <BlurFade delay={0.3}>
           <div className="relative overflow-hidden rounded-xl border border-border bg-card p-6 shadow-sm">
-            <BorderBeam size={50} duration={10} delay={6} />
+            <BorderBeam size={50} duration={10} delay={8} />
             <h2 className="flex items-center gap-2 text-sm font-semibold">
               <Music2 className="h-4 w-4 text-brand" /> Instruments master list
             </h2>

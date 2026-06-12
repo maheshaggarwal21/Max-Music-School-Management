@@ -10,6 +10,8 @@ export interface StudentSelf {
   displayId: string;
   name: string;
   mobile: string;
+  /** OTP login works only after the student verifies their number. */
+  mobileVerified: boolean;
   instrument: string | null;
   joinStatus: string;
   validityEnd: string | null;

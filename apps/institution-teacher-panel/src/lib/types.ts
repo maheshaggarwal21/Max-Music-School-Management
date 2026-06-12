@@ -41,6 +41,8 @@ export interface TeacherSelf {
   name: string;
   email: string;
   mobile: string;
+  /** OTP login works only after the teacher verifies their number. */
+  mobileVerified: boolean;
   status: "active" | "inactive";
   activeBatches: number;
 }

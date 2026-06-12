@@ -33,6 +33,55 @@ export default function ProfilePage() {
   const [guardianName, setGuardianName] = useState("");
   const [guardianMobile, setGuardianMobile] = useState("");
   const [saving, setSaving] = useState(false);
+  // verify-mobile flow (enables OTP sign-in); seeded from /me, then local.
+  const [verified, setVerified] = useState<boolean | null>(null);
+  const [verifySent, setVerifySent] = useState(false);
+  const [verifyCode, setVerifyCode] = useState("");
+  const [verifyBusy, setVerifyBusy] = useState(false);
+  const mobileVerified = verified ?? student?.mobileVerified ?? false;
+
+  async function requestVerify() {
+    setVerifyBusy(true);
+    try {
+      const res = await mockable(
+        () => api.post<ApiResponse>(studentPath("/verify-mobile/request"), {}),
+        { success: true, message: "Verification code sent", data: null } as ApiResponse,
+        400
+      );
+      setVerifySent(true);
+      setVerifyCode("");
+      toast.info(res.message || "Verification code sent");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not send the code");
+    } finally {
+      setVerifyBusy(false);
+    }
+  }
+
+  async function confirmVerify() {
+    if (verifyCode.length !== 6) {
+      toast.error("Enter the 6-digit code");
+      return;
+    }
+    setVerifyBusy(true);
+    try {
+      await mockable(
+        () =>
+          api.post<ApiResponse>(studentPath("/verify-mobile/confirm"), { otp: verifyCode }),
+        { success: true, message: "Mobile number verified", data: null } as ApiResponse,
+        400
+      );
+      setVerified(true);
+      setVerifySent(false);
+      setVerifyCode("");
+      toast.success("Mobile verified — OTP sign-in is now enabled");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Invalid or expired code");
+      setVerifyCode("");
+    } finally {
+      setVerifyBusy(false);
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -200,6 +249,66 @@ export default function ProfilePage() {
               <p className="-mt-2 text-[11px] text-muted-foreground">
                 Your mobile number is your sign-in ID — ask your school to change it.
               </p>
+
+              {/* Mobile verification — gate for OTP sign-in */}
+              <div className="rounded-xl border border-border bg-muted/30 p-4">
+                {mobileVerified ? (
+                  <p className="flex items-center gap-2 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                    <ShieldCheck className="h-4 w-4" />
+                    Mobile verified — you can sign in with an OTP.
+                  </p>
+                ) : (
+                  <div className="flex flex-col gap-3">
+                    <p className="text-xs text-muted-foreground">
+                      Verify your mobile number to enable OTP sign-in. We&apos;ll send a
+                      6-digit code to {formatPhone(student.mobile)}.
+                    </p>
+                    {!verifySent ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={requestVerify}
+                        disabled={verifyBusy}
+                        className="w-fit rounded-full px-5"
+                      >
+                        {verifyBusy ? "Sending…" : "Verify mobile"}
+                      </Button>
+                    ) : (
+                      <div className="flex flex-wrap items-end gap-3">
+                        <Input
+                          label="Verification code"
+                          type="text"
+                          inputMode="numeric"
+                          autoComplete="one-time-code"
+                          placeholder="6-digit code"
+                          value={verifyCode}
+                          onChange={(e) =>
+                            setVerifyCode(e.target.value.replace(/\D/g, "").slice(0, 6))
+                          }
+                          className="max-w-[180px] text-center tracking-[0.3em]"
+                        />
+                        <Button
+                          type="button"
+                          variant="brand"
+                          onClick={confirmVerify}
+                          disabled={verifyBusy || verifyCode.length !== 6}
+                          className="rounded-full px-5"
+                        >
+                          {verifyBusy ? "Checking…" : "Confirm"}
+                        </Button>
+                        <button
+                          type="button"
+                          onClick={requestVerify}
+                          disabled={verifyBusy}
+                          className="pb-2.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+                        >
+                          Resend code
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
               <Input
                 label="Email"
                 type="email"

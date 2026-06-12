@@ -31,6 +31,7 @@ export const MOCK_STUDENT: StudentSelf = {
   displayId: "SSM-STU-0042",
   name: "Aarav Sharma",
   mobile: "9876543210",
+  mobileVerified: true,
   instrument: "Piano",
   joinStatus: "active",
   validityEnd: "2026-07-14",

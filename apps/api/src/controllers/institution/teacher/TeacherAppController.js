@@ -56,7 +56,9 @@ exports.me = async (req, res, next) => {
     return ok(res, S.OK, {
       teacher: {
         _id: String(teacher._id), displayId: teacher.displayId, name: teacher.name,
-        email: teacher.email, mobile: teacher.mobile, status: teacher.status, activeBatches,
+        email: teacher.email, mobile: teacher.mobile,
+        mobileVerified: !!teacher.mobileVerified,
+        status: teacher.status, activeBatches,
       },
       institution: brandingPublic(req.institution),
     });
@@ -90,6 +92,9 @@ exports.updateMe = async (req, res, next) => {
     if (teacher.mobile !== mobile) changes.push({ field: 'mobile', from: teacher.mobile, to: mobile });
 
     if (changes.length) {
+      // A changed mobile is an UNPROVEN number — verification must be redone
+      // before OTP login works on it, or codes would go to an unverified phone.
+      if (teacher.mobile !== mobile) teacher.mobileVerified = false;
       teacher.email = email;
       teacher.mobile = mobile;
       await teacher.save();

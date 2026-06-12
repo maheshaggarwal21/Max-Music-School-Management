@@ -39,6 +39,7 @@ export const MOCK_TEACHER: TeacherSelf = {
   name: "Aarav Mehta",
   email: "aarav.mehta@example.com",
   mobile: "9876543210",
+  mobileVerified: true,
   status: "active",
   activeBatches: 5,
 };

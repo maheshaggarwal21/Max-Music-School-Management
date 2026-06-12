@@ -169,6 +169,8 @@ exports.update = async (req, res, next) => {
     if (typeof b.name === 'string' && b.name.trim())   s.name = b.name.trim();
     if (typeof b.mobile === 'string' && b.mobile.trim()) {
       if (!/^\d{10}$/.test(b.mobile.trim())) return badRequest(res, S.VALIDATION_FAILED);
+      // A changed mobile is an unproven number — OTP login must re-verify it.
+      if (s.mobile !== b.mobile.trim()) s.mobileVerified = false;
       s.mobile = b.mobile.trim();
     }
     if (b.joinStatus !== undefined) {

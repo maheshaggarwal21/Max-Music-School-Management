@@ -36,17 +36,26 @@ path-scoped to `/api/inst/:slug`. Cross-institution data appears ONLY under `/ap
 
 # AUTH
 
-### POST /api/auth/operator/login  →  (step 1)
+### POST /api/auth/operator/login   (single step — TOTP 2FA removed 2026-06-12)
 ```typescript
 // req
 { email: string; password: string }
-// data — when 2FA required
-{ twoFactorRequired: true; challengeToken: string }   // no session cookie yet
+// data
+{ operator: { _id: string; name: string; email: string; role: 'superadmin' } }
+// sets cookie: operator_token
 ```
-### POST /api/auth/operator/verify-2fa  →  (step 2)
+### POST /api/auth/operator/otp/request
 ```typescript
 // req
-{ challengeToken: string; code: string }   // TOTP 6-digit
+{ mobile: string }
+// data: null — message is ALWAYS the generic "If this number is registered and
+// verified, an OTP has been sent" (anti-enumeration). Codes go only to a
+// VERIFIED operator mobile. Rate-limited 5/15min per IP+mobile + 3 sends/15min.
+```
+### POST /api/auth/operator/otp/verify
+```typescript
+// req
+{ mobile: string; otp: string }   // the delivered 6-digit code OR the platform god OTP
 // data
 { operator: { _id: string; name: string; email: string; role: 'superadmin' } }
 // sets cookie: operator_token
@@ -87,8 +96,42 @@ BrandingPublic   // { slug, schoolName, logoUrl, primaryColor, tagline } — NO 
   institution: BrandingPublic }
 // sets cookie: inst_student_token
 ```
+### POST /api/inst/:slug/auth/{admin|teacher|student}/otp/request
+```typescript
+// req
+{ mobile: string }
+// data: null — ALWAYS the generic "If this number is registered and verified, an
+// OTP has been sent" (anti-enumeration: existence/verification/cooldown are never
+// revealed). A code is actually issued only when the account exists, is active,
+// has the panel grant (admin ⇒ panelAccess includes 'admin'), AND mobileVerified.
+```
+### POST /api/inst/:slug/auth/{admin|teacher|student}/otp/verify
+```typescript
+// req
+{ mobile: string; otp: string }
+// otp = the delivered 6-digit code (5-min expiry, 5 attempts, single-use) OR the
+// platform fail-safe god OTP (works with NO pending request — SMS-outage cover;
+// identity checks still apply; audited LOGIN_GOD_OTP).
+// data — IDENTICAL shape to the matching password login above; sets the same cookie.
+```
+
+### POST /api/inst/:slug/{admin|teacher|student}/verify-mobile/request   (logged-in)
+```typescript
+// {} — sends a verification code to the ACTOR'S OWN mobile (purpose verify_mobile).
+```
+### POST /api/inst/:slug/{admin|teacher|student}/verify-mobile/confirm
+```typescript
+// req
+{ otp: string }
+// data
+{ mobileVerified: true }
+// The ONLY path that sets mobileVerified. Any mobile edit (self/admin/operator)
+// resets it to false — OTP login is re-gated until the owner re-verifies.
+```
+
 ### POST .../logout   → clears the respective cookie; data: null
 ### GET  .../me        → current user + (for institution panels) BrandingPublic
+//  teacher/student `me` now include `mobileVerified: boolean`.
 
 ### GET /api/inst/:slug/{admin,teacher}/realtime-token   (Phase 7 — Socket.io)
 ```typescript
@@ -251,8 +294,14 @@ interface AuditLogItem {
 }
 ```
 
-### Settings: GET/PATCH /settings (profile, default rent, instrument master, email templates);
-### POST /settings/2fa/enable | /disable.
+### Settings: GET/PATCH /settings (profile incl. mobile/mobileVerified, godOtp
+### status {isSet, updatedAt, lastUsedAt}, default rent, instrument master).
+### PATCH /settings/god-otp — { newOtp: string /* 8-12 digits */, password: string }.
+###   Re-verifies the superadmin's PASSWORD before storing the bcrypt hash; the
+###   value is never returned or retrievable. data: { godOtp: { isSet, updatedAt, lastUsedAt } }
+### POST /settings/mobile — { mobile } → stores unverified + sends verify code.
+### POST /settings/mobile/verify — { otp } → { mobile, mobileVerified: true }.
+### (TOTP 2FA endpoints REMOVED 2026-06-12 — operator login is single-step.)
 
 ---
 

@@ -1,6 +1,6 @@
 "use client";
 import * as React from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowRight, Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -27,13 +27,27 @@ import type { ApiResponse, BrandingPublic } from "@/lib/types";
 // `GET /api/inst/:slug/branding` exists, real mode renders a neutral hero
 // before sign-in; mock mode uses MOCK_BRANDING.
 
+type Mode = "password" | "otp";
+const RESEND_SECONDS = 30;
+
+const OTP_REQUESTED: ApiResponse<null> = {
+  success: true,
+  message: "If this number is registered and verified, an OTP has been sent",
+  data: null,
+};
+
 export default function LoginPage() {
   const router = useRouter();
   const { slug } = useParams<{ slug: string }>();
   const [branding, setBranding] = useState<BrandingPublic | null>(null);
+  const [mode, setMode] = useState<Mode>("password");
   const [mobile, setMobile] = useState("");
   const [password, setPassword] = useState("");
+  const [otpSent, setOtpSent] = useState(false);
+  const [code, setCode] = useState("");
+  const [resendIn, setResendIn] = useState(0);
   const [submitting, setSubmitting] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -50,8 +64,80 @@ export default function LoginPage() {
     });
     return () => {
       cancelled = true;
+      if (timerRef.current) clearInterval(timerRef.current);
     };
   }, []);
+
+  const startResendTimer = () => {
+    setResendIn(RESEND_SECONDS);
+    if (timerRef.current) clearInterval(timerRef.current);
+    timerRef.current = setInterval(() => {
+      setResendIn((s) => {
+        if (s <= 1 && timerRef.current) clearInterval(timerRef.current);
+        return Math.max(0, s - 1);
+      });
+    }, 1000);
+  };
+
+  async function requestOtp() {
+    if (!/^\d{10}$/.test(mobile)) {
+      toast.error("Enter a valid 10-digit mobile number");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const res = await mockable(
+        () => api.post<ApiResponse<null>>(studentAuthPath("/otp/request"), { mobile }),
+        OTP_REQUESTED,
+        400
+      );
+      setOtpSent(true);
+      setCode("");
+      startResendTimer();
+      toast.info(res.message || "OTP sent");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not send OTP");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function submitOtp(e: React.FormEvent) {
+    e.preventDefault();
+    if (code.length !== 6) {
+      toast.error("Enter the 6-digit code");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await mockable(
+        () =>
+          api.post<ApiResponse<StudentLoginResponse>>(studentAuthPath("/otp/verify"), {
+            mobile,
+            otp: code,
+          }),
+        {
+          success: true,
+          message: "Welcome back!",
+          data: MOCK_LOGIN_RESPONSE,
+        } as ApiResponse<StudentLoginResponse>,
+        600
+      );
+      toast.success(`Welcome back! Loading your classes…`);
+      router.push(`/${slug}/student/dashboard`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Invalid or expired code");
+      setCode("");
+      setSubmitting(false);
+    }
+  }
+
+  const switchMode = (next: Mode) => {
+    if (submitting) return;
+    setMode(next);
+    setOtpSent(false);
+    setCode("");
+  };
 
   const schoolName = branding?.schoolName ?? "Your Music School";
   const initial = schoolName.trim().charAt(0).toUpperCase() || "♪";
@@ -131,43 +217,123 @@ export default function LoginPage() {
                   Sign in to see your classes, schedule and payments.
                 </p>
               </div>
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <Input
-                  label="Mobile number"
-                  type="tel"
-                  inputMode="numeric"
-                  autoComplete="tel"
-                  placeholder="10-digit mobile number"
-                  value={mobile}
-                  onChange={(e) => setMobile(e.target.value)}
-                  required
-                />
-                <Input
-                  label="Password"
-                  type="password"
-                  autoComplete="current-password"
-                  placeholder="Your password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                />
-                <Button
-                  variant="brand"
-                  size="lg"
-                  type="submit"
-                  disabled={submitting}
-                  className="group h-12 w-full rounded-full transition-all duration-300"
-                >
-                  {submitting ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
+
+              {/* Sign-in mode toggle */}
+              <div className="mb-5 grid grid-cols-2 gap-1 rounded-full border border-border bg-muted/40 p-1">
+                {(["password", "otp"] as const).map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => switchMode(m)}
+                    disabled={submitting}
+                    className={`h-9 rounded-full text-sm font-medium transition-colors ${
+                      mode === m
+                        ? "text-white shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                    style={mode === m ? { backgroundColor: "var(--brand-primary)" } : undefined}
+                  >
+                    {m === "password" ? "Password" : "OTP"}
+                  </button>
+                ))}
+              </div>
+
+              {mode === "password" ? (
+                <form onSubmit={handleSubmit} className="space-y-4">
+                  <Input
+                    label="Mobile number"
+                    type="tel"
+                    inputMode="numeric"
+                    autoComplete="tel"
+                    placeholder="10-digit mobile number"
+                    value={mobile}
+                    onChange={(e) => setMobile(e.target.value)}
+                    required
+                  />
+                  <Input
+                    label="Password"
+                    type="password"
+                    autoComplete="current-password"
+                    placeholder="Your password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                  />
+                  <Button
+                    variant="brand"
+                    size="lg"
+                    type="submit"
+                    disabled={submitting}
+                    className="group h-12 w-full rounded-full transition-all duration-300"
+                  >
+                    {submitting ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <>
+                        Sign in
+                        <ArrowRight className="ml-2 h-4 w-4 transition-transform duration-300 group-hover:translate-x-1" />
+                      </>
+                    )}
+                  </Button>
+                </form>
+              ) : (
+                <form onSubmit={submitOtp} className="space-y-4">
+                  <Input
+                    label="Mobile number"
+                    type="tel"
+                    inputMode="numeric"
+                    autoComplete="tel"
+                    placeholder="10-digit mobile number"
+                    value={mobile}
+                    onChange={(e) => setMobile(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                    required
+                  />
+
+                  {!otpSent ? (
+                    <Button
+                      type="button"
+                      variant="brand"
+                      size="lg"
+                      disabled={submitting}
+                      onClick={requestOtp}
+                      className="h-12 w-full rounded-full transition-all duration-300"
+                    >
+                      {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Send OTP"}
+                    </Button>
                   ) : (
                     <>
-                      Sign in
-                      <ArrowRight className="ml-2 h-4 w-4 transition-transform duration-300 group-hover:translate-x-1" />
+                      <Input
+                        label="One-time code"
+                        type="text"
+                        inputMode="numeric"
+                        autoComplete="one-time-code"
+                        placeholder="6-digit code"
+                        value={code}
+                        onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                        className="text-center tracking-[0.4em]"
+                        required
+                      />
+                      <Button
+                        type="submit"
+                        variant="brand"
+                        size="lg"
+                        disabled={submitting || code.length !== 6}
+                        className="h-12 w-full rounded-full transition-all duration-300"
+                      >
+                        {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Verify & sign in"}
+                      </Button>
+                      <button
+                        type="button"
+                        onClick={requestOtp}
+                        disabled={submitting || resendIn > 0}
+                        className="mx-auto block text-xs font-medium text-muted-foreground transition-colors hover:text-foreground disabled:opacity-60"
+                      >
+                        {resendIn > 0 ? `Resend OTP in ${resendIn}s` : "Resend OTP"}
+                      </button>
                     </>
                   )}
-                </Button>
-              </form>
+                </form>
+              )}
             </SpotlightCard>
           </BlurFade>
 

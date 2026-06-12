@@ -61,6 +61,7 @@ exports.me = async (req, res, next) => {
     return ok(res, S.OK, {
       student: {
         _id: String(s._id), displayId: s.displayId, name: s.name, mobile: s.mobile,
+        mobileVerified: !!s.mobileVerified,
         email: s.email || null,
         guardianName: s.guardianName || null,
         guardianMobile: s.guardianMobile || null,

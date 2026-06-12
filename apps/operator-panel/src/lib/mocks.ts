@@ -15,7 +15,6 @@ import type {
   InstitutionDetail,
   InstitutionListItem,
   OperatorDashboardData,
-  OperatorLoginChallenge,
   OperatorPaymentRow,
   OperatorProfile,
   OperatorSettingsData,
@@ -53,14 +52,13 @@ export const MOCK_OPERATOR: OperatorProfile = {
   role: "superadmin",
 };
 
-export const mockLoginChallenge = (): ApiResponse<OperatorLoginChallenge> =>
-  ok(
-    { twoFactorRequired: true, challengeToken: "mock-challenge-token-7f3a" },
-    "Enter the 6-digit code from your authenticator app"
-  );
-
-export const mockVerify2fa = (): ApiResponse<{ operator: OperatorProfile }> =>
+// Single-step login (TOTP 2FA removed): password or OTP verify both return the
+// operator directly with the session cookie.
+export const mockLogin = (): ApiResponse<{ operator: OperatorProfile }> =>
   ok({ operator: MOCK_OPERATOR }, "Welcome back");
+
+export const mockOtpRequested = (): ApiResponse<null> =>
+  ok(null, "If this number is registered and verified, an OTP has been sent");
 
 export const mockMe = (): ApiResponse<{ operator: OperatorProfile }> =>
   ok({ operator: MOCK_OPERATOR });
@@ -1029,8 +1027,13 @@ export const MOCK_FEE_TREND = [
 // ── Settings ──────────────────────────────────────────────────────────────────
 
 export const MOCK_SETTINGS: OperatorSettingsData = {
-  profile: { name: MOCK_OPERATOR.name, email: MOCK_OPERATOR.email },
-  twoFactorEnabled: true,
+  profile: {
+    name: MOCK_OPERATOR.name,
+    email: MOCK_OPERATOR.email,
+    mobile: "9000000001",
+    mobileVerified: true,
+  },
+  godOtp: { isSet: true, updatedAt: "2026-06-01T10:00:00.000Z", lastUsedAt: null },
   defaultRent: { amount: 2500000, billingCycle: "monthly" },
   instruments: [
     { _id: "ins_01", name: "Sitar", isActive: true },
@@ -1051,17 +1054,17 @@ export const mockSettings = (): ApiResponse<OperatorSettingsData> => ok(MOCK_SET
 export const mockSettingsSaved = (settings: OperatorSettingsData): ApiResponse<OperatorSettingsData> =>
   ok(settings, "Settings saved");
 
-export const mock2faEnableStart = (): ApiResponse<{ otpauthUrl: string; secret: string }> =>
+export const mockGodOtpSaved = (): ApiResponse<{ godOtp: OperatorSettingsData["godOtp"] }> =>
   ok(
-    { otpauthUrl: "otpauth://totp/OperatorConsole:operator?secret=JBSWY3DPEHPK3PXP", secret: "JBSW Y3DP EHPK 3PXP" },
-    "Scan the QR with your authenticator app"
+    { godOtp: { isSet: true, updatedAt: "2026-06-12T10:00:00.000Z", lastUsedAt: null } },
+    "Fail-safe OTP updated"
   );
 
-export const mock2faVerified = (): ApiResponse<{ twoFactorEnabled: boolean }> =>
-  ok({ twoFactorEnabled: true }, "Two-factor authentication enabled");
+export const mockMobileSet = (): ApiResponse<{ mobile: string; mobileVerified: boolean }> =>
+  ok({ mobile: "9000000001", mobileVerified: false }, "If this number is registered and verified, an OTP has been sent");
 
-export const mock2faDisabled = (): ApiResponse<{ twoFactorEnabled: boolean }> =>
-  ok({ twoFactorEnabled: false }, "Two-factor authentication disabled");
+export const mockMobileVerified = (): ApiResponse<{ mobile: string; mobileVerified: boolean }> =>
+  ok({ mobile: "9000000001", mobileVerified: true }, "Mobile number verified");
 
 // ── Shared select options (filters) ───────────────────────────────────────────
 

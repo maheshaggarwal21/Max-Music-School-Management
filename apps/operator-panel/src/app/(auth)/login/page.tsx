@@ -1,12 +1,13 @@
 "use client";
-// P5-02 — Operator login: email+password → TOTP 2FA (6-digit, paste support).
-// Mirrors CONTRACTS.md: POST /api/auth/operator/login → { twoFactorRequired,
-// challengeToken }; POST /api/auth/operator/verify-2fa → cookie + operator.
+// Operator login — SINGLE STEP (TOTP 2FA removed 2026-06-12), two alternatives:
+//   • email + password           → POST /api/auth/operator/login
+//   • mobile OTP (MSG91)         → POST /api/auth/operator/otp/request + /verify
+// Both return { operator } with the operator_token cookie set.
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
-import { ArrowLeft, ArrowRight, KeyRound, Loader2, ShieldCheck } from "lucide-react";
+import { ArrowRight, KeyRound, Loader2, Smartphone } from "lucide-react";
 import { toast } from "sonner";
 import {
   BlurFade,
@@ -19,21 +20,47 @@ import {
 } from "@maxmusic/ui";
 import { OtpInput } from "@/components/otp-input";
 import { api, mockable } from "@/lib/api";
-import { mockLoginChallenge, mockVerify2fa } from "@/lib/mocks";
-import type { ApiResponse, OperatorLoginChallenge, OperatorProfile } from "@/lib/types";
+import { mockLogin, mockOtpRequested } from "@/lib/mocks";
+import type { ApiResponse, OperatorProfile } from "@/lib/types";
 
-type Step = "credentials" | "totp";
+type Mode = "password" | "otp";
+const RESEND_SECONDS = 30;
 
 export default function LoginPage() {
   const router = useRouter();
-  const [step, setStep] = useState<Step>("credentials");
+  const [mode, setMode] = useState<Mode>("password");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [challengeToken, setChallengeToken] = useState("");
+  const [mobile, setMobile] = useState("");
+  const [otpSent, setOtpSent] = useState(false);
   const [code, setCode] = useState("");
+  const [resendIn, setResendIn] = useState(0);
   const [busy, setBusy] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const submitCredentials = async (e: React.FormEvent) => {
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, []);
+
+  const startResendTimer = () => {
+    setResendIn(RESEND_SECONDS);
+    if (timerRef.current) clearInterval(timerRef.current);
+    timerRef.current = setInterval(() => {
+      setResendIn((s) => {
+        if (s <= 1 && timerRef.current) clearInterval(timerRef.current);
+        return Math.max(0, s - 1);
+      });
+    }, 1000);
+  };
+
+  const finishLogin = () => {
+    toast.success("Welcome back");
+    router.push("/dashboard");
+  };
+
+  const submitPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !password) {
       toast.error("Enter your email and password");
@@ -41,44 +68,69 @@ export default function LoginPage() {
     }
     setBusy(true);
     try {
-      const res = await mockable(
+      await mockable(
         () =>
-          api.post<ApiResponse<OperatorLoginChallenge>>("/api/auth/operator/login", {
+          api.post<ApiResponse<{ operator: OperatorProfile }>>("/api/auth/operator/login", {
             email,
             password,
           }),
-        mockLoginChallenge()
+        mockLogin()
       );
-      if (res.data?.twoFactorRequired) {
-        setChallengeToken(res.data.challengeToken);
-        setStep("totp");
-      }
+      finishLogin();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Login failed");
+      setBusy(false);
+    }
+  };
+
+  const requestOtp = async () => {
+    if (!/^\d{10}$/.test(mobile)) {
+      toast.error("Enter a valid 10-digit mobile number");
+      return;
+    }
+    setBusy(true);
+    try {
+      const res = await mockable(
+        () =>
+          api.post<ApiResponse<null>>("/api/auth/operator/otp/request", { mobile }),
+        mockOtpRequested()
+      );
+      setOtpSent(true);
+      setCode("");
+      startResendTimer();
+      toast.info(res.message || "OTP sent");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not send OTP");
     } finally {
       setBusy(false);
     }
   };
 
-  const submitCode = async (totp: string) => {
-    if (busy) return;
+  const submitOtp = async (otp: string) => {
+    if (busy || otp.length !== 6) return;
     setBusy(true);
     try {
       await mockable(
         () =>
           api.post<ApiResponse<{ operator: OperatorProfile }>>(
-            "/api/auth/operator/verify-2fa",
-            { challengeToken, code: totp }
+            "/api/auth/operator/otp/verify",
+            { mobile, otp }
           ),
-        mockVerify2fa()
+        mockLogin()
       );
-      toast.success("Welcome back");
-      router.push("/dashboard");
+      finishLogin();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Invalid code");
+      toast.error(err instanceof Error ? err.message : "Invalid or expired code");
       setCode("");
       setBusy(false);
     }
+  };
+
+  const switchMode = (next: Mode) => {
+    if (busy) return;
+    setMode(next);
+    setOtpSent(false);
+    setCode("");
   };
 
   return (
@@ -93,35 +145,46 @@ export default function LoginPage() {
         <SpotlightCard className="relative overflow-hidden rounded-2xl border border-border bg-card p-8 shadow-xl">
           <BorderBeam size={70} duration={8} />
 
-          <div className="mb-8 flex flex-col items-center gap-2 text-center">
+          <div className="mb-6 flex flex-col items-center gap-2 text-center">
             <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-brand/10">
-              {step === "credentials" ? (
+              {mode === "password" ? (
                 <KeyRound className="h-6 w-6 text-brand" />
               ) : (
-                <ShieldCheck className="h-6 w-6 text-brand" />
+                <Smartphone className="h-6 w-6 text-brand" />
               )}
             </span>
             <GradientText className="text-2xl font-bold">Operator Console</GradientText>
-            <ShinyText
-              text={
-                step === "credentials"
-                  ? "Sign in to manage the platform"
-                  : "Two-factor verification"
-              }
-              speed={5}
-              className="text-sm"
-            />
+            <ShinyText text="Sign in to manage the platform" speed={5} className="text-sm" />
+          </div>
+
+          {/* Mode toggle */}
+          <div className="mb-6 grid grid-cols-2 gap-1 rounded-full border border-border bg-muted/40 p-1">
+            {(["password", "otp"] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => switchMode(m)}
+                disabled={busy}
+                className={`h-9 rounded-full text-sm font-medium transition-colors ${
+                  mode === m
+                    ? "bg-brand text-white shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {m === "password" ? "Password" : "OTP"}
+              </button>
+            ))}
           </div>
 
           <AnimatePresence mode="wait" initial={false}>
-            {step === "credentials" ? (
+            {mode === "password" ? (
               <motion.form
-                key="credentials"
+                key="password"
                 initial={{ opacity: 0, x: -24, filter: "blur(4px)" }}
                 animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
                 exit={{ opacity: 0, x: -24, filter: "blur(4px)" }}
                 transition={{ duration: 0.25, ease: "easeOut" }}
-                onSubmit={submitCredentials}
+                onSubmit={submitPassword}
                 className="space-y-4"
               >
                 <Input
@@ -153,7 +216,7 @@ export default function LoginPage() {
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
                     <>
-                      Continue
+                      Sign in
                       <ArrowRight className="ml-2 h-4 w-4 transition-transform duration-300 group-hover:translate-x-1" />
                     </>
                   )}
@@ -161,48 +224,70 @@ export default function LoginPage() {
               </motion.form>
             ) : (
               <motion.div
-                key="totp"
+                key="otp"
                 initial={{ opacity: 0, x: 24, filter: "blur(4px)" }}
                 animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
                 exit={{ opacity: 0, x: 24, filter: "blur(4px)" }}
                 transition={{ duration: 0.25, ease: "easeOut" }}
-                className="space-y-6"
+                className="space-y-4"
               >
-                <p className="text-center text-sm text-muted-foreground">
-                  Enter the 6-digit code from your authenticator app for{" "}
-                  <span className="font-medium text-foreground">{email}</span>
-                </p>
-
-                <OtpInput
-                  value={code}
-                  onChange={setCode}
-                  onComplete={submitCode}
-                  disabled={busy}
-                  autoFocus
+                <Input
+                  label="Mobile number"
+                  type="tel"
+                  inputMode="numeric"
+                  autoComplete="tel"
+                  placeholder="98765 43210"
+                  value={mobile}
+                  onChange={(e) => setMobile(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                  disabled={otpSent && resendIn > 0}
+                  required
                 />
 
-                <Button
-                  variant="brand"
-                  size="lg"
-                  disabled={busy || code.length !== 6}
-                  onClick={() => submitCode(code)}
-                  className="h-12 w-full rounded-full transition-all duration-300"
-                >
-                  {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : "Verify & sign in"}
-                </Button>
+                {!otpSent ? (
+                  <Button
+                    variant="brand"
+                    size="lg"
+                    disabled={busy}
+                    onClick={requestOtp}
+                    className="h-12 w-full rounded-full transition-all duration-300"
+                  >
+                    {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : "Send OTP"}
+                  </Button>
+                ) : (
+                  <div className="space-y-4">
+                    <p className="text-center text-sm text-muted-foreground">
+                      Enter the 6-digit code sent to{" "}
+                      <span className="font-medium text-foreground">{mobile}</span>
+                    </p>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    setStep("credentials");
-                    setCode("");
-                  }}
-                  disabled={busy}
-                  className="mx-auto flex items-center gap-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
-                >
-                  <ArrowLeft className="h-3.5 w-3.5" />
-                  Back to credentials
-                </button>
+                    <OtpInput
+                      value={code}
+                      onChange={setCode}
+                      onComplete={submitOtp}
+                      disabled={busy}
+                      autoFocus
+                    />
+
+                    <Button
+                      variant="brand"
+                      size="lg"
+                      disabled={busy || code.length !== 6}
+                      onClick={() => submitOtp(code)}
+                      className="h-12 w-full rounded-full transition-all duration-300"
+                    >
+                      {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : "Verify & sign in"}
+                    </Button>
+
+                    <button
+                      type="button"
+                      onClick={requestOtp}
+                      disabled={busy || resendIn > 0}
+                      className="mx-auto block text-xs font-medium text-muted-foreground transition-colors hover:text-foreground disabled:opacity-60"
+                    >
+                      {resendIn > 0 ? `Resend OTP in ${resendIn}s` : "Resend OTP"}
+                    </button>
+                  </div>
+                )}
               </motion.div>
             )}
           </AnimatePresence>
