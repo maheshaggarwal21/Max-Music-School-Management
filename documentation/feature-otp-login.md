@@ -1,6 +1,12 @@
 # Feature: OTP Login (all 4 panels) + Fail-safe Master OTP
 
-> Planned 2026-06-12. Status tracked in `.claude/CLAUDE.md` progress block.
+> Planned + SHIPPED 2026-06-12 (commits `0590ed8` backend, `c98b0fe` frontend,
+> `5112e7c` QA fixes). API smoke: `scripts/verify-otp.js` — 27/27 PASS. Browser
+> QA: all 4 panels verified live (OTP login, god-OTP login, verify-mobile chain,
+> god-OTP rotation with password confirm, white-label clean). QA found 2 bugs,
+> both fixed in `5112e7c`: 6-digit-capped code inputs blocked the 8-12-digit god
+> OTP; god-OTP wrong-password 401 tripped the global session-expired redirect
+> (now 400).
 
 ## Requirements (user-stated)
 

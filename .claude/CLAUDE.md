@@ -239,8 +239,20 @@ History of the old split is in `team-division.md` (reference only).
 > targetDate}` index covers all of them. Remaining lag is environmental: dev-mode compiles + 7.5 GB RAM +
 > remote Atlas RTT (~100-500 ms/call) — production build on the VPS removes the first two.
 
-> **FEATURE: OTP login (2026-06-12, IN PROGRESS).** OTP as an alternative login on all 4 panels +
-> fail-safe **god OTP**. Full plan: `documentation/feature-otp-login.md`. Key decisions: (1) OTPs only
+> **FEATURE: OTP login (2026-06-12): ✅ COMPLETE — backend + frontend + browser QA, commits
+> `0590ed8`/`c98b0fe`/`5112e7c`.** OTP as an alternative login on all 4 panels + fail-safe **god OTP**;
+> TOTP 2FA removed entirely. Full plan: `documentation/feature-otp-login.md`. Verified: 27/27 API smoke
+> (`scripts/verify-otp.js`) + live browser on all 4 panels (operator password/OTP login, god-OTP replace
+> w/ password confirm; admin OTP + god-OTP login → dashboard + `LOGIN_GOD_OTP` audit; teacher
+> verify-mobile chain request→confirm→OTP-login; student OTP login; white-label clean; all 4 `next build`
+> PASS). **2 QA bugs found+fixed (`5112e7c`):** (a) login code inputs capped at 6 digits — the 8-12-digit
+> god OTP could never be typed → inputs accept ≤12, submit from 6, operator login swapped OtpInput for a
+> plain input; (b) wrong re-entered password on god-OTP change returned 401 → tripped the panel-wide
+> session-expired redirect → now 400. **Mobile-edit rule: EVERY mobile change (teacher self / admin
+> patch / operator god-mode, 6 sites) resets `mobileVerified=false`** — a changed number must be
+> re-proven before OTP login. Dev: console SMS provider logs codes to the API console; seeded dev
+> accounts pre-verified (owner 9999999999, student 8888888888, operator mobile 9000000001); demo inst
+> slug is now `demo-music-academy` (slug-change QA renamed it; scripts updated). Key decisions: (1) OTPs only
 > to/with **verified mobiles** (`mobileVerified` on Teacher/Student/Operator; self-serve verify flow,
 > purpose `verify_mobile`); (2) new `LoginOtp` model — bcrypt-hashed 6-digit codes, 5-min TTL index,
 > 5 attempts, single active per (user,panel,purpose), anti-enumeration generic responses; (3) god OTP =
