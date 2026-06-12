@@ -18,7 +18,7 @@ const LoginOtpSchema = new mongoose.Schema(
     panel:         { type: String, enum: ['operator', 'admin', 'teacher', 'student'], required: true },
     userId:        { type: mongoose.Schema.Types.ObjectId, required: true },
     mobile:        { type: String, required: true, trim: true },
-    purpose:       { type: String, enum: ['login', 'verify_mobile'], required: true },
+    purpose:       { type: String, enum: ['login', 'verify_mobile', 'reset_confirm'], required: true },
     otpHash:       { type: String, required: true, select: false },
     attempts:      { type: Number, default: 0 },
     consumedAt:    { type: Date, default: null },

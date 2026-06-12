@@ -5,6 +5,8 @@ const Teacher  = require('../../../models/Teacher');
 const Student  = require('../../../models/Student');
 const Operator = require('../../../models/Operator');
 const { hash, compare, randomTempPassword } = require('../../../config/password');
+const { issueOtp, verifyOtp } = require('../../../config/otp');
+const { sendOtpSms } = require('../../../config/sms');
 const { ok, badRequest, notFound, paginated } = require('../../../config/helper');
 const { auditLog, actorFromReq } = require('../../../config/auditLog');
 const S = require('../../../config/strings');
@@ -57,6 +59,37 @@ async function verifyActorPassword(req, password) {
   return !!(t && (await compare(password, t.passwordHash)));
 }
 
+// Step-up OTP for reset confirmation — sent to the ACTING ADMIN'S OWN verified
+// mobile (never the target's). Impersonating operators use their password
+// instead. Strict: the god OTP is NOT accepted here.
+exports.resetOtpRequest = async (req, res, next) => {
+  try {
+    if (req.actor && req.actor.godMode) return badRequest(res, S.VALIDATION_FAILED);
+
+    const t = await Teacher.findOne({ _id: req.actor._id, institutionId: req.institution._id });
+    if (!t) return notFound(res, S.NOT_FOUND);
+    if (!t.mobile || !t.mobileVerified) return badRequest(res, S.MOBILE_NOT_VERIFIED);
+
+    const { code, cooldown } = await issueOtp({
+      institutionId: req.institution._id, panel: 'admin', user: t, mobile: t.mobile, purpose: 'reset_confirm',
+    });
+    if (cooldown) return badRequest(res, S.AUTH_TOO_MANY);
+    await sendOtpSms({ mobile: t.mobile, otp: code });
+
+    return ok(res, S.OTP_SENT_GENERIC, null);
+  } catch (err) {
+    next(err);
+  }
+};
+
+async function verifyActorOtp(req, otp) {
+  if (req.actor && req.actor.godMode) return false; // impersonation → password only
+  return verifyOtp({
+    institutionId: req.institution._id, panel: 'admin',
+    userId: req.actor._id, purpose: 'reset_confirm', code: otp,
+  });
+}
+
 exports.list = async (req, res, next) => {
   try {
     const role = String(req.query.role || '').toLowerCase();
@@ -91,11 +124,16 @@ exports.resetPassword = async (req, res, next) => {
     if (!Model || !mongoose.isValidObjectId(req.params.id)) return badRequest(res, S.VALIDATION_FAILED);
 
     const password = (req.body && req.body.password) || '';
-    if (!password) return badRequest(res, S.VALIDATION_FAILED);
+    const otp      = (req.body && req.body.otp) || '';
+    if (!password && !otp) return badRequest(res, S.VALIDATION_FAILED);
 
-    // 400, not 401 — the SESSION is valid; only the re-entered password is wrong.
-    if (!(await verifyActorPassword(req, password))) {
-      return badRequest(res, S.PASSWORD_INCORRECT);
+    // 400, not 401 — the SESSION is valid; only the re-confirmation failed.
+    if (password) {
+      if (!(await verifyActorPassword(req, password))) {
+        return badRequest(res, S.PASSWORD_INCORRECT);
+      }
+    } else if (!(await verifyActorOtp(req, otp))) {
+      return badRequest(res, S.OTP_INVALID);
     }
 
     const user = await Model.findOne({ _id: req.params.id, institutionId: req.institution._id });

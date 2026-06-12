@@ -5,6 +5,8 @@ const Teacher  = require('../../models/Teacher');
 const Student  = require('../../models/Student');
 const Operator = require('../../models/Operator');
 const { hash, compare, randomTempPassword } = require('../../config/password');
+const { issueOtp, verifyOtp } = require('../../config/otp');
+const { sendOtpSms } = require('../../config/sms');
 const { ok, badRequest, notFound, paginated } = require('../../config/helper');
 const { auditLog, actorFromReq } = require('../../config/auditLog');
 const S = require('../../config/strings');
@@ -82,8 +84,29 @@ exports.list = async (req, res, next) => {
   }
 };
 
-// Reset requires the operator to RE-ENTER HIS PASSWORD — a stolen operator
-// session alone cannot mint credentials for other people's accounts.
+// Step-up OTP for reset confirmation — sent to the OPERATOR'S OWN verified
+// mobile (never the target's). Strict: the god OTP is NOT accepted here.
+exports.resetOtpRequest = async (req, res, next) => {
+  try {
+    const op = await Operator.findById(req.operator._id);
+    if (!op) return notFound(res, S.NOT_FOUND);
+    if (!op.mobile || !op.mobileVerified) return badRequest(res, S.MOBILE_NOT_VERIFIED);
+
+    const { code, cooldown } = await issueOtp({
+      institutionId: null, panel: 'operator', user: op, mobile: op.mobile, purpose: 'reset_confirm',
+    });
+    if (cooldown) return badRequest(res, S.AUTH_TOO_MANY);
+    await sendOtpSms({ mobile: op.mobile, otp: code });
+
+    return ok(res, S.OTP_SENT_GENERIC, null);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Reset requires the operator to RE-CONFIRM HIS IDENTITY — his own password OR
+// an OTP on his own verified mobile. A stolen operator session alone cannot
+// mint credentials for other people's accounts.
 exports.resetPassword = async (req, res, next) => {
   try {
     const role = String(req.params.role || '').toLowerCase();
@@ -91,13 +114,21 @@ exports.resetPassword = async (req, res, next) => {
     if (!Model || !mongoose.isValidObjectId(req.params.id)) return badRequest(res, S.VALIDATION_FAILED);
 
     const password = (req.body && req.body.password) || '';
-    if (!password) return badRequest(res, S.VALIDATION_FAILED);
+    const otp      = (req.body && req.body.otp) || '';
+    if (!password && !otp) return badRequest(res, S.VALIDATION_FAILED);
 
     const op = await Operator.findById(req.operator._id).select('+passwordHash');
     if (!op) return notFound(res, S.NOT_FOUND);
-    // 400, not 401 — the SESSION is valid; only the re-entered password is wrong.
-    if (!(await compare(password, op.passwordHash))) {
-      return badRequest(res, S.PASSWORD_INCORRECT);
+    if (password) {
+      // 400, not 401 — the SESSION is valid; only the re-entered password is wrong.
+      if (!(await compare(password, op.passwordHash))) {
+        return badRequest(res, S.PASSWORD_INCORRECT);
+      }
+    } else {
+      const valid = await verifyOtp({
+        institutionId: null, panel: 'operator', userId: op._id, purpose: 'reset_confirm', code: otp,
+      });
+      if (!valid) return badRequest(res, S.OTP_INVALID);
     }
 
     const user = await Model.findById(req.params.id);

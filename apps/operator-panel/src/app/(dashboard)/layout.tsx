@@ -8,6 +8,7 @@ import {
   Building2,
   GraduationCap,
   History,
+  KeyRound,
   LayoutDashboard,
   Settings,
   Users,
@@ -32,6 +33,7 @@ const SECTIONS: SidebarSection[] = [
       { label: "Slug Requests", href: "/slug-requests", icon: ArrowLeftRight },
       { label: "Students", href: "/students", icon: GraduationCap },
       { label: "Teachers", href: "/teachers", icon: Users },
+      { label: "Credentials", href: "/credentials", icon: KeyRound },
     ],
   },
   {

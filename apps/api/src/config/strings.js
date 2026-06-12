@@ -28,6 +28,7 @@ module.exports = {
   GOD_OTP_FORMAT:        'Fail-safe OTP must be 8-12 digits',
   PASSWORD_INCORRECT:    'Incorrect password',
   PASSWORD_RESET:        'Password reset — share the temporary password securely',
+  MOBILE_NOT_VERIFIED:   'Verify your own mobile number first to use OTP confirmation',
 
   INST_CREATED:          'Institution created',
   INST_UPDATED:          'Institution updated',

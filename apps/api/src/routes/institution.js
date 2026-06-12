@@ -105,8 +105,10 @@ router.get('/:slug/admin/batches/:id',                    ...adminChain, Batch.g
 router.patch('/:slug/admin/batches/:id',                  ...adminChain, Batch.patch);
 
 // Credential directory + password reset (own institution only; reset requires
-// the acting admin to re-enter HIS password — operator's when impersonating).
+// the acting admin's own password OR an OTP on his own verified mobile —
+// operator's password when impersonating).
 router.get('/:slug/admin/credentials', ...adminChain, Credentials.list);
+router.post('/:slug/admin/credentials/reset-otp', ...adminChain, passwordResetLimiter, Credentials.resetOtpRequest);
 router.post('/:slug/admin/credentials/:role/:id/reset-password', ...adminChain, passwordResetLimiter, Credentials.resetPassword);
 
 router.get('/:slug/admin/attendance',       ...adminChain, Attendance.grid);

@@ -53,8 +53,9 @@ router.post('/slug-requests/:id/approve', SlugRequests.approve);
 router.post('/slug-requests/:id/reject',  SlugRequests.reject);
 
 // Credential directory + hierarchical password reset (identifiers only; reset
-// requires the operator to re-enter his own password).
+// requires the operator's own password OR an OTP on his own verified mobile).
 router.get('/credentials', Credentials.list);
+router.post('/credentials/reset-otp', passwordResetLimiter, Credentials.resetOtpRequest);
 router.post('/credentials/:role/:id/reset-password', passwordResetLimiter, Credentials.resetPassword);
 
 // Global audit timeline
