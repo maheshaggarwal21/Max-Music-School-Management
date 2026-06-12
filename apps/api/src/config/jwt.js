@@ -102,12 +102,16 @@ function verifySocketToken(token) {
 
 // Cookie options (httpOnly, secure in prod, sameSite).
 // Institution cookies are path-scoped so they cannot leak cross-institution.
+// COOKIE_SAME_SITE env var overrides the default — set to 'none' when API and
+// panels are on different domains (e.g. Render + Vercel). Defaults to 'strict'
+// in production (same-domain VPS) and 'lax' in dev.
 function cookieOptions(panel, slug) {
   const isProd = process.env.NODE_ENV === 'production';
+  const sameSite = process.env.COOKIE_SAME_SITE || (isProd ? 'strict' : 'lax');
   const base = {
     httpOnly: true,
-    secure: isProd,
-    sameSite: isProd ? 'strict' : 'lax',
+    secure: isProd || sameSite === 'none',
+    sameSite,
   };
   if (panel === 'operator') {
     return { ...base, path: '/' };

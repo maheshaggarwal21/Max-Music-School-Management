@@ -25,7 +25,13 @@ app.use(helmet());
 app.use(compression());
 // Drop undefined entries so a missing env var can never collapse the
 // allow-list into "reflect any origin".
-const allowedOrigins = [process.env.PLATFORM_DOMAIN_URL, process.env.OPERATOR_DOMAIN_URL].filter(Boolean);
+// CORS_ORIGINS accepts a comma-separated list for multi-URL deployments
+// (e.g. Vercel gives each panel its own *.vercel.app domain).
+const allowedOrigins = [
+  process.env.PLATFORM_DOMAIN_URL,
+  process.env.OPERATOR_DOMAIN_URL,
+  ...(process.env.CORS_ORIGINS ? process.env.CORS_ORIGINS.split(',').map(o => o.trim()) : []),
+].filter(Boolean);
 const isDev = process.env.NODE_ENV !== 'production';
 app.use(cors({
   // In production every institution panel shares ONE platform origin, so the
