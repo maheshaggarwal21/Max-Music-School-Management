@@ -304,7 +304,7 @@ export default function InstitutionsPage() {
   const slugPreview = slugify(name);
 
   return (
-    <div className="relative flex flex-col gap-6 p-6">
+    <div className="relative flex flex-col gap-6 p-4 sm:p-6">
       <PageHeader
         title="Institutions"
         subtitle={`${pagination.total || MOCK_INSTITUTIONS.length} schools under the platform umbrella`}
@@ -325,7 +325,7 @@ export default function InstitutionsPage() {
               setPage(1);
             }}
             placeholder="Search by name or slug…"
-            className="w-72"
+            className="w-full sm:w-72"
           />
           <Select
             options={MODE_OPTIONS}
@@ -334,7 +334,7 @@ export default function InstitutionsPage() {
               setMode(v);
               setPage(1);
             }}
-            className="w-44"
+            className="w-full sm:w-44"
           />
           <Select
             options={STATUS_OPTIONS}
@@ -343,7 +343,7 @@ export default function InstitutionsPage() {
               setStatus(v);
               setPage(1);
             }}
-            className="w-44"
+            className="w-full sm:w-44"
           />
         </div>
       </BlurFade>

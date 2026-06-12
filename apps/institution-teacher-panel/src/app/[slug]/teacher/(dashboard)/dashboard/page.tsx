@@ -141,7 +141,7 @@ export default function DashboardPage() {
                   className="pl-9"
                 />
               </div>
-              <div className="w-44">
+              <div className="w-full sm:w-44">
                 <Select options={DAY_OPTIONS} value={day} onChange={setDay} />
               </div>
               <span className="rounded-lg border border-border bg-card px-3 py-2 text-xs font-semibold tabular-nums text-muted-foreground">

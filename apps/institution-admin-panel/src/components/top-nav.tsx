@@ -60,7 +60,7 @@ export function TopNav({ adminName, schoolName, logoUrl, settingsHref, onSignOut
   };
 
   return (
-    <header className="flex shrink-0 items-center justify-between gap-4 border-b border-border bg-background/80 px-6 py-3 backdrop-blur-sm">
+    <header className="hidden shrink-0 items-center justify-between gap-4 border-b border-border bg-background/80 px-6 py-3 backdrop-blur-sm md:flex">
       {/* Left: page identity + greeting */}
       <div className="min-w-0">
         <h1 className="text-lg font-bold leading-tight">Admin Dashboard</h1>

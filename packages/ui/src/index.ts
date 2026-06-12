@@ -31,6 +31,7 @@ export {
   type SidebarSection,
   type SidebarNavItem,
 } from "./components/sidebar";
+export { MobileSidebar, type MobileSidebarProps } from "./components/mobile-sidebar";
 export { LineChart, BarChart, type ChartProps } from "./components/charts";
 export { useThemeTransition } from "./components/use-theme-transition";
 export {

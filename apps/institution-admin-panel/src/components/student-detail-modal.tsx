@@ -217,7 +217,7 @@ export function StudentDetailModal({
                   </p>
                   <StatusBadge status={detail.paymentStatus} />
                 </div>
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                   <div className="rounded-lg border border-border bg-card p-3">
                     <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Total fee</p>
                     <p className="mt-1 text-base font-bold">{formatCurrency(detail.feeTotal)}</p>

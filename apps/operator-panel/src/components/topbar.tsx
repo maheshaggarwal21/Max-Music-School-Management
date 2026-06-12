@@ -78,7 +78,7 @@ export function Topbar() {
   });
 
   return (
-    <header className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-background/80 px-6 backdrop-blur-md">
+    <header className="hidden h-14 shrink-0 items-center justify-between border-b border-border bg-background/80 px-6 backdrop-blur-md md:flex">
       <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
         {today}
       </p>

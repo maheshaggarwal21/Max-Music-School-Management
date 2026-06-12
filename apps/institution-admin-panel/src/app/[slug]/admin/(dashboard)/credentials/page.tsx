@@ -219,7 +219,7 @@ export default function CredentialsPage() {
               setPage(1);
             }}
             placeholder="Search name, mobile, email or ID…"
-            className="w-72"
+            className="w-full sm:w-72"
           />
           <Select
             options={STATUS_OPTIONS}
@@ -228,7 +228,7 @@ export default function CredentialsPage() {
               setStatus(v);
               setPage(1);
             }}
-            className="w-44"
+            className="w-full sm:w-44"
           />
         </div>
       </BlurFade>

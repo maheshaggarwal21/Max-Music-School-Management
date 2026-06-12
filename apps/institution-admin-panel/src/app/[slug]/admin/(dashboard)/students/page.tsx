@@ -166,7 +166,7 @@ export default function StudentsPage() {
             placeholder="Search name, ID, mobile, instrument…"
             onSearch={setSearch}
           />
-          <div className="w-44">
+          <div className="w-full sm:w-44">
             <Select
               placeholder="All statuses"
               options={JOIN_STATUS_OPTIONS}
@@ -174,7 +174,7 @@ export default function StudentsPage() {
               onChange={setStatusFilter}
             />
           </div>
-          <div className="w-48">
+          <div className="w-full sm:w-48">
             <Select
               placeholder="All teachers"
               searchable

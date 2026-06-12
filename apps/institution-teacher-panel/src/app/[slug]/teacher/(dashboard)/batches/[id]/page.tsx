@@ -191,7 +191,7 @@ export default function BatchDetailPage() {
                     </p>
                   </div>
                 </div>
-                <div className="w-40">
+                <div className="w-full sm:w-40">
                   <DatePicker value={targetDate} onChange={(v) => setTargetDate(v ?? toIsoDate(new Date()))} />
                 </div>
               </div>

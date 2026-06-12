@@ -177,7 +177,7 @@ export default function StudentsPage() {
   const noResults = !loading && rows.length === 0;
 
   return (
-    <div className="relative flex flex-col gap-6 p-6">
+    <div className="relative flex flex-col gap-6 p-4 sm:p-6">
       <PageHeader
         title="Students"
         subtitle={`${pagination.total} students across all institutions`}
@@ -197,7 +197,7 @@ export default function StudentsPage() {
               setPage(1);
             }}
             placeholder="Search name, mobile or ID…"
-            className="w-72"
+            className="w-full sm:w-72"
           />
           <Select
             options={[{ value: "", label: "All institutions" }, ...institutionOptions]}
@@ -207,7 +207,7 @@ export default function StudentsPage() {
               setPage(1);
             }}
             searchable
-            className="w-64"
+            className="w-full sm:w-64"
           />
           <Select
             options={JOIN_STATUS_OPTIONS}
@@ -216,7 +216,7 @@ export default function StudentsPage() {
               setJoinStatus(v);
               setPage(1);
             }}
-            className="w-44"
+            className="w-full sm:w-44"
           />
         </div>
       </BlurFade>

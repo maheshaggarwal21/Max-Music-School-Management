@@ -101,10 +101,10 @@ export default function ColleagueSchedulePage() {
       {/* Filters */}
       <BlurFade delay={0.05} className="mt-4">
         <div className="flex flex-wrap items-center gap-3">
-          <div className="w-48">
+          <div className="w-full sm:w-48">
             <DatePicker value={date} onChange={(v) => setDate(v ?? toIsoDate(new Date()))} />
           </div>
-          <div className="w-56">
+          <div className="w-full sm:w-56">
             <Select
               options={[
                 { value: "all", label: "All Batches" },

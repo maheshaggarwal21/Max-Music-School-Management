@@ -248,7 +248,7 @@ export default function PaymentsPage() {
   ];
 
   return (
-    <div className="relative flex flex-col gap-6 p-6">
+    <div className="relative flex flex-col gap-6 p-4 sm:p-6">
       <PageHeader
         title="Payments"
         subtitle="Student fees across institutions · rent invoices owed to the platform"
@@ -277,7 +277,7 @@ export default function PaymentsPage() {
                   setFeePage(1);
                 }}
                 searchable
-                className="w-64"
+                className="w-full sm:w-64"
               />
               <Select
                 options={FEE_STATUS_OPTIONS}
@@ -286,7 +286,7 @@ export default function PaymentsPage() {
                   setFeeStatus(v);
                   setFeePage(1);
                 }}
-                className="w-44"
+                className="w-full sm:w-44"
               />
             </div>
           </BlurFade>

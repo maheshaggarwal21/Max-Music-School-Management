@@ -120,7 +120,7 @@ export default function ChangesPage() {
   const noResults = !loading && items.length === 0;
 
   return (
-    <div className="relative flex flex-col gap-6 p-6">
+    <div className="relative flex flex-col gap-6 p-4 sm:p-6">
       <PageHeader
         title="Changes History"
         subtitle="Immutable audit trail — every write across every institution"
@@ -137,7 +137,7 @@ export default function ChangesPage() {
               setPage(1);
             }}
             searchable
-            className="w-64"
+            className="w-full sm:w-64"
           />
           <Select
             options={ROLE_OPTIONS}
@@ -146,7 +146,7 @@ export default function ChangesPage() {
               setActorRole(v);
               setPage(1);
             }}
-            className="w-48"
+            className="w-full sm:w-48"
           />
           <DatePicker
             mode="range"
@@ -156,7 +156,7 @@ export default function ChangesPage() {
               setPage(1);
             }}
             placeholder="Filter by date range"
-            className="w-64"
+            className="w-full sm:w-64"
           />
         </div>
       </BlurFade>

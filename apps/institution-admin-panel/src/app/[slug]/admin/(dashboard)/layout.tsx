@@ -6,7 +6,7 @@ import {
   Settings, Users, Wallet, GraduationCap,
 } from "lucide-react";
 import {
-  Avatar, BrandingProvider, Sidebar, type SidebarSection,
+  Avatar, BrandingProvider, MobileSidebar, Sidebar, type SidebarSection,
 } from "@maxmusic/ui";
 import { api, authPath, mockable } from "@/lib/api";
 import { MOCK_SESSION, ok } from "@/lib/mocks";
@@ -104,6 +104,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <OperatorBanner />
         <div className="flex min-h-0 flex-1 overflow-hidden">
           <Sidebar
+            className="hidden md:flex"
             brandName={session.institution.schoolName}
             logoUrl={session.institution.logoUrl}
             sections={navSections}
@@ -123,6 +124,25 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           />
           {/* Top nav lives in the content column — it never overlaps the sidebar */}
           <div className="flex min-w-0 flex-1 flex-col">
+            {/* Mobile: hamburger top bar + slide-over drawer (md:hidden) */}
+            <MobileSidebar
+              brandName={session.institution.schoolName}
+              logoUrl={session.institution.logoUrl}
+              sections={navSections}
+              activeHref={pathname ?? undefined}
+              onSignOut={handleSignOut}
+              footer={
+                <div className="flex items-center gap-2.5 rounded-lg px-3 py-2">
+                  <Avatar name={session.user.name} size="sm" />
+                  <div className="min-w-0">
+                    <p className="truncate text-xs font-semibold">{session.user.name}</p>
+                    <p className="text-[10px] uppercase tracking-wide text-sidebar-foreground/50">
+                      Administrator
+                    </p>
+                  </div>
+                </div>
+              }
+            />
             <TopNav
               adminName={session.user.name}
               schoolName={session.institution.schoolName}

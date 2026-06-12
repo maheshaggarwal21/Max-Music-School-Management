@@ -298,7 +298,7 @@ function AttendanceContent() {
             <DatePicker
               value={date}
               onChange={(v) => v && setDate(v)}
-              className="w-44"
+              className="w-full sm:w-44"
             />
           </div>
 

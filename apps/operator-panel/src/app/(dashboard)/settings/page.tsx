@@ -284,7 +284,7 @@ export default function SettingsPage() {
   const mobileVerified = settings.profile.mobileVerified;
 
   return (
-    <div className="relative flex flex-col gap-6 p-6">
+    <div className="relative flex flex-col gap-6 p-4 sm:p-6">
       <PageHeader
         title="Settings"
         subtitle="Operator profile · sign-in options · platform defaults"

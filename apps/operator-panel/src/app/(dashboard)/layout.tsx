@@ -15,7 +15,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { toast } from "sonner";
-import { Sidebar, type SidebarSection } from "@maxmusic/ui";
+import { MobileSidebar, Sidebar, type SidebarSection } from "@maxmusic/ui";
 import { Topbar } from "@/components/topbar";
 import { api, mockable } from "@/lib/api";
 import { mockLogout } from "@/lib/mocks";
@@ -73,12 +73,20 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   return (
     <div className="flex h-screen overflow-hidden bg-background">
       <Sidebar
+        className="hidden md:flex"
         brandName="Operator Console"
         sections={SECTIONS}
         activeHref={activeHref}
         onSignOut={signOut}
       />
       <div className="flex min-w-0 flex-1 flex-col">
+        {/* Mobile: hamburger top bar + slide-over drawer (md:hidden) */}
+        <MobileSidebar
+          brandName="Operator Console"
+          sections={SECTIONS}
+          activeHref={activeHref}
+          onSignOut={signOut}
+        />
         <Topbar />
         <main className="relative flex-1 overflow-y-auto">{children}</main>
       </div>

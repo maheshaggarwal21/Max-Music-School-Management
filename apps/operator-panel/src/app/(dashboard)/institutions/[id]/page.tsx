@@ -206,7 +206,7 @@ export default function InstitutionDetailPage() {
 
   if (loading || !inst) {
     return (
-      <div className="flex flex-col gap-6 p-6">
+      <div className="flex flex-col gap-6 p-4 sm:p-6">
         <Skeleton className="h-8 w-64" />
         <Skeleton className="h-10 w-80" />
         <div className="grid gap-4 lg:grid-cols-3">
@@ -223,7 +223,7 @@ export default function InstitutionDetailPage() {
   const isSuspended = inst.status === "suspended";
 
   return (
-    <div className="relative flex flex-col gap-6 p-6">
+    <div className="relative flex flex-col gap-6 p-4 sm:p-6">
       <BlurFade delay={0}>
         <Link
           href="/institutions"

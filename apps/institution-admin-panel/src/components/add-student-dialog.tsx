@@ -274,7 +274,7 @@ export function AddStudentDialog({
           <Input label="Validity start" type="date" value={form.validityStart} onChange={(e) => set("validityStart", e.target.value)} />
           <Input label="Validity end" type="date" value={form.validityEnd} onChange={(e) => set("validityEnd", e.target.value)} />
         </div>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <Input label="Total fee (₹)" type="number" min={0} value={form.feeRupees} onChange={(e) => set("feeRupees", e.target.value)} />
           <Input label="Paid now (₹)" type="number" min={0} value={form.paidRupees} onChange={(e) => set("paidRupees", e.target.value)} />
           <Input label="Paid classes" type="number" min={0} value={form.paidClasses} onChange={(e) => set("paidClasses", e.target.value)} />

@@ -104,7 +104,7 @@ export default function SlugRequestsPage() {
   };
 
   return (
-    <div className="relative flex flex-col gap-6 p-6">
+    <div className="relative flex flex-col gap-6 p-4 sm:p-6">
       <PageHeader
         title="Slug Requests"
         subtitle="Institution admins request public-address changes — approval applies them instantly"

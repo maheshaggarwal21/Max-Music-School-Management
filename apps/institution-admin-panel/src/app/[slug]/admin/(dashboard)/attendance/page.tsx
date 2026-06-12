@@ -164,7 +164,7 @@ export default function AttendancePage() {
       {/* Batch + month pickers */}
       <BlurFade delay={0.1}>
         <div className="flex flex-wrap items-end gap-3">
-          <div className="w-72">
+          <div className="w-full sm:w-72">
             <Select
               label="Batch"
               searchable

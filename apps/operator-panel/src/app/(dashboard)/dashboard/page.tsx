@@ -57,7 +57,7 @@ export default function DashboardPage() {
   }, []);
 
   return (
-    <div className="relative flex flex-col gap-6 p-6">
+    <div className="relative flex flex-col gap-6 p-4 sm:p-6">
       <PageHeader
         title="Dashboard"
         subtitle={

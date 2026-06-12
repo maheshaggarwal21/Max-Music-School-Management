@@ -17,7 +17,7 @@ export function PageShell({
   children: React.ReactNode;
 }) {
   return (
-    <div className="relative flex flex-col gap-6 p-6">
+    <div className="relative flex flex-col gap-6 p-4 sm:p-6">
       {/* Ambient background glow — institution brand color, very subtle */}
       <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
         <div
