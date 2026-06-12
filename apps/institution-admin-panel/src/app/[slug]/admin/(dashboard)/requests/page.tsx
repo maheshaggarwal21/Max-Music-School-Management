@@ -43,6 +43,11 @@ export default function RequestsPage() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
 
+  // ?new=1 deep-link from the dashboard quick-action card (A1)
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).has("new")) setCreating(true);
+  }, []);
+
   // reference lists for the form dropdowns — fetched live from this institution
   const [instruments, setInstruments] = useState<{ _id: string; name: string }[]>([]);
   const [dayPatterns, setDayPatterns] = useState<{ _id: string; label: string; isActive: boolean }[]>([]);

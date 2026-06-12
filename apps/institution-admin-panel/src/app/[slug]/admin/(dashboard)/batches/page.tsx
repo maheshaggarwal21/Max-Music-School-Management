@@ -45,6 +45,11 @@ export default function BatchesPage() {
   const base = `/${slug}/admin`;
   const [batches, setBatches] = useState<BatchRow[] | null>(null);
   const [creating, setCreating] = useState(false);
+
+  // ?new=1 deep-link from the dashboard quick-action card (A1)
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).has("new")) setCreating(true);
+  }, []);
   const [form, setForm] = useState<BatchForm>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [holidayModal, setHolidayModal] = useState(false);

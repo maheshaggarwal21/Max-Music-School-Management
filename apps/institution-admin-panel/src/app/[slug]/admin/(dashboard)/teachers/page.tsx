@@ -43,6 +43,11 @@ export default function TeachersPage() {
   const [saving, setSaving] = useState(false);
   const [activity, setActivity] = useState<AuditLogItem[] | null>(null);
 
+  // ?new=1 deep-link from the dashboard quick-action card (A1)
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).has("new")) setModalOpen(true);
+  }, []);
+
   // Per-teacher audit feed — same one-immutable-log pattern as students.
   useEffect(() => {
     if (!editing) {

@@ -7,7 +7,10 @@ import {
   Building2,
   GraduationCap,
   IndianRupee,
+  KeyRound,
+  Plus,
   ReceiptText,
+  Settings,
   Sparkles,
   Users,
 } from "lucide-react";
@@ -17,6 +20,7 @@ import { formatCurrency, formatDate } from "@maxmusic/utils";
 import { AreaChart } from "@/components/area-chart";
 import { CurrencyCountUp } from "@/components/currency-count-up";
 import { PageHeader } from "@/components/page-header";
+import { QuickActions } from "@/components/quick-actions";
 import { StatsRowSkeleton, Skeleton } from "@/components/skeleton";
 import { Tag } from "@/components/tag";
 import { api, mockable } from "@/lib/api";
@@ -61,6 +65,18 @@ export default function DashboardPage() {
             ? `${data.institutions.total} institutions · ${data.totals.students} students across the platform`
             : "Loading platform overview…"
         }
+      />
+
+      {/* Quick actions — core operations up front (A1) */}
+      <QuickActions
+        actions={[
+          { label: "Add Institution", hint: "Onboard a new school", href: "/institutions?new=1", icon: Plus },
+          { label: "Institutions", hint: "Manage & impersonate", href: "/institutions", icon: Building2 },
+          { label: "Students", hint: "All students, god view", href: "/students", icon: GraduationCap },
+          { label: "Teachers", hint: "All teachers, god view", href: "/teachers", icon: Users },
+          { label: "Credentials", hint: "Reset forgotten passwords", href: "/credentials", icon: KeyRound },
+          { label: "Settings", hint: "Platform defaults & OTP", href: "/settings", icon: Settings },
+        ]}
       />
 
       {/* Stats row */}

@@ -71,6 +71,11 @@ export default function InstitutionsPage() {
   // create modal state
   const [createOpen, setCreateOpen] = useState(false);
   const [creating, setCreating] = useState(false);
+
+  // ?new=1 deep-link from the dashboard quick-action card (A1)
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).has("new")) setCreateOpen(true);
+  }, []);
   const [name, setName] = useState("");
   const [contactEmail, setContactEmail] = useState("");
   const [newMode, setNewMode] = useState<string | null>("managed");

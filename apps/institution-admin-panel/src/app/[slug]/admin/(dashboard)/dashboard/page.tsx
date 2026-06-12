@@ -1,8 +1,10 @@
 "use client";
 import { useEffect, useState } from "react";
 import {
-  CalendarClock, ClipboardCheck, GraduationCap, Layers, TrendingUp, Users, Wallet,
+  CalendarCheck, CalendarClock, ClipboardCheck, GraduationCap, Inbox, KeyRound, Layers,
+  TrendingUp, UserPlus, Users, Wallet,
 } from "lucide-react";
+import { useParams } from "next/navigation";
 import {
   BlurFade, BorderBeam, CountUp, LineChart, StatsCard, StatusBadge, useBranding,
 } from "@maxmusic/ui";
@@ -11,6 +13,7 @@ import { api, adminPath, mockable } from "@/lib/api";
 import { MOCK_DASHBOARD, ok } from "@/lib/mocks";
 import type { AdminDashboardData, ApiResponse } from "@/lib/types";
 import { PageShell } from "@/components/page-shell";
+import { QuickActions } from "@/components/quick-actions";
 import { EmptyState } from "@/components/empty-state";
 import { Skeleton, StatsRowSkeleton } from "@/components/skeletons";
 
@@ -32,6 +35,8 @@ function rateColor(rate: number): string {
 
 export default function DashboardPage() {
   const branding = useBranding();
+  const { slug } = useParams<{ slug: string }>();
+  const base = `/${slug}/admin`;
   const [data, setData] = useState<AdminDashboardData | null>(null);
 
   useEffect(() => {
@@ -62,6 +67,18 @@ export default function DashboardPage() {
           : "Your school at a glance"
       }
     >
+      {/* Quick actions — core operations up front (A1) */}
+      <QuickActions
+        actions={[
+          { label: "Add Student", hint: "File an enrollment request", href: `${base}/requests?new=1`, icon: UserPlus },
+          { label: "Add Teacher", hint: "Onboard a teacher", href: `${base}/teachers?new=1`, icon: GraduationCap },
+          { label: "Add Batch", hint: "Compose days × time × teacher", href: `${base}/batches?new=1`, icon: Layers },
+          { label: "Requests", hint: "Approve pending enrollments", href: `${base}/requests`, icon: Inbox },
+          { label: "Attendance", hint: "Mark & correct sessions", href: `${base}/attendance`, icon: CalendarCheck },
+          { label: "Credentials", hint: "Reset forgotten passwords", href: `${base}/credentials`, icon: KeyRound },
+        ]}
+      />
+
       {/* Stats row */}
       {!data || !students ? (
         <StatsRowSkeleton />
