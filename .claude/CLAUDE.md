@@ -271,6 +271,32 @@ History of the old split is in `team-division.md` (reference only).
 > cooldown (3/15min). Frontend: Password|OTP toggle on all 4 login pages; operator Settings god-OTP
 > card (+ own-mobile verify card); teacher/student profile verify-mobile blocks.
 
+> **FEATURE: legacy-parity round (2026-06-12): ✅ BUILT — commits `ef5a38f..d83f65a`, all touched
+> panels `next build` PASS; browser /qa pending.** Source: client's legacy product screenshots →
+> `documentation/feature-inventory/legacy-maxmusic-screenshot-inventory.md`; plan
+> `documentation/feature-legacy-parity-plan.md`. User-locked scope A1+A4+A5+A7+A12+B1+CRED
+> (A8 dropped mid-build; B2 staff-RBAC deferred; B3/B4/B5 + video/AI skipped). Shipped:
+> (1) **CRED credential manager** — operator `/credentials` (cross-institution, institution filter)
+> + admin `/credentials` (institution-scoped) tabs: identifier directory (displayId/email/
+> mobile+verified/panelAccess/status/lastLogin, role toggle, search), **reset → ONE-TIME temp
+> password** (`randomTempPassword(10)` bcrypt-stored, target `tokenVersion++`, `RESET_PASSWORD`
+> audit, new `passwordResetLimiter` 10/15min). **Step-up re-confirm = acting user's OWN password
+> (400 on mismatch, never 401) OR OTP to acting user's OWN verified mobile** (new LoginOtp purpose
+> `reset_confirm`; god OTP NOT accepted; impersonating operator → password only). **Plaintext
+> passwords NEVER viewable** — legacy showed them (vuln); user's "view current password" ask was
+> amended to reset-reveal, keeping their password/OTP gate idea. (2) **A1 quick-action cards** on
+> operator + admin dashboard landings; add-cards deep-link `?new=1` → target page auto-opens its
+> create modal (reads `window.location.search`, NOT useSearchParams — avoids the Suspense build
+> requirement). (3) **A5 student My Plan card** — dashboard payload + `validity.{days,
+> upcomingClasses}`; class-balance card now LIVE (paidClasses vs attendance.total; was mock-only).
+> (4) **B1+ Join class** — `upcomingClass.meetingUrl` for ONLINE batches with a ClassSession
+> launched on the next class date → button on the student banner. (5) **A7 operator god-mode
+> teacher edit** + altMobile/gender/dob/razorpayPaymentLink (validated: 10-digit, https-only;
+> audited per-diff). Verified ALREADY DONE (no work): A4 request preferred-days/time, A12 approve
+> `calcDaysAndClasses`, B1 core teacher launch+archive. CONTRACTS.md updated (credentials ×2,
+> teacher row extras, student dashboard validity/meetingUrl). **Next: /qa browser pass on new
+> surfaces + /cso over the 2 credentials controllers.**
+
 **H1 + H2 complete** — scaffold + 16 models + `packages/types` ready. **P1-R /plan-eng-review ✅** (5 model fixes). **P2-R /cso ✅** — 5 checkpoint Qs clean; .gitignore + lockfile + nodemailer@8 + node-cron@4 fixed. **Phase 3 (Operator APIs) ✅** — 9 controllers + 29 routes behind `operatorAuth`. **P3-R /review ✅** — 5 fixes (existingTeacher isolation guard, grant/revoke idempotency = no mass-logout, impersonate targetUserId required, audit accuracy). **Phase 4 (Institution APIs) ✅** — 10 controllers + 46 routes under `/api/inst/:slug/*`; every login JWT embeds `instVersion`+`userVersion`; brandingPublic-only (white-label). **P4-R /cso ✅** — 1 HIGH fixed (`config/refGuard.studentRefsValid` rejects cross-institution teacher/batch/instrument refs in student create/patch + request approve — they leaked foreign labels via populate); other 4 checkpoint Qs clean. **BACKEND COMPLETE (Phases 0-4).** **Frontend integration (current session) ✅** — Dev B's 4-panel frontend merged (PR #1). Dev A pass over it: (1) **H2 type migration** — all 4 apps now import the shared contract (`ApiResponse`/`Paginated`/`BrandingPublic` + enums) from `@maxmusic/types` instead of local mirrors (drift eliminated); (2) **`[slug]` routing fix** — the 3 institution panels were flat route-groups (`/dashboard`) that 404 behind nginx; restructured to real `app/[slug]/<panel>/(auth|dashboard)/*` with slug-aware nav, validated by `next build` ×4; (3) **multi-tenant slug fixes** — 401-redirect now `/<slug>/<panel>/login` (was hardcoded `/login`), teacher panel now derives slug from the URL (was a build-time `NEXT_PUBLIC_INSTITUTION_SLUG` env var = one-slug-per-build); (4) **new public `GET /api/inst/:slug/branding`** endpoint (controller + route + CONTRACTS) wired into all 3 login pages — clears the teacher TODO(H5) + student BLOCKED notes. **Phase 7 backend (current session) ✅** — (1) **Socket.io** (`config/socket.js`) shares the HTTP server, rooms keyed by institutionId; auth via a short-lived `JWT_SECRET_SOCKET` token minted by `GET /:slug/{admin,teacher}/realtime-token` (panel cookies are path-scoped so they can't reach `/socket.io`); room derives from the VERIFIED token only; `emitToInstitution` (already called by teacher `markAttendance`) now live → unblocks teacher `TODO(H3)` backend-side. (2) **Daily cron** (`config/cron.js`, 00:05 `CRON_TZ`) advances `active_soon→active`, expires validity→inactive (both audited per-student as the `system` actor), and flags overdue rent. (3) **Razorpay webhook** (`POST /api/webhooks/razorpay`, `WebhookController`) mounted pre-json with `express.raw`; timing-safe HMAC verify (fails closed), idempotent by paymentId+eventType, tenant from payload `notes`; read-only RazorpayWebhookEvent feed only. (4) **Branded mailer** (`config/mailer.js`) lazy transport, From-name = institution `branding.schoolName` (never "Max Music"), fails soft. All smoke-tested. Next: H4/H5 live wiring (`NEXT_PUBLIC_API_URL` + `/qa`); Dev B wires `TODO(H3)` client to realtime-token + Socket.io; then Phase 8 (QA + deploy).
 
 > **Isolation lesson (P4-R):** scoping the `:id` lookup by `institutionId` is NOT enough — client-supplied foreign-key refs (`teacherId`/`batchId`/`instrumentId`) in create/patch bodies must ALSO be verified to belong to the institution before persist, or a foreign id leaks the other tenant's data through Mongoose `populate` (which has no tenant filter). Always run refs through `config/refGuard`.

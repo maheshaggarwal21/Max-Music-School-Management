@@ -216,3 +216,94 @@ Never skip these two.
 | /cso | After Phase 2 + Phase 4 | Middleware + controllers | Auth bypass, data isolation |
 | /qa | After Phase 5 + Phase 6 | Running app URL | UI flows, white-label leak |
 | /ship | Before deploy | Config files | Missing env vars, PM2, SSL |
+
+---
+
+# Official README Reference (merged 2026-06-12 — codex/OpenClaw/iOS sections excluded; not available on this box)
+
+## The sprint — skills run in sprint order
+
+**Think → Plan → Build → Review → Test → Ship → Reflect**
+
+Each skill feeds the next: `/office-hours` writes a design doc → `/plan-ceo-review` reads it →
+`/plan-eng-review` writes a test plan → `/qa` picks it up → `/review` finds bugs → `/ship` verifies fixed.
+
+## Which review to use?
+
+| Building for... | Plan stage (before code) | Live audit (after shipping) |
+|---|---|---|
+| **End users** (UI, web app) | `/plan-design-review` | `/design-review` |
+| **Developers** (API, CLI, docs) | `/plan-devex-review` | `/devex-review` |
+| **Architecture** (data flow, perf, tests) | `/plan-eng-review` | `/review` |
+| **All of the above** | `/autoplan` (CEO → design → eng → DX, auto-detects which apply) | — |
+
+## Skill roles (one-liners)
+
+- `/office-hours` — six forcing questions that reframe the product before code; design doc feeds downstream skills
+- `/plan-ceo-review` — 4 scope modes: Expansion / Selective Expansion / Hold Scope / Reduction
+- `/plan-eng-review` — ASCII data-flow diagrams, state machines, error paths, test matrix, failure modes
+- `/plan-design-review` — rates each design dimension 0-10, explains what a 10 looks like, AI-slop detection; interactive
+- `/plan-devex-review` — DX personas, TTHW benchmarks, friction trace; modes: DX EXPANSION / POLISH / TRIAGE
+- `/autoplan` — full review pipeline with encoded auto-decisions; surfaces only taste decisions
+- `/design-consultation` — full design system from scratch (researches landscape, writes DESIGN.md)
+- `/design-shotgun` — 4-6 AI mockup variants → browser comparison board → feedback loop; taste memory learns picks
+- `/design-html` — mockup → production HTML/CSS (Pretext computed layout, 30KB, zero deps; detects React)
+- `/design-review` — same audit as plan-design-review then FIXES findings; atomic commits, before/after screenshots
+- `/review` — staff-engineer diff review: bugs that pass CI but blow up in prod; auto-fixes obvious ones
+- `/investigate` — Iron Law: no fixes without investigation; traces data flow, tests hypotheses, stops after 3 failed fixes
+- `/spec` — vague intent → executable spec in 5 phases (why, scope, technical w/ mandatory code-reading, draft, file)
+- `/qa` — browser QA + fixes with atomic commits + auto-generated regression test per fix; 3 tiers (Quick/Standard/Exhaustive)
+- `/qa-only` — same methodology, report only, zero code changes
+- `/cso` — OWASP Top 10 + STRIDE; daily mode (8/10 confidence gate, zero-noise) vs comprehensive monthly (2/10 bar); trend tracking
+- `/ship` — sync main, run tests, audit coverage, bump VERSION, CHANGELOG, push, PR; bootstraps test framework if missing; auto-invokes /document-release
+- `/land-and-deploy` — merge PR → wait CI → deploy → verify production health (needs /setup-deploy once)
+- `/canary` — post-deploy loop: console errors, perf regressions, page failures
+- `/benchmark` — baseline page loads, Core Web Vitals, resource sizes; before/after per PR
+- `/document-release` — cross-references diff vs every doc file; updates what drifted; Diataxis coverage map in PR body
+- `/document-generate` — writes missing docs from scratch (reference / how-to / tutorial / explanation)
+- `/retro` — weekly retro: shipping streaks, test health trends; `/retro global` spans all projects
+- `/learn` — review/search/prune what gstack learned about this project (compounds across sessions)
+- `/health` — code quality dashboard
+- `/context-save` · `/context-restore` — save/resume working context across sessions
+- `/scrape` — pull data from a web page; `/skillify` codifies the last successful scrape into a permanent browser-skill
+
+## Safety & control
+
+- `/careful` — warns before destructive commands (rm -rf, DROP TABLE, force-push, git reset --hard); any warning overridable
+- `/freeze <dir>` — lock edits to one directory (use while debugging); `/unfreeze` clears
+- `/guard` — `/careful` + `/freeze` combined, for prod work
+- `/investigate` auto-freezes to the module under investigation
+
+## /browse extras
+
+- `$B domain-skill save` — per-site note (auto-fires on that hostname next visit); quarantined → active after 3 uses
+- `$B handoff` — stuck on CAPTCHA/auth/MFA? opens a visible Chrome at the same page with cookies+tabs intact; solve it, then `$B resume` (agent suggests it after 3 consecutive failures)
+- `$B cdp <Domain.method>` — raw Chrome DevTools Protocol escape hatch (deny-default allowlist)
+- `/setup-browser-cookies` — import cookies from real Chrome/Edge into headless session (test authenticated pages)
+- `/open-gstack-browser` — headed Chromium w/ sidebar agent + anti-bot stealth (Google etc. work captcha-free)
+
+## Continuous checkpoint mode (opt-in)
+
+`gstack-config set checkpoint_mode continuous` → skills auto-commit WIP with structured `[gstack-context]` body
+(decisions, remaining work, failed approaches). `/context-restore` reconstructs session state from those commits.
+`/ship` filter-squashes WIP commits before PR so bisect stays clean. Push stays local unless `checkpoint_push=true`.
+
+## Config & maintenance
+
+```bash
+gstack-config set <key> <value>     # telemetry off · proactive false · checkpoint_mode continuous …
+gstack-analytics                    # local usage dashboard (JSONL, no remote)
+/gstack-upgrade                     # self-update; or auto_upgrade: true in ~/.gstack/config.yaml
+```
+
+## Windows notes (this box)
+
+- Works via Git Bash; Node.js required besides Bun (Bun+Playwright pipe bug → browse server auto-falls back to Node)
+- No Developer Mode → setup uses file copies, not symlinks → **re-run `cd ~/.claude/skills/gstack && ./setup` after every `git pull`**
+- `/browse` fails? `cd ~/.claude/skills/gstack && bun install && bun run build`
+- Skill missing? re-run `./setup`
+
+## Voice triggers
+
+Skills respond to natural phrases: "run a security check" → /cso · "test the website" → /qa ·
+"do an engineering review" → /plan-eng-review · "code review" → /review

@@ -249,6 +249,8 @@ interface OperatorStudentRow {
 // query: ?search=&institutionId=&employmentType=salary|rent&status=
 interface OperatorTeacherRow {
   _id: string; displayId: string; name: string; mobile: string; email: string;
+  altMobile: string | null; gender: 'male'|'female'|null;          // A7 (2026-06-12)
+  dob: string | null; razorpayPaymentLink: string | null;          // A7 (2026-06-12)
   institution: { _id: string; name: string; slug: string };   // the TAG
   role: 'owner'|'staff';
   employmentType: 'salary'|'rent';
@@ -257,7 +259,33 @@ interface OperatorTeacherRow {
   status: 'active'|'inactive';
   createdAt: string;
 }
+// PATCH /teachers/:id also accepts altMobile (10-digit or empty), gender,
+// dob (ISO date or empty), razorpayPaymentLink (https-only or empty) — audited per-diff.
 ```
+
+### GET /credentials   → Paginated<CredentialRow>   (CRED 2026-06-12, CROSS-INSTITUTION)
+```typescript
+// query: ?role=teacher|student (required) &institutionId=&status=&search=&page=&limit=
+// Identifiers ONLY — passwordHash/recoveryOtp are never selected or returned.
+interface CredentialRow {
+  _id: string; role: 'teacher'|'student'; displayId: string; name: string;
+  email: string | null; mobile: string; mobileVerified: boolean;
+  status: 'active'|'inactive'; lastLoginAt: string | null; createdAt: string;
+  institution: { _id: string; name: string; slug: string } | null;
+  panelAccess?: string[]; isOwner?: boolean;   // teacher rows
+  joinStatus?: string;                          // student rows
+}
+```
+
+### POST /credentials/reset-otp   → sends a step-up OTP (purpose 'reset_confirm')
+###   to the OPERATOR'S OWN verified mobile. 400 MOBILE_NOT_VERIFIED if unverified.
+###   God OTP is NOT accepted for step-up. Rate-limited (passwordResetLimiter 10/15min).
+
+### POST /credentials/:role/:id/reset-password   { password? , otp? }   (one of the two)
+###   Re-confirms the OPERATOR's identity (own password → 400 PASSWORD_INCORRECT on
+###   mismatch — never 401; or reset_confirm OTP → 400 OTP_INVALID). On success:
+###   bcrypt(temp) replaces the hash, target tokenVersion++ (logged out everywhere),
+###   audit RESET_PASSWORD. data: { tempPassword /* shown ONCE, never persisted */, user }
 
 ### GET /payments   → Paginated<OperatorPaymentRow>   (student fees, CROSS-INSTITUTION)
 ```typescript
@@ -410,6 +438,19 @@ interface DayPatternItem { _id: string; days: string[]; label: string; isActive:
 interface TimeSlotItem  { _id: string; startTime: string; endTime: string; label: string; isOnline: boolean }
 ```
 
+### Credentials   (CRED 2026-06-12 — institution-scoped mirror of the operator tab)
+```
+GET  /credentials                              → Paginated<CredentialRow (no institution field)>
+                                                 ?role=teacher|student (required) &status=&search=&page=&limit=
+POST /credentials/reset-otp                    → step-up OTP to the ACTING ADMIN's own verified mobile
+                                                 (purpose 'reset_confirm'; 400 if impersonating or unverified)
+POST /credentials/:role/:id/reset-password     { password? , otp? }  → { tempPassword /* ONCE */, user }
+```
+Reset re-confirms the acting admin's identity (own password — operator's when
+impersonating via god-token, OTP path refused under impersonation). Target
+tokenVersion++ → logged out everywhere; audit RESET_PASSWORD; identifiers only,
+hashes never returned. Rate-limited (passwordResetLimiter).
+
 ### Payment History
 ```
 GET /payments     → Paginated<PaymentRow>   ?status=&from=&to=
@@ -463,7 +504,11 @@ Marking attendance emits a Socket.io `attendance:marked` event to the institutio
 # INSTITUTION STUDENT  — /api/inst/:slug/student
 ```
 GET   /dashboard   → { upcomingClass, holidayNotice, attendance: { percent, present, total },
-                       credentials: { displayId, schedule, sessionSlot }, timetable: ClassItem[] }
+                       credentials: { displayId, schedule, sessionSlot },
+                       validity: { start, end, days, paidClasses, upcomingClasses },   // A5 2026-06-12
+                       timetable: ClassItem[] }
+                     // upcomingClass also carries meetingUrl: string|null (B1+ 2026-06-12) —
+                     // set ONLY for online batches with a ClassSession launched on that date.
 GET   /classes     → Paginated<ClassItem>          // attendance history
 GET   /timetable   → ClassItem[]
 GET   /me          → { student: StudentSelf, institution: BrandingPublic }
