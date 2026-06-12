@@ -1,9 +1,10 @@
 'use strict';
 
-const Student    = require('../../../models/Student');
-const Batch      = require('../../../models/Batch');
-const Attendance = require('../../../models/Attendance');
-const Holiday    = require('../../../models/Holiday');
+const Student      = require('../../../models/Student');
+const Batch        = require('../../../models/Batch');
+const Attendance   = require('../../../models/Attendance');
+const Holiday      = require('../../../models/Holiday');
+const ClassSession = require('../../../models/ClassSession');
 const { brandingPublic } = require('../../../config/instAuthHelpers');
 const { auditLog, actorFromReq } = require('../../../config/auditLog');
 const { ok, badRequest, notFound, paginated } = require('../../../config/helper');
@@ -22,7 +23,7 @@ const JS_DOW = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
 
 const SELF_POPULATE = [
   { path: 'instrumentId', select: 'name' },
-  { path: 'batchId', select: 'name dayPatternId timeSlotId', populate: [
+  { path: 'batchId', select: 'name mode dayPatternId timeSlotId', populate: [
     { path: 'dayPatternId', select: 'label days' },
     { path: 'timeSlotId',   select: 'label' },
   ] },
@@ -125,7 +126,14 @@ exports.dashboard = async (req, res, next) => {
     const sched = scheduleOf(s);
     const todayStart = new Date(dayKey(new Date()));
 
-    const [attAgg, nextHoliday] = await Promise.all([
+    // upcomingClass must be a ClassItem (CONTRACTS.md): { date, batchName, time, status }.
+    const upcomingDate = (s.batchId && s.batchId.dayPatternId)
+      ? nextClassDate(s.batchId.dayPatternId.days, new Date())
+      : null;
+    // B1+: online batches surface the launched session's meeting link to the student.
+    const wantSession = !!(upcomingDate && s.batchId && s.batchId.mode === 'online');
+
+    const [attAgg, nextHoliday, session] = await Promise.all([
       Attendance.aggregate([
         { $match: { institutionId: s.institutionId, studentId: s._id } },
         { $group: { _id: '$status', c: { $sum: 1 } } },
@@ -133,6 +141,16 @@ exports.dashboard = async (req, res, next) => {
       s.batchId
         ? Holiday.findOne({ institutionId: inst, batchId: s.batchId._id, date: { $gte: todayStart } })
             .sort({ date: 1 }).lean()
+        : null,
+      wantSession
+        ? ClassSession.findOne({
+            institutionId: inst,
+            batchId: s.batchId._id,
+            targetDate: {
+              $gte: new Date(`${upcomingDate}T00:00:00.000Z`),
+              $lt:  new Date(new Date(`${upcomingDate}T00:00:00.000Z`).getTime() + 24 * 60 * 60 * 1000),
+            },
+          }).sort({ createdAt: -1 }).lean()
         : null,
     ]);
 
@@ -142,14 +160,12 @@ exports.dashboard = async (req, res, next) => {
     const total   = present + absent;
     const percent = total ? Math.round((present / total) * 100) : 0;
 
-    // upcomingClass must be a ClassItem (CONTRACTS.md): { date, batchName, time, status }.
-    const upcomingDate = (s.batchId && s.batchId.dayPatternId)
-      ? nextClassDate(s.batchId.dayPatternId.days, new Date())
-      : null;
-
     return ok(res, S.OK, {
       upcomingClass: upcomingDate
-        ? { date: upcomingDate, batchName: sched.batchName, time: sched.time, status: 'upcoming' }
+        ? {
+            date: upcomingDate, batchName: sched.batchName, time: sched.time, status: 'upcoming',
+            meetingUrl: session ? session.meetingUrl : null,
+          }
         : null,
       // holidayNotice is a string|null per the contract — not an object.
       holidayNotice: nextHoliday
@@ -157,7 +173,12 @@ exports.dashboard = async (req, res, next) => {
         : null,
       attendance: { percent, present, total },
       credentials: { displayId: s.displayId, schedule: sched.days, sessionSlot: sched.time },
-      validity: { start: s.validityStart || null, end: s.validityEnd || null, paidClasses: s.paidClasses || 0 },
+      validity: {
+        start: s.validityStart || null, end: s.validityEnd || null,
+        days: s.validityDays || null,
+        paidClasses: s.paidClasses || 0,
+        upcomingClasses: s.upcomingClasses || 0,
+      },
     });
   } catch (err) {
     next(err);

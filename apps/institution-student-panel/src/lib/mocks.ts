@@ -141,6 +141,13 @@ export const MOCK_DASHBOARD: StudentDashboard = {
     schedule: "Tue & Thu",
     sessionSlot: SLOT,
   },
+  validity: {
+    start: "2026-05-15",
+    end: "2026-07-14",
+    days: 60,
+    paidClasses: 24,
+    upcomingClasses: 0,
+  },
   timetable: MOCK_TIMETABLE,
 };
 

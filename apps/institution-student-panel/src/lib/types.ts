@@ -31,9 +31,18 @@ export interface ClassItem {
 // confirm exact shapes with Dev A before wiring (do not extend locally).
 
 export interface StudentDashboard {
-  upcomingClass: ClassItem | null;
+  /** meetingUrl is set only for ONLINE batches with a launched session on that date (B1+). */
+  upcomingClass: (ClassItem & { meetingUrl?: string | null }) | null;
   holidayNotice: string | null;
   attendance: { percent: number; present: number; total: number };
   credentials: { displayId: string; schedule: string | null; sessionSlot: string | null };
+  /** A5 — plan facts: window, plan length, purchased + upcoming classes. */
+  validity: {
+    start: string | null;
+    end: string | null;
+    days: number | null;
+    paidClasses: number;
+    upcomingClasses: number;
+  };
   timetable: ClassItem[];
 }

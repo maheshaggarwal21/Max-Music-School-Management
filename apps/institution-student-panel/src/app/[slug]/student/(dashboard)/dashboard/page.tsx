@@ -6,9 +6,11 @@ import {
   CalendarClock,
   CalendarOff,
   Hourglass,
+  IdCard,
   Music,
   Sparkles,
   TrendingUp,
+  Video,
 } from "lucide-react";
 import {
   BlurFade,
@@ -23,7 +25,7 @@ import {
 } from "@maxmusic/ui";
 import { formatDate, joinStatusLabel } from "@maxmusic/utils";
 
-import { api, mockable, studentPath } from "@/lib/api";
+import { api, mockable, MOCKS_ENABLED, studentPath } from "@/lib/api";
 import {
   MOCK_CLASSES,
   MOCK_CLASS_BALANCE,
@@ -78,13 +80,23 @@ export default function DashboardPage() {
             .then((r) => r.data!),
         MOCK_CLASSES
       ),
-      // PENDING CONTRACT — class balance is mock-only until Dev A adds it.
-      mockable<ClassBalance | null>(() => Promise.resolve(null), MOCK_CLASS_BALANCE),
-    ]).then(([d, c, b]) => {
+    ]).then(([d, c]) => {
       if (cancelled) return;
       setDash(d);
       setHistory(c.items);
-      setBalance(b);
+      // A5 — class balance now derives live from the dashboard payload.
+      setBalance(
+        d.validity && d.validity.paidClasses > 0
+          ? {
+              paidClasses: d.validity.paidClasses,
+              classesUsed: d.attendance.total,
+              validityStart: d.validity.start ?? "",
+              validityEnd: d.validity.end ?? "",
+            }
+          : MOCKS_ENABLED
+            ? MOCK_CLASS_BALANCE
+            : null
+      );
     });
     return () => {
       cancelled = true;
@@ -179,9 +191,23 @@ export default function DashboardPage() {
                   </p>
                 </div>
               </div>
-              <span className="rounded-full bg-brand/10 px-4 py-1.5 text-xs font-bold uppercase tracking-wider text-brand">
-                {relativeDay(dash.upcomingClass.date)}
-              </span>
+              <div className="flex items-center gap-3">
+                {/* B1+ — online batches: jump straight into the launched session */}
+                {dash.upcomingClass.meetingUrl && (
+                  <a
+                    href={dash.upcomingClass.meetingUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 rounded-full bg-brand px-4 py-1.5 text-xs font-bold uppercase tracking-wider text-white shadow-sm transition-transform hover:scale-[1.03]"
+                  >
+                    <Video className="h-3.5 w-3.5" />
+                    Join class
+                  </a>
+                )}
+                <span className="rounded-full bg-brand/10 px-4 py-1.5 text-xs font-bold uppercase tracking-wider text-brand">
+                  {relativeDay(dash.upcomingClass.date)}
+                </span>
+              </div>
             </div>
           </SpotlightCard>
         ) : (
@@ -289,6 +315,57 @@ export default function DashboardPage() {
                 </p>
               )}
             </div>
+          </SpotlightCard>
+        </BlurFade>
+
+        {/* A5 — My Plan: the at-a-glance facts a student calls the school about */}
+        <BlurFade delay={0.55} className="h-full lg:col-span-2">
+          <SpotlightCard className="relative h-full overflow-hidden rounded-2xl border border-border bg-card p-6">
+            <BorderBeam size={40} duration={12} />
+            <div className="flex items-center gap-2">
+              <IdCard className="h-4 w-4 text-brand" />
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                My plan
+              </p>
+            </div>
+            <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-3 text-sm sm:grid-cols-3">
+              <div>
+                <dt className="text-xs text-muted-foreground">Registration ID</dt>
+                <dd className="mt-0.5 font-mono font-semibold">{student.displayId}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted-foreground">Course start</dt>
+                <dd className="mt-0.5 font-semibold">
+                  {dash?.validity.start ? formatDate(dash.validity.start) : "—"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted-foreground">Valid until</dt>
+                <dd className="mt-0.5 font-semibold">
+                  {dash?.validity.end ? formatDate(dash.validity.end) : "—"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted-foreground">Plan length</dt>
+                <dd className="mt-0.5 font-semibold">
+                  {dash?.validity.days ? `${dash.validity.days}-day plan` : "—"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted-foreground">Total sessions</dt>
+                <dd className="mt-0.5 font-semibold">
+                  {dash && dash.validity.paidClasses > 0
+                    ? `${dash.validity.paidClasses} classes`
+                    : "—"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted-foreground">Upcoming classes</dt>
+                <dd className="mt-0.5 font-semibold">
+                  {dash && dash.validity.upcomingClasses > 0 ? dash.validity.upcomingClasses : "—"}
+                </dd>
+              </div>
+            </dl>
           </SpotlightCard>
         </BlurFade>
       </div>
