@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { useParams, usePathname, useRouter } from "next/navigation";
 import {
-  CalendarCheck, CalendarDays, Clock, Inbox, Layers, LayoutDashboard, Loader2,
+  CalendarCheck, CalendarDays, Clock, Inbox, KeyRound, Layers, LayoutDashboard, Loader2,
   Settings, Users, Wallet, GraduationCap,
 } from "lucide-react";
 import {
@@ -44,6 +44,7 @@ const NAV_SECTIONS: SidebarSection[] = [
     items: [
       { label: "Suitable Days", href: "/suitable-days", icon: CalendarDays },
       { label: "Suitable Times", href: "/suitable-times", icon: Clock },
+      { label: "Credentials", href: "/credentials", icon: KeyRound },
       { label: "Settings", href: "/settings", icon: Settings },
     ],
   },

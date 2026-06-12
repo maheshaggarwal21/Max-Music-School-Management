@@ -66,7 +66,7 @@ export const api = new ApiClient();
 const INTERNAL_ROUTES = new Set([
   "login", "dashboard", "requests", "students", "teachers",
   "batches", "attendance", "payments", "settings",
-  "suitable-days", "suitable-times",
+  "suitable-days", "suitable-times", "credentials",
 ]);
 
 export function getInstSlug(): string {
