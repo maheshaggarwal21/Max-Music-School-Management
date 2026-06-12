@@ -315,6 +315,12 @@ expiry → `inactive`. These transitions are audited as `actorRole: 'system'`.
 
 ## 14. THE PANELS — WHAT EACH SHOWS
 
+> **All four panels are mobile-responsive (2026-06-13).** Desktop renders the in-flow `<Sidebar>`
+> (`hidden md:flex`); below `md` each panel shows a `md:hidden` mobile nav — operator + admin use the
+> shared `<MobileSidebar>` (hamburger top bar + left slide-over drawer), teacher uses a bottom-tab bar,
+> student uses its own slide-over. Filter controls go full-width and wrap on mobile; tables scroll inside
+> `overflow-x-auto`. See `documentation/feature-mobile-responsive-2026-06-13.md`.
+
 ### Operator panel (superadmin — private domain)
 - **Dashboard** — KPIs: institutions (active/total), total students, total teachers, revenue
   (rents + a fee summary), recent changes, overdue rents.

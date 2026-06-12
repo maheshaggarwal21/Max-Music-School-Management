@@ -144,9 +144,14 @@ institution-* (all three):    NEXT_PUBLIC_API_URL = https://api.<PLATFORM_DOMAIN
 ## SHARED PACKAGES
 
 ```
-packages/ui/components/        ← DataTable, Modal, StatusBadge, StatsCard, Sidebar, BrandingProvider,
-                                 Form (Input/Select/DatePicker/FileUpload), SearchBar, Avatar, Charts,
+packages/ui/components/        ← DataTable, Modal, StatusBadge, StatsCard, Sidebar, MobileSidebar,
+                                 BrandingProvider, Form (Input/Select/DatePicker/FileUpload), SearchBar,
+                                 Avatar, Charts,
                                  BlurFade/BorderBeam/SpotlightCard/GradientText/ShinyText/CountUp (anim)
+                                 RESPONSIVE: desktop <Sidebar> is `hidden md:flex`; each panel pairs it
+                                 with a `md:hidden` mobile nav — operator+admin use <MobileSidebar>
+                                 (hamburger top bar + left slide-over drawer, reuses SidebarSection),
+                                 teacher uses a bottom-tab MobileNav, student its own slide-over.
 packages/types/                ← models.ts (mirror data-model.md) + api.ts (mirror CONTRACTS.md).
                                  CONSUMED by all 4 apps (H2): each app's lib/types.ts re-exports the
                                  shared contract from here; frontend view/row types stay local.
